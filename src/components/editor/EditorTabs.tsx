@@ -1,0 +1,218 @@
+import { useRef, useState, useEffect, useCallback } from "react";
+import { X, Plus } from "lucide-react";
+import { useAppStore } from "@/stores/appStore";
+import { cn } from "@/lib/utils";
+
+interface ScriptTabProps {
+  script: {
+    id: string;
+    name: string;
+    connectionId: string;
+    isDirty: boolean;
+  };
+  isActive: boolean;
+  isConnected: boolean;
+}
+
+function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
+  const { setActiveScript, closeScript, renameScript } = useAppStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(script.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditName(script.name);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const trimmedName = editName.trim();
+    if (trimmedName && trimmedName !== script.name) {
+      await renameScript(script.id, trimmedName);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSaveEdit();
+    } else if (e.key === "Escape") {
+      setEditName(script.name);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 h-7 px-2 rounded shrink-0",
+          isActive ? "bg-base-750" : "bg-base-800/50"
+        )}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleSaveEdit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          className="w-24 bg-base-700 border border-accent-500 rounded px-1.5 py-0.5 text-[13px] text-base-100 outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      data-script-id={script.id}
+      onClick={() => setActiveScript(script.id)}
+      onDoubleClick={handleDoubleClick}
+      onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeScript(script.id))}
+      className={cn(
+        "group flex items-center gap-2 h-7 px-3 rounded text-[13px] font-medium transition-colors duration-100 shrink-0",
+        isActive
+          ? "bg-base-750 text-base-100"
+          : "text-base-400 hover:text-base-200 hover:bg-base-800/50"
+      )}
+    >
+      {/* Disconnected indicator */}
+      {!isConnected && (
+        <span 
+          className="w-1.5 h-1.5 rounded-full bg-error shrink-0" 
+          title="Connection not active"
+        />
+      )}
+
+      {/* Dirty indicator */}
+      {script.isDirty && (
+        <span 
+          className="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" 
+          title="Unsaved changes"
+        />
+      )}
+
+      {/* Name */}
+      <span className="truncate max-w-[100px]">{script.name}</span>
+
+      {/* Close */}
+      <span
+        role="button"
+        tabIndex={-1}
+        onClick={(e) => {
+          e.stopPropagation();
+          closeScript(script.id);
+        }}
+        className="p-0.5 -mr-1 rounded hover:bg-base-600/50 text-base-400 hover:text-base-200"
+      >
+        <X className="w-3 h-3" />
+      </span>
+    </button>
+  );
+}
+
+export function EditorTabs() {
+  const {
+    openScripts,
+    activeScriptId,
+    connections,
+    createScript,
+    activeConnectionId,
+  } = useAppStore();
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener("scroll", checkScroll);
+    const ro = new ResizeObserver(checkScroll);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      ro.disconnect();
+    };
+  }, [checkScroll, openScripts.length]);
+
+  useEffect(() => {
+    if (!activeScriptId || !scrollContainerRef.current) return;
+    const tab = scrollContainerRef.current.querySelector(`[data-script-id="${activeScriptId}"]`);
+    tab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeScriptId]);
+
+  const handleNewScript = async () => {
+    if (activeConnectionId) {
+      await createScript(activeConnectionId);
+    }
+  };
+
+  // Check if a script's connection is active
+  const isConnectionActive = (connectionId: string) => {
+    const conn = connections.find((c) => c.id === connectionId);
+    return conn?.is_connected ?? false;
+  };
+
+  // Don't render if no scripts
+  if (openScripts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center h-full min-w-0 flex-1 relative">
+      {/* Left fade */}
+      {canScrollLeft && (
+        <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-surface to-transparent z-10 pointer-events-none" />
+      )}
+
+      {/* Scripts */}
+      <div
+        ref={scrollContainerRef}
+        className="flex items-center gap-0.5 overflow-x-auto editor-tabs-scroll h-full"
+      >
+        {openScripts.map((script) => (
+          <ScriptTab
+            key={script.id}
+            script={script}
+            isActive={script.id === activeScriptId}
+            isConnected={isConnectionActive(script.connectionId)}
+          />
+        ))}
+      </div>
+
+      {/* Right fade */}
+      {canScrollRight && (
+        <div className="absolute right-8 top-0 bottom-0 w-6 bg-gradient-to-l from-surface to-transparent z-10 pointer-events-none" />
+      )}
+
+      {/* New script - only show when there's an active connection */}
+      {activeConnectionId && (
+        <button
+          onClick={handleNewScript}
+          className="ml-1 p-1.5 rounded text-base-400 hover:text-base-200 hover:bg-base-800/50 transition-colors shrink-0"
+          title="New script"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
