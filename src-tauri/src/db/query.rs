@@ -217,6 +217,72 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                 return v;
             }
             
+            // PostgreSQL arrays - try common array types
+            // Integer arrays
+            if let Ok(v) = row.try_get::<Vec<i64>, _>(i) {
+                return json!(v);
+            }
+            if let Ok(v) = row.try_get::<Vec<i32>, _>(i) {
+                return json!(v);
+            }
+            if let Ok(v) = row.try_get::<Vec<i16>, _>(i) {
+                return json!(v);
+            }
+            // Float arrays
+            if let Ok(v) = row.try_get::<Vec<f64>, _>(i) {
+                return json!(v);
+            }
+            if let Ok(v) = row.try_get::<Vec<f32>, _>(i) {
+                return json!(v);
+            }
+            // String/text arrays
+            if let Ok(v) = row.try_get::<Vec<String>, _>(i) {
+                return json!(v);
+            }
+            // Boolean arrays
+            if let Ok(v) = row.try_get::<Vec<bool>, _>(i) {
+                return json!(v);
+            }
+            // UUID arrays
+            if let Ok(v) = row.try_get::<Vec<uuid::Uuid>, _>(i) {
+                return json!(v.iter().map(|u| u.to_string()).collect::<Vec<_>>());
+            }
+            // Timestamp arrays
+            if let Ok(v) = row.try_get::<Vec<chrono::NaiveDateTime>, _>(i) {
+                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+            }
+            if let Ok(v) = row.try_get::<Vec<chrono::DateTime<chrono::Utc>>, _>(i) {
+                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+            }
+            // Date arrays
+            if let Ok(v) = row.try_get::<Vec<chrono::NaiveDate>, _>(i) {
+                return json!(v.iter().map(|d| d.to_string()).collect::<Vec<_>>());
+            }
+            // Time arrays
+            if let Ok(v) = row.try_get::<Vec<chrono::NaiveTime>, _>(i) {
+                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+            }
+            
+            // For custom types (enums, composite types, domains), try to get raw bytes as text
+            // PostgreSQL sends custom types in text format when using the simple query protocol
+            if let Ok(raw) = row.try_get_raw(i) {
+                // Try to decode as UTF-8 text from the raw value
+                if let Ok(bytes) = raw.as_bytes() {
+                    if let Ok(text) = std::str::from_utf8(bytes) {
+                        // For composite types, convert (a,b,c) format to JSON object
+                        if text.starts_with('(') && text.ends_with(')') {
+                            return json!({
+                                "_type": type_name.to_lowercase(),
+                                "_raw": text,
+                                "_display": "composite"
+                            });
+                        }
+                        // For enums and other types, just return the text
+                        return json!(text);
+                    }
+                }
+            }
+            
             // Fallback
             json!(format!("[{}]", type_name))
         })
@@ -250,7 +316,20 @@ fn convert_mysql_row(row: &sqlx::mysql::MySqlRow) -> Vec<JsonValue> {
             if let Ok(v) = row.try_get::<bool, _>(i) {
                 return json!(v);
             }
+            // MySQL JSON type
+            if let Ok(v) = row.try_get::<serde_json::Value, _>(i) {
+                return v;
+            }
             if let Ok(v) = row.try_get::<String, _>(i) {
+                // Try to parse JSON arrays/objects stored as text
+                let trimmed = v.trim();
+                if (trimmed.starts_with('[') && trimmed.ends_with(']'))
+                    || (trimmed.starts_with('{') && trimmed.ends_with('}'))
+                {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&v) {
+                        return parsed;
+                    }
+                }
                 return json!(v);
             }
             if let Ok(v) = row.try_get::<chrono::NaiveDateTime, _>(i) {
@@ -294,6 +373,15 @@ fn convert_sqlite_row(row: &sqlx::sqlite::SqliteRow) -> Vec<JsonValue> {
                 return json!(v);
             }
             if let Ok(v) = row.try_get::<String, _>(i) {
+                // Try to parse JSON arrays/objects stored as text
+                let trimmed = v.trim();
+                if (trimmed.starts_with('[') && trimmed.ends_with(']'))
+                    || (trimmed.starts_with('{') && trimmed.ends_with('}'))
+                {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&v) {
+                        return parsed;
+                    }
+                }
                 return json!(v);
             }
             if let Ok(v) = row.try_get::<Vec<u8>, _>(i) {

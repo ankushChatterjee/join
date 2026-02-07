@@ -243,6 +243,35 @@ async fn get_functions(connection_id: String, schema: Option<String>) -> Result<
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn get_custom_types(connection_id: String, schema: Option<String>) -> Result<Vec<db::CustomTypeInfo>, String> {
+    db::get_custom_types(&connection_id, schema.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_type_details(
+    connection_id: String,
+    type_name: String,
+    schema: Option<String>,
+) -> Result<db::TypeDetailInfo, String> {
+    db::get_type_details(&connection_id, &type_name, schema.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_function_details(
+    connection_id: String,
+    function_name: String,
+    schema: Option<String>,
+) -> Result<db::FunctionDetailInfo, String> {
+    db::get_function_details(&connection_id, &function_name, schema.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // ============================================================================
 // Tauri Commands - Query Execution
 // ============================================================================
@@ -300,6 +329,27 @@ fn rename_script(connection_id: String, script_id: String, new_name: String) -> 
 #[tauri::command]
 fn delete_script(connection_id: String, script_id: String) -> Result<(), String> {
     storage::scripts::delete_script(&connection_id, &script_id).map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Tauri Commands - Query History
+// ============================================================================
+
+#[tauri::command]
+fn load_query_history() -> Result<Vec<storage::QueryHistoryEntry>, String> {
+    let history = storage::history::load_history().map_err(|e| e.to_string())?;
+    Ok(history.entries)
+}
+
+#[tauri::command]
+fn save_query_history(entries: Vec<storage::QueryHistoryEntry>) -> Result<(), String> {
+    let history = storage::QueryHistory { entries };
+    storage::history::save_history(&history).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn clear_query_history() -> Result<(), String> {
+    storage::history::clear_history().map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -368,6 +418,9 @@ pub fn run() {
             get_views,
             get_indexes,
             get_functions,
+            get_custom_types,
+            get_type_details,
+            get_function_details,
             // Query
             execute_query,
             // Tabs (legacy)
@@ -380,6 +433,10 @@ pub fn run() {
             update_script_content,
             rename_script,
             delete_script,
+            // Query History
+            load_query_history,
+            save_query_history,
+            clear_query_history,
             // Export
             export_to_csv,
         ])
