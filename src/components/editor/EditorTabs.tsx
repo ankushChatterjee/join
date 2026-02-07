@@ -93,14 +93,6 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         />
       )}
 
-      {/* Dirty indicator */}
-      {script.isDirty && (
-        <span 
-          className="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" 
-          title="Unsaved changes"
-        />
-      )}
-
       {/* Name */}
       <span className="truncate max-w-[100px]">{script.name}</span>
 
