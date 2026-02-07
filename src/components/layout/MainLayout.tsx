@@ -5,6 +5,7 @@ import {
 } from "react-resizable-panels";
 import { Database, Zap, FileCode2, Plus } from "lucide-react";
 import { Sidebar } from "./Sidebar";
+import { TitleBar } from "./TitleBar";
 import { SqlEditor } from "@/components/editor/SqlEditor";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { ResultsPanel } from "@/components/results/ResultsPanel";
@@ -32,7 +33,7 @@ function NoConnectionState() {
         {/* Icon */}
         <div className="relative mb-6">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-base-750 to-base-800 flex items-center justify-center border border-base-700/50 shadow-lg shadow-black/20">
-            <Database className="w-7 h-7 text-base-400" strokeWidth={1.5} />
+            <Database className="w-7 h-7 text-base-300" strokeWidth={1.5} />
           </div>
           <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-accent-500/20 flex items-center justify-center border border-accent-500/30">
             <Zap className="w-3 h-3 text-accent-400" />
@@ -43,14 +44,14 @@ function NoConnectionState() {
         <h2 className="text-lg font-semibold text-base-200 mb-2">
           No active connection
         </h2>
-        <p className="text-sm text-base-400 max-w-[280px] leading-relaxed">
+        <p className="text-sm text-base-300 max-w-[280px] leading-relaxed">
           Connect to a database from the sidebar to start writing queries
         </p>
         
         {/* Keyboard hint */}
-        <div className="mt-8 flex items-center gap-2 text-xs text-base-500">
+        <div className="mt-8 flex items-center gap-2 text-xs text-base-400">
           <span>or press</span>
-          <kbd className="px-2 py-1 rounded bg-base-800 border border-base-700 font-mono text-base-400">
+          <kbd className="px-2 py-1 rounded bg-base-800 border border-base-700 font-mono text-base-300">
             ⌘ N
           </kbd>
           <span>to add a connection</span>
@@ -93,7 +94,7 @@ function NoScriptsState() {
         {/* Icon */}
         <div className="mb-5">
           <div className="w-12 h-12 rounded-xl bg-base-800/80 flex items-center justify-center border border-base-700/50">
-            <FileCode2 className="w-5 h-5 text-base-500" strokeWidth={1.5} />
+            <FileCode2 className="w-5 h-5 text-base-400" strokeWidth={1.5} />
           </div>
         </div>
         
@@ -101,7 +102,7 @@ function NoScriptsState() {
         <h2 className="text-base font-medium text-base-300 mb-1.5">
           No open scripts
         </h2>
-        <p className="text-sm text-base-500 mb-5">
+        <p className="text-sm text-base-400 mb-5">
           {canCreateScript 
             ? "Create a new script to start writing queries"
             : "Connect to a database first, then create a script"}
@@ -131,6 +132,8 @@ export function MainLayout() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
+      {/* Custom Title Bar */}
+      <TitleBar />
       
       <Group orientation="horizontal" className="flex-1">
         {/* Left Sidebar */}

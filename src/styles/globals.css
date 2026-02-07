@@ -13,19 +13,19 @@
   --color-base-800: #1e1c19;
   --color-base-750: #25221e;
   --color-base-700: #2e2a25;
-  --color-base-600: #3d3830;
-  --color-base-500: #5c5346;
-  --color-base-400: #7d7264;
-  --color-base-300: #b5a896;
-  --color-base-200: #d4c9b8;
+  --color-base-600: #4a443a;
+  --color-base-500: #756a5a;
+  --color-base-400: #968a78;
+  --color-base-300: #bfb4a2;
+  --color-base-200: #d8cfbf;
   --color-base-100: #ebe5db;
   --color-base-50: #faf8f4;
   
   /* Subtle warm accent - muted gold */
-  --color-accent-500: #c9a475;
-  --color-accent-400: #e0c9a8;
-  --color-accent-600: #a8875c;
-  --color-accent-glow: rgba(201, 164, 117, 0.12);
+  --color-accent-500: #d4ad7a;
+  --color-accent-400: #e8d4b5;
+  --color-accent-600: #b5915f;
+  --color-accent-glow: rgba(212, 173, 122, 0.15);
   
   /* Status colors */
   --color-success: #34d399;
@@ -109,6 +109,37 @@ body {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--color-base-500);
+}
+
+/* Sidebar scrollbar - very thin and subtle */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar-scroll:hover {
+  scrollbar-color: var(--color-base-600) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--color-base-600);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--color-base-500);
 }
 
@@ -317,7 +348,7 @@ a:focus-visible {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-base-400);
+  color: var(--color-base-300);
 }
 
 /* Sidebar item selection - macOS style with subtle vibrancy */
@@ -370,4 +401,31 @@ a:focus-visible {
   box-shadow: 
     inset 1px 0 0 rgba(255, 255, 255, 0.02),
     inset -1px 0 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Custom Title Bar - macOS Native Style */
+.title-bar {
+  -webkit-app-region: drag;
+  app-region: drag;
+  /* Match sidebar background for seamless look */
+  background: var(--color-base-900);
+  /* Subtle bottom border only */
+  border-bottom: 1px solid var(--color-base-800);
+}
+
+/* Elements in title bar that should be clickable */
+.title-bar button,
+.title-bar [role="button"],
+.title-bar a,
+.title-bar input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Title text styling */
+.title-bar-title {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-base-300);
 }
