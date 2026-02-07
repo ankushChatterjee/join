@@ -19,10 +19,15 @@ import {
   Plus,
   Trash2,
   Pencil,
+  FunctionSquare,
+  Shapes,
+  Tag,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/appStore";
-import type { ColumnInfo, TableInfo, ViewInfo, IndexInfo, FunctionInfo, ScriptMetadata } from "@/stores/types";
+import { insertTextAtCursor, generateSelectStatement } from "@/components/editor/editorUtils";
+import type { ColumnInfo, TableInfo, ViewInfo, IndexInfo, FunctionInfo, CustomTypeInfo, ScriptMetadata } from "@/stores/types";
 
 const typeIcons: Record<string, typeof Hash> = {
   uuid: Key,
@@ -83,12 +88,15 @@ function ColumnNode({ column, level }: ColumnNodeProps) {
           )} 
         />
         <span className={cn(
-          "truncate",
+          "truncate min-w-0",
           column.is_primary_key ? "text-base-100" : "text-base-300"
         )}>
           {column.name}
         </span>
-        <span className="ml-auto text-xs text-base-500 font-mono shrink-0">
+        <span 
+          className="ml-auto text-xs text-base-500 font-mono shrink-0 truncate max-w-[12ch]"
+          title={column.data_type}
+        >
           {column.data_type}
         </span>
       </div>
@@ -161,11 +169,6 @@ function IndexFolderNode({ tableOrViewName, schema, level }: IndexFolderNodeProp
           {isLoading && (
             <Loader2 className="w-3 h-3 animate-spin text-base-500 ml-auto shrink-0" />
           )}
-          {tableIndexes && (
-            <span className="ml-auto text-xs text-base-500 shrink-0">
-              {tableIndexes.length}
-            </span>
-          )}
         </button>
       </TreeNode>
       
@@ -181,7 +184,7 @@ function IndexFolderNode({ tableOrViewName, schema, level }: IndexFolderNodeProp
             ))
           ) : (
             <TreeNode level={level + 1}>
-              <div className="py-1 px-2 text-sm text-base-500">
+              <div className="py-1 px-2 text-sm text-base-400">
                 No indexes
               </div>
             </TreeNode>
@@ -199,7 +202,14 @@ interface TableNodeProps {
 }
 
 function TableNode({ table, schema, level }: TableNodeProps) {
-  const { expandedTables, columns, indexes, toggleTableExpanded } = useAppStore();
+  const { 
+    expandedTables, 
+    columns, 
+    indexes, 
+    toggleTableExpanded, 
+    activeConnectionId,
+    executeQueryDirect,
+  } = useAppStore();
   
   const key = `${schema}.${table.name}`;
   const isExpanded = expandedTables.has(key);
@@ -207,6 +217,22 @@ function TableNode({ table, schema, level }: TableNodeProps) {
   const tableIndexes = indexes[key];
   const isLoading = isExpanded && !tableColumns;
   const hasIndexes = tableIndexes && tableIndexes.length > 0;
+
+  // Handle preview table
+  const handlePreview = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!activeConnectionId) return;
+    const sql = `SELECT * FROM ${schema}.${table.name} LIMIT 100`;
+    executeQueryDirect(activeConnectionId, sql, `${schema}.${table.name}`);
+  };
+
+  // Handle generate SELECT
+  const handleGenerateSelect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const columnNames = tableColumns?.map(c => c.name);
+    const sql = generateSelectStatement(schema, table.name, columnNames);
+    insertTextAtCursor(sql);
+  };
   
   return (
     <div>
@@ -222,17 +248,31 @@ function TableNode({ table, schema, level }: TableNodeProps) {
             )}
           />
           <Table2 className="w-4 h-4 text-accent-500 shrink-0" />
-          <span className="text-base-200 group-hover:text-base-50 truncate text-left">
+          <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             {table.name}
           </span>
           {isLoading && (
-            <Loader2 className="w-3 h-3 animate-spin text-base-500 ml-auto shrink-0" />
+            <Loader2 className="w-3 h-3 animate-spin text-base-500 shrink-0" />
           )}
-          {tableColumns && (
-            <span className="ml-auto text-xs text-base-500 shrink-0">
-              {tableColumns.length}
-            </span>
-          )}
+          {/* Action buttons - visible on hover */}
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={handlePreview}
+            className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-base-600/50 text-base-400 hover:text-green-400 transition-opacity shrink-0"
+            title="Preview first 100 rows"
+          >
+            <Play className="w-3 h-3" />
+          </span>
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={handleGenerateSelect}
+            className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-base-600/50 text-base-400 hover:text-accent-400 transition-opacity shrink-0"
+            title="Generate SELECT"
+          >
+            <FileCode className="w-3 h-3" />
+          </span>
         </button>
       </TreeNode>
       
@@ -265,7 +305,14 @@ interface ViewNodeProps {
 }
 
 function ViewNode({ view, schema, level }: ViewNodeProps) {
-  const { expandedViews, columns, indexes, toggleViewExpanded } = useAppStore();
+  const { 
+    expandedViews, 
+    columns, 
+    indexes, 
+    toggleViewExpanded,
+    activeConnectionId,
+    executeQueryDirect,
+  } = useAppStore();
   
   const key = `${schema}.${view.name}`;
   const isExpanded = expandedViews.has(key);
@@ -273,6 +320,22 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
   const viewIndexes = indexes[key];
   const isLoading = isExpanded && !viewColumns;
   const hasIndexes = viewIndexes && viewIndexes.length > 0;
+
+  // Handle preview view
+  const handlePreview = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!activeConnectionId) return;
+    const sql = `SELECT * FROM ${schema}.${view.name} LIMIT 100`;
+    executeQueryDirect(activeConnectionId, sql, `${schema}.${view.name}`);
+  };
+
+  // Handle generate SELECT
+  const handleGenerateSelect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const columnNames = viewColumns?.map(c => c.name);
+    const sql = generateSelectStatement(schema, view.name, columnNames);
+    insertTextAtCursor(sql);
+  };
   
   return (
     <div>
@@ -288,17 +351,31 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
             )}
           />
           <Eye className="w-4 h-4 text-violet-400 shrink-0" />
-          <span className="text-base-200 group-hover:text-base-50 truncate text-left">
+          <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             {view.name}
           </span>
           {isLoading && (
-            <Loader2 className="w-3 h-3 animate-spin text-base-500 ml-auto shrink-0" />
+            <Loader2 className="w-3 h-3 animate-spin text-base-500 shrink-0" />
           )}
-          {viewColumns && (
-            <span className="ml-auto text-xs text-base-500 shrink-0">
-              {viewColumns.length}
-            </span>
-          )}
+          {/* Action buttons - visible on hover */}
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={handlePreview}
+            className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-base-600/50 text-base-400 hover:text-green-400 transition-opacity shrink-0"
+            title="Preview first 100 rows"
+          >
+            <Play className="w-3 h-3" />
+          </span>
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={handleGenerateSelect}
+            className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-base-600/50 text-base-400 hover:text-accent-400 transition-opacity shrink-0"
+            title="Generate SELECT"
+          >
+            <FileCode className="w-3 h-3" />
+          </span>
         </button>
       </TreeNode>
       
@@ -326,15 +403,35 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
 
 interface FunctionNodeProps {
   func: FunctionInfo;
+  schema: string;
   level: number;
 }
 
-function FunctionNode({ func, level }: FunctionNodeProps) {
+function FunctionNode({ func, schema, level }: FunctionNodeProps) {
+  const { selectSchemaObject, selectedSchemaObject } = useAppStore();
+  const isSelected = selectedSchemaObject?.type === "function" && 
+                     selectedSchemaObject?.specificName === func.specific_name && 
+                     selectedSchemaObject?.schema === schema;
+  
   return (
     <TreeNode level={level}>
-      <div className="flex items-center gap-2 py-1 px-2 text-sm hover:bg-base-800/30 rounded transition-colors">
-        <Braces className="w-4 h-4 text-teal-400 shrink-0" />
-        <span className="text-base-200 truncate">
+      <button
+        onClick={() => selectSchemaObject("function", func.name, schema, func.specific_name)}
+        className={cn(
+          "w-full flex items-center gap-2 py-1 px-2 text-sm rounded transition-colors cursor-pointer",
+          isSelected
+            ? "bg-accent-500/20 text-accent-300"
+            : "hover:bg-base-800/30"
+        )}
+      >
+        <Braces className={cn(
+          "w-4 h-4 shrink-0",
+          isSelected ? "text-accent-400" : "text-teal-400"
+        )} />
+        <span className={cn(
+          "truncate text-left",
+          isSelected ? "text-accent-300" : "text-base-200"
+        )}>
           {func.name}
         </span>
         {func.return_type && (
@@ -342,8 +439,156 @@ function FunctionNode({ func, level }: FunctionNodeProps) {
             {func.return_type}
           </span>
         )}
-      </div>
+      </button>
     </TreeNode>
+  );
+}
+
+interface FunctionsFolderNodeProps {
+  schemaName: string;
+  functions: FunctionInfo[];
+  level: number;
+}
+
+function FunctionsFolderNode({ schemaName, functions, level }: FunctionsFolderNodeProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  if (functions.length === 0) return null;
+  
+  return (
+    <div>
+      <TreeNode level={level}>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+        >
+          <ChevronRight
+            className={cn(
+              "w-3.5 h-3.5 text-base-500 transition-transform duration-150 shrink-0",
+              isExpanded && "rotate-90"
+            )}
+          />
+          <FunctionSquare className="w-4 h-4 text-teal-500 shrink-0" />
+          <span className="text-base-300 group-hover:text-base-100 truncate text-left">
+            Functions
+          </span>
+        </button>
+      </TreeNode>
+      
+      {isExpanded && (
+        <div className="border-l border-base-800 ml-4">
+          {functions.map((func) => (
+            <FunctionNode
+              key={`func-${func.specific_name}`}
+              func={func}
+              schema={schemaName}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TypeNodeProps {
+  customType: CustomTypeInfo;
+  schema: string;
+  level: number;
+}
+
+function TypeNode({ customType, schema, level }: TypeNodeProps) {
+  const { selectSchemaObject, selectedSchemaObject } = useAppStore();
+  const isSelected = selectedSchemaObject?.type === "custom_type" && 
+                     selectedSchemaObject?.name === customType.name && 
+                     selectedSchemaObject?.schema === schema;
+  
+  // Color coding by type kind
+  const getTypeColor = () => {
+    switch (customType.type_kind) {
+      case "enum":
+        return isSelected ? "text-accent-400" : "text-purple-400";
+      case "composite":
+        return isSelected ? "text-accent-400" : "text-orange-400";
+      case "domain":
+        return isSelected ? "text-accent-400" : "text-blue-400";
+      case "set":
+        return isSelected ? "text-accent-400" : "text-pink-400";
+      default:
+        return isSelected ? "text-accent-400" : "text-base-400";
+    }
+  };
+  
+  return (
+    <TreeNode level={level}>
+      <button
+        onClick={() => selectSchemaObject("custom_type", customType.name, schema)}
+        className={cn(
+          "w-full flex items-center gap-2 py-1 px-2 text-sm rounded transition-colors cursor-pointer",
+          isSelected
+            ? "bg-accent-500/20 text-accent-300"
+            : "hover:bg-base-800/30"
+        )}
+      >
+        <Tag className={cn("w-4 h-4 shrink-0", getTypeColor())} />
+        <span className={cn(
+          "truncate text-left",
+          isSelected ? "text-accent-300" : "text-base-200"
+        )}>
+          {customType.name}
+        </span>
+        <span className="ml-auto text-xs text-base-500 font-mono shrink-0">
+          {customType.type_kind}
+        </span>
+      </button>
+    </TreeNode>
+  );
+}
+
+interface TypesFolderNodeProps {
+  schemaName: string;
+  types: CustomTypeInfo[];
+  level: number;
+}
+
+function TypesFolderNode({ schemaName, types, level }: TypesFolderNodeProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  if (types.length === 0) return null;
+  
+  return (
+    <div>
+      <TreeNode level={level}>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+        >
+          <ChevronRight
+            className={cn(
+              "w-3.5 h-3.5 text-base-500 transition-transform duration-150 shrink-0",
+              isExpanded && "rotate-90"
+            )}
+          />
+          <Shapes className="w-4 h-4 text-purple-500 shrink-0" />
+          <span className="text-base-300 group-hover:text-base-100 truncate text-left">
+            Types
+          </span>
+        </button>
+      </TreeNode>
+      
+      {isExpanded && (
+        <div className="border-l border-base-800 ml-4">
+          {types.map((t) => (
+            <TypeNode
+              key={`type-${t.name}`}
+              customType={t}
+              schema={schemaName}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -496,9 +741,6 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
           <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             Scripts
           </span>
-          <span className="text-xs text-base-500 shrink-0">
-            {scripts.length}
-          </span>
           <span
             role="button"
             tabIndex={-1}
@@ -526,7 +768,7 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
             <TreeNode level={level + 1}>
               <button
                 onClick={handleNewScript}
-                className="py-1 px-2 text-sm text-base-500 hover:text-accent-400 cursor-pointer"
+                className="py-1 px-2 text-sm text-base-400 hover:text-accent-400 cursor-pointer"
               >
                 + New script
               </button>
@@ -549,6 +791,7 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
     tablesBySchema,
     viewsBySchema,
     functionsBySchema,
+    typesBySchema,
     loadingSchemas,
     toggleSchemaExpanded 
   } = useAppStore();
@@ -557,25 +800,15 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
   const tables = tablesBySchema[schemaName];
   const views = viewsBySchema[schemaName];
   const functions = functionsBySchema[schemaName];
+  const types = typesBySchema[schemaName];
   const isLoading = loadingSchemas.has(schemaName);
   
   const FolderIcon = isExpanded ? FolderOpen : FolderClosed;
-  
-  // Build count display
-  const getCounts = () => {
-    if (!tables && !views && !functions) return null;
-    const parts: string[] = [];
-    if (tables && tables.length > 0) {
-      parts.push(`${tables.length} table${tables.length !== 1 ? 's' : ''}`);
-    }
-    if (views && views.length > 0) {
-      parts.push(`${views.length} view${views.length !== 1 ? 's' : ''}`);
-    }
-    if (functions && functions.length > 0) {
-      parts.push(`${functions.length} fn${functions.length !== 1 ? 's' : ''}`);
-    }
-    return parts.join(', ') || 'empty';
-  };
+
+  const isEmpty = (!tables || tables.length === 0) && 
+                  (!views || views.length === 0) && 
+                  (!functions || functions.length === 0) &&
+                  (!types || types.length === 0);
   
   return (
     <div>
@@ -597,11 +830,6 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
           {isLoading && (
             <Loader2 className="w-3 h-3 animate-spin text-base-500 ml-auto shrink-0" />
           )}
-          {!isLoading && getCounts() && (
-            <span className="ml-auto text-xs text-base-500 shrink-0">
-              {getCounts()}
-            </span>
-          )}
         </button>
       </TreeNode>
       
@@ -609,7 +837,7 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
         <div className="border-l border-base-800 ml-4">
           {isLoading ? (
             <TreeNode level={level + 1}>
-              <div className="py-2 px-2 text-sm text-base-500 flex items-center gap-2">
+              <div className="py-2 px-2 text-sm text-base-400 flex items-center gap-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Loading...
               </div>
@@ -638,21 +866,27 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
                   />
                 ))
               )}
-              {/* Functions */}
+              {/* Functions folder */}
               {functions && functions.length > 0 && (
-                functions.map((func) => (
-                  <FunctionNode
-                    key={`func-${func.name}`}
-                    func={func}
-                    level={level + 1}
-                  />
-                ))
+                <FunctionsFolderNode
+                  schemaName={schemaName}
+                  functions={functions}
+                  level={level + 1}
+                />
+              )}
+              {/* Types folder */}
+              {types && types.length > 0 && (
+                <TypesFolderNode
+                  schemaName={schemaName}
+                  types={types}
+                  level={level + 1}
+                />
               )}
               {/* Empty state */}
-              {(!tables || tables.length === 0) && (!views || views.length === 0) && (!functions || functions.length === 0) && (
+              {isEmpty && (
                 <TreeNode level={level + 1}>
-                  <div className="py-2 px-2 text-sm text-base-500">
-                    No tables, views, or functions
+                  <div className="py-2 px-2 text-sm text-base-400">
+                    No tables, views, functions, or types
                   </div>
                 </TreeNode>
               )}
@@ -678,14 +912,14 @@ export function SchemaTree() {
 
   if (!activeConnectionId || !activeConnection) {
     return (
-      <div className="h-full flex items-center justify-center text-sm text-base-500 px-4 text-center">
+      <div className="h-full flex items-center justify-center text-sm text-base-400 px-4 text-center">
         Connect to a database to see schema
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-auto py-1">
+    <div className="h-full overflow-auto py-1 sidebar-scroll">
       {/* Scripts folder - shown at top level */}
       <ScriptsFolderNode connectionId={activeConnectionId} level={0} />
 
@@ -708,11 +942,6 @@ export function SchemaTree() {
           {isLoadingSchema && (
             <Loader2 className="w-3 h-3 animate-spin text-base-500 ml-auto shrink-0" />
           )}
-          {!isLoadingSchema && schemas.length > 0 && (
-            <span className="ml-auto text-xs text-base-500 shrink-0">
-              {schemas.length} {schemas.length === 1 ? 'schema' : 'schemas'}
-            </span>
-          )}
         </button>
       </TreeNode>
 
@@ -720,7 +949,7 @@ export function SchemaTree() {
         <div className="border-l border-base-800 ml-3">
           {isLoadingSchema && schemas.length === 0 ? (
             <TreeNode level={1}>
-              <div className="py-2 px-2 text-sm text-base-500 flex items-center gap-2">
+              <div className="py-2 px-2 text-sm text-base-400 flex items-center gap-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Loading schemas...
               </div>
@@ -735,7 +964,7 @@ export function SchemaTree() {
             ))
           ) : (
             <TreeNode level={1}>
-              <div className="py-2 px-2 text-sm text-base-500">
+              <div className="py-2 px-2 text-sm text-base-400">
                 No schemas found
               </div>
             </TreeNode>
