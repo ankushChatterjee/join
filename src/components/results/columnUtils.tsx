@@ -1,9 +1,22 @@
 import { createColumnHelper, ColumnDef } from "@tanstack/react-table";
 import { useRef, useState, useEffect } from "react";
-import { X, Copy, Check, Braces } from "lucide-react";
+import { X, Copy, Check, Braces, Layers, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ColumnDef as SqlColumnDef, DatabaseType } from "@/stores/types";
-import { isJsonType, formatJsonPreview, formatJsonPretty, isJsonValue, hasNativeJsonSupport } from "@/lib/typeHandlers";
+import { 
+  isJsonType, 
+  formatJsonPreview, 
+  formatJsonPretty, 
+  isJsonValue, 
+  hasNativeJsonSupport,
+  isCompositeTypeValue,
+  formatCompositePreview,
+  formatCompositePretty,
+  isArrayValue,
+  formatArrayPreview,
+  formatArrayPretty,
+  formatArrayItem,
+} from "@/lib/typeHandlers";
 
 const TRUNCATE_LENGTH = 100;
 const JSON_PREVIEW_LENGTH = 50;
@@ -15,6 +28,8 @@ function CellPopover({
   isPrimaryKey,
   isIndexed,
   isJson,
+  arrayLength,
+  arrayItems,
   onClose,
   anchorRect,
 }: {
@@ -23,6 +38,8 @@ function CellPopover({
   isPrimaryKey?: boolean;
   isIndexed?: boolean;
   isJson?: boolean;
+  arrayLength?: number;
+  arrayItems?: unknown[];
   onClose: () => void;
   anchorRect: DOMRect;
 }) {
@@ -115,7 +132,9 @@ function CellPopover({
               </span>
             )}
             <span className="text-xs text-base-500">
-              {value.length.toLocaleString()} chars
+              {arrayLength !== undefined 
+                ? `${arrayLength.toLocaleString()} elements`
+                : `${value.length.toLocaleString()} chars`}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -143,15 +162,29 @@ function CellPopover({
         {/* Content */}
         <div
           className={cn(
-            "p-3 overflow-auto",
-            isLongContent || isJson ? "max-h-[400px]" : "max-h-[200px]"
+            "overflow-auto",
+            isLongContent || isJson ? "max-h-[400px]" : "max-h-[200px]",
+            !arrayItems && "p-3"
           )}
         >
-          <pre
-            className="text-xs text-base-200 whitespace-pre-wrap break-all font-mono leading-relaxed"
-          >
-            {displayContent}
-          </pre>
+          {arrayItems ? (
+            <div className="divide-y divide-base-700/50">
+              {arrayItems.map((item, i) => (
+                <div key={i} className="px-3 py-2 flex gap-3">
+                  <span className="text-base-500 text-xs font-mono shrink-0">[{i}]</span>
+                  <span className="text-xs text-base-200 font-mono break-all">
+                    {formatArrayItem(item)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre
+              className="text-xs text-base-200 whitespace-pre-wrap break-all font-mono leading-relaxed"
+            >
+              {displayContent}
+            </pre>
+          )}
         </div>
       </div>
     </div>
@@ -166,6 +199,8 @@ function ClickableCell({
   isPrimaryKey,
   isIndexed,
   isJson,
+  arrayLength,
+  arrayItems,
   className,
 }: {
   value: string;
@@ -174,6 +209,8 @@ function ClickableCell({
   isPrimaryKey?: boolean;
   isIndexed?: boolean;
   isJson?: boolean;
+  arrayLength?: number;
+  arrayItems?: unknown[];
   className?: string;
 }) {
   const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
@@ -205,6 +242,8 @@ function ClickableCell({
           isPrimaryKey={isPrimaryKey}
           isIndexed={isIndexed}
           isJson={isJson}
+          arrayLength={arrayLength}
+          arrayItems={arrayItems}
           anchorRect={popoverAnchor}
           onClose={() => setPopoverAnchor(null)}
         />
@@ -218,6 +257,28 @@ function JsonCellDisplay({ preview }: { preview: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <Braces className="w-3 h-3 shrink-0 text-base-500" />
+      <span className="truncate">{preview}</span>
+    </span>
+  );
+}
+
+// Composite type cell display component
+function CompositeTypeCellDisplay({ preview, typeName }: { preview: string; typeName: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Layers className="w-3 h-3 shrink-0 text-orange-400" />
+      <span className="text-orange-300 text-[10px] font-medium uppercase">{typeName}</span>
+      <span className="truncate text-base-300">{preview}</span>
+    </span>
+  );
+}
+
+// Array cell display component
+function ArrayCellDisplay({ preview, count }: { preview: string; count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <List className="w-3 h-3 shrink-0 text-base-500" />
+      <span className="text-base-400 text-[10px] font-medium">[{count}]</span>
       <span className="truncate">{preview}</span>
     </span>
   );
@@ -264,7 +325,40 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
           );
         }
         
-        // Handle JSON types specially
+        // Handle PostgreSQL composite types (returned as special object from backend)
+        if (isCompositeTypeValue(value)) {
+          const preview = formatCompositePreview(value, 40);
+          const fullValue = formatCompositePretty(value);
+          return (
+            <ClickableCell
+              value={fullValue}
+              sqlType={value._type}
+              isPrimaryKey={isPrimaryKey}
+              isIndexed={isIndexed}
+              displayValue={<CompositeTypeCellDisplay preview={preview} typeName={value._type} />}
+            />
+          );
+        }
+        
+        // Handle arrays (PostgreSQL native arrays, or JSON arrays from MySQL/SQLite)
+        if (isArrayValue(value)) {
+          const preview = formatArrayPreview(value, 40);
+          const fullValue = formatArrayPretty(value);
+          return (
+            <ClickableCell
+              value={fullValue}
+              sqlType={sqlType}
+              isPrimaryKey={isPrimaryKey}
+              isIndexed={isIndexed}
+              isJson={true}
+              arrayLength={value.length}
+              arrayItems={value}
+              displayValue={<ArrayCellDisplay preview={preview} count={value.length} />}
+            />
+          );
+        }
+        
+        // Handle JSON types specially (non-array objects)
         if (shouldTreatAsJson && typeof value === "object") {
           const jsonPreview = formatJsonPreview(value, JSON_PREVIEW_LENGTH);
           const fullValue = JSON.stringify(value);

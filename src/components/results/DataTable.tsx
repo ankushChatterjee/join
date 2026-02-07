@@ -1,11 +1,15 @@
+import { useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
+  getSortedRowModel,
   flexRender,
   ColumnDef,
+  SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef } from "react";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 32;
@@ -17,11 +21,15 @@ interface DataTableProps<TData> {
 
 export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
+    state: { sorting },
   });
 
   const { rows } = table.getRowModel();
@@ -35,7 +43,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
 
   if (data.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-base-500 text-sm">
+      <div className="h-full flex items-center justify-center text-base-400 text-sm">
         No data to display
       </div>
     );
@@ -49,19 +57,41 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
         <thead className="sticky top-0 z-10">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  className="h-8 px-3 text-left font-medium text-base-300 bg-base-850 border-b border-border-subtle whitespace-nowrap"
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
+              {headerGroup.headers.map((header) => {
+                const canSort = header.column.getCanSort();
+                const sortDirection = header.column.getIsSorted();
+                
+                return (
+                  <th
+                    key={header.id}
+                    className={cn(
+                      "h-8 px-3 text-left font-medium text-base-300 bg-base-850 border-b border-border-subtle whitespace-nowrap",
+                      canSort && "cursor-pointer select-none hover:bg-base-800 transition-colors"
+                    )}
+                    onClick={header.column.getToggleSortingHandler()}
+                  >
+                    <div className="flex items-center gap-1">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                      {canSort && (
+                        <span className="ml-1 text-base-500">
+                          {sortDirection === "asc" ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-accent-400" />
+                          ) : sortDirection === "desc" ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-accent-400" />
+                          ) : (
+                            <ChevronsUpDown className="w-3.5 h-3.5 opacity-50" />
+                          )}
+                        </span>
                       )}
-                </th>
-              ))}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           ))}
         </thead>
