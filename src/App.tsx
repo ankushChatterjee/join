@@ -5,16 +5,17 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { useAppStore } from "@/stores/appStore";
 
 function App() {
-  const { loadConnections, loadOpenTabs } = useAppStore();
+  const { loadConnections, loadOpenTabs, loadQueryHistory } = useAppStore();
 
   useEffect(() => {
-    // Load connections and open tabs on app start
+    // Load connections, open tabs, and query history on app start
     const initApp = async () => {
       await loadConnections();
       await loadOpenTabs();
+      await loadQueryHistory();
     };
     initApp();
-  }, [loadConnections, loadOpenTabs]);
+  }, [loadConnections, loadOpenTabs, loadQueryHistory]);
 
   return (
     <>

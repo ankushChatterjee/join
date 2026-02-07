@@ -9,9 +9,13 @@ import type {
   ViewInfo,
   IndexInfo,
   FunctionInfo,
+  CustomTypeInfo,
+  TypeDetailInfo,
+  FunctionDetailInfo,
   QueryResult,
   ScriptMetadata,
   Script,
+  QueryHistoryEntry,
 } from "./types";
 
 export interface Toast {
@@ -40,11 +44,23 @@ interface AppState {
   tablesBySchema: Record<string, TableInfo[]>; // schemaName -> tables
   viewsBySchema: Record<string, ViewInfo[]>; // schemaName -> views
   functionsBySchema: Record<string, FunctionInfo[]>; // schemaName -> functions
+  typesBySchema: Record<string, CustomTypeInfo[]>; // schemaName -> custom types
   columns: Record<string, ColumnInfo[]>; // "schema.table" -> columns
   indexes: Record<string, IndexInfo[]>; // "schema.table" -> indexes
   activeSchema: string | null;
   isLoadingSchema: boolean;
   loadingSchemas: Set<string>; // schemas currently loading tables/views/functions
+
+  // Selected schema object (for showing details in results panel)
+  selectedSchemaObject: {
+    type: "function" | "custom_type";
+    name: string;
+    schema: string;
+    /** Unique identifier for functions (to handle overloaded functions) */
+    specificName?: string;
+  } | null;
+  schemaObjectDetails: TypeDetailInfo | FunctionDetailInfo | null;
+  isLoadingSchemaObjectDetails: boolean;
 
   // Scripts (stored as .sql files per connection)
   scriptsByConnection: Record<string, ScriptMetadata[]>; // connectionId -> scripts
@@ -61,6 +77,10 @@ interface AppState {
   queryResults: QueryResult | null;
   isExecuting: boolean;
   queryError: string | null;
+  previewSource: string | null; // "schema.table" when previewing a table/view
+
+  // Query History
+  queryHistory: QueryHistoryEntry[];
 
   // UI State
   isConnectionDialogOpen: boolean;
@@ -87,8 +107,16 @@ interface AppState {
   loadViewsForSchema: (schema: string) => Promise<void>;
   loadColumns: (table: string, schema: string) => Promise<void>;
   loadIndexes: (table: string, schema: string) => Promise<void>;
+  loadTypesForSchema: (schema: string) => Promise<void>;
   setActiveSchema: (schema: string | null) => void;
   refreshConnectionMetadata: (connectionId: string) => Promise<void>;
+  selectSchemaObject: (
+    type: "function" | "custom_type",
+    name: string,
+    schema: string,
+    specificName?: string
+  ) => Promise<void>;
+  clearSchemaObjectSelection: () => void;
 
   // Actions - Scripts
   loadScripts: (connectionId: string) => Promise<void>;
@@ -115,7 +143,10 @@ interface AppState {
 
   // Actions - Query
   executeQuery: (sql: string) => Promise<void>;
+  executeQueryDirect: (connectionId: string, sql: string, previewSource?: string) => Promise<void>;
   clearResults: () => void;
+  loadQueryHistory: () => Promise<void>;
+  clearQueryHistory: () => void;
 
   // Actions - UI
   openConnectionDialog: (connection?: ConnectionInfo) => void;
@@ -134,11 +165,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   tablesBySchema: {},
   viewsBySchema: {},
   functionsBySchema: {},
+  typesBySchema: {},
   columns: {},
   indexes: {},
   activeSchema: null,
   isLoadingSchema: false,
   loadingSchemas: new Set(),
+
+  // Selected schema object
+  selectedSchemaObject: null,
+  schemaObjectDetails: null,
+  isLoadingSchemaObjectDetails: false,
 
   // Scripts state
   scriptsByConnection: {},
@@ -154,6 +191,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   queryResults: null,
   isExecuting: false,
   queryError: null,
+  previewSource: null,
+
+  // Query History
+  queryHistory: [],
 
   isConnectionDialogOpen: false,
   editingConnection: null,
@@ -217,7 +258,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   connect: async (id: string) => {
-    await invoke("connect", { connectionId: id });
+    // Clear any previous errors and results when attempting to connect
+    set({ queryError: null, queryResults: null });
+    
+    try {
+      await invoke("connect", { connectionId: id });
+    } catch (error) {
+      // Show connection error in results panel
+      set({ queryError: `Connection failed: ${error}` });
+      throw error; // Re-throw so caller can also handle it
+    }
     // Refresh connection status
     await get().loadConnections();
     // Set as active and load schema
@@ -232,8 +282,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       tablesBySchema: {},
       viewsBySchema: {},
       functionsBySchema: {},
+      typesBySchema: {},
       columns: {},
       indexes: {},
+      selectedSchemaObject: null,
+      schemaObjectDetails: null,
     });
     // Load schemas and scripts in parallel
     await Promise.all([
@@ -284,6 +337,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tablesBySchema: {},
         viewsBySchema: {},
         functionsBySchema: {},
+        typesBySchema: {},
         columns: {},
         indexes: {},
         activeSchema: null,
@@ -293,6 +347,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         expandedIndexFolders: new Set(),
         isDbExpanded: true,
         isScriptsFolderExpanded: true,
+        selectedSchemaObject: null,
+        schemaObjectDetails: null,
       });
     }
   },
@@ -307,10 +363,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       tablesBySchema: {},
       viewsBySchema: {},
       functionsBySchema: {},
+      typesBySchema: {},
       columns: {},
       indexes: {},
       isDbExpanded: true,
       isScriptsFolderExpanded: true,
+      selectedSchemaObject: null,
+      schemaObjectDetails: null,
     });
     if (id) {
       get().loadSchemas();
@@ -355,8 +414,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     try {
-      // Load tables, views, and functions in parallel
-      const [tables, views, functions] = await Promise.all([
+      // Load tables, views, functions, and types in parallel
+      const [tables, views, functions, types] = await Promise.all([
         invoke<TableInfo[]>("get_tables", {
           connectionId: activeConnectionId,
           schema: schema,
@@ -369,6 +428,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           connectionId: activeConnectionId,
           schema: schema,
         }),
+        invoke<CustomTypeInfo[]>("get_custom_types", {
+          connectionId: activeConnectionId,
+          schema: schema,
+        }),
       ]);
       set((state) => {
         const newLoadingSchemas = new Set(state.loadingSchemas);
@@ -377,6 +440,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           tablesBySchema: { ...state.tablesBySchema, [schema]: tables },
           viewsBySchema: { ...state.viewsBySchema, [schema]: views },
           functionsBySchema: { ...state.functionsBySchema, [schema]: functions },
+          typesBySchema: { ...state.typesBySchema, [schema]: types },
           loadingSchemas: newLoadingSchemas,
         };
       });
@@ -466,6 +530,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  loadTypesForSchema: async (schema: string) => {
+    const { activeConnectionId, typesBySchema } = get();
+    if (!activeConnectionId) return;
+
+    // Skip if already loaded
+    if (typesBySchema[schema]) return;
+
+    try {
+      const types = await invoke<CustomTypeInfo[]>("get_custom_types", {
+        connectionId: activeConnectionId,
+        schema: schema,
+      });
+      set((state) => ({
+        typesBySchema: { ...state.typesBySchema, [schema]: types },
+      }));
+    } catch (error) {
+      console.error("Failed to load types:", error);
+    }
+  },
+
   setActiveSchema: (schema: string | null) => {
     set({ activeSchema: schema });
   },
@@ -491,6 +575,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       tablesBySchema: {},
       viewsBySchema: {},
       functionsBySchema: {},
+      typesBySchema: {},
       columns: {},
       indexes: {},
       expandedSchemas: new Set(),
@@ -498,6 +583,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       expandedViews: new Set(),
       expandedIndexFolders: new Set(),
       isDbExpanded: true,
+      selectedSchemaObject: null,
+      schemaObjectDetails: null,
     });
 
     // Reload schemas and scripts
@@ -529,6 +616,67 @@ export const useAppStore = create<AppState>((set, get) => ({
     await Promise.all(columnLoadPromises);
     
     get().showToast("success", "Metadata refreshed");
+  },
+
+  selectSchemaObject: async (
+    type: "function" | "custom_type",
+    name: string,
+    schema: string,
+    specificName?: string
+  ) => {
+    const { activeConnectionId } = get();
+    if (!activeConnectionId) return;
+
+    set({
+      selectedSchemaObject: { type, name, schema, specificName },
+      schemaObjectDetails: null,
+      isLoadingSchemaObjectDetails: true,
+      // Clear any query results when selecting a schema object
+      queryResults: null,
+      queryError: null,
+    });
+
+    if (type === "custom_type") {
+      try {
+        const details = await invoke<TypeDetailInfo>("get_type_details", {
+          connectionId: activeConnectionId,
+          typeName: name,
+          schema: schema,
+        });
+        set({
+          schemaObjectDetails: details,
+          isLoadingSchemaObjectDetails: false,
+        });
+      } catch (error) {
+        console.error("Failed to load type details:", error);
+        set({ isLoadingSchemaObjectDetails: false });
+        get().showToast("error", `Failed to load type details: ${error}`);
+      }
+    } else if (type === "function") {
+      try {
+        const details = await invoke<FunctionDetailInfo>("get_function_details", {
+          connectionId: activeConnectionId,
+          functionName: name,
+          schema: schema,
+        });
+        set({
+          schemaObjectDetails: details,
+          isLoadingSchemaObjectDetails: false,
+        });
+      } catch (error) {
+        console.error("Failed to load function details:", error);
+        set({ isLoadingSchemaObjectDetails: false });
+        get().showToast("error", `Failed to load function details: ${error}`);
+      }
+    }
+  },
+
+  clearSchemaObjectSelection: () => {
+    set({
+      selectedSchemaObject: null,
+      schemaObjectDetails: null,
+      isLoadingSchemaObjectDetails: false,
+    });
   },
 
   // Script actions
@@ -949,24 +1097,157 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
-    set({ isExecuting: true, queryError: null });
+    set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: null });
+    const startTime = Date.now();
+    
     try {
       const results = await invoke<QueryResult>("execute_query", {
         connectionId,
         sql,
       });
-      set({ queryResults: results, isExecuting: false });
+      
+      // Add to history on success
+      const historyEntry: QueryHistoryEntry = {
+        id: crypto.randomUUID(),
+        sql,
+        connectionId,
+        connectionName: connection.name,
+        timestamp: startTime,
+        rowCount: results.row_count,
+        executionTimeMs: results.execution_time_ms,
+        error: null,
+      };
+      
+      const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
+      set({
+        queryResults: results,
+        isExecuting: false,
+        queryHistory: newHistory,
+      });
+      // Persist history to disk
+      invoke("save_query_history", { entries: newHistory }).catch(console.error);
     } catch (error) {
+      // Add to history on error
+      const historyEntry: QueryHistoryEntry = {
+        id: crypto.randomUUID(),
+        sql,
+        connectionId,
+        connectionName: connection.name,
+        timestamp: startTime,
+        rowCount: null,
+        executionTimeMs: null,
+        error: error as string,
+      };
+      
+      const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
         queryError: error as string,
         isExecuting: false,
         queryResults: null,
+        queryHistory: newHistory,
       });
+      // Persist history to disk
+      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+    }
+  },
+
+  // Execute query directly with a specific connection (for table preview)
+  executeQueryDirect: async (connectionId: string, sql: string, previewSource?: string) => {
+    const { connections } = get();
+    const connection = connections.find((c) => c.id === connectionId);
+    
+    if (!connection) {
+      set({ queryError: "Connection not found" });
+      return;
+    }
+
+    // Auto-connect if not connected
+    if (!connection.is_connected) {
+      get().showToast("info", `Connecting to ${connection.name}...`);
+      try {
+        await invoke("connect", { connectionId });
+        await get().loadConnections();
+        get().showToast("success", `Connected to ${connection.name}`);
+      } catch (error) {
+        get().showToast("error", `Failed to connect: ${error}`);
+        set({ queryError: `Connection failed: ${error}` });
+        return;
+      }
+    }
+
+    set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: previewSource || null });
+    const startTime = Date.now();
+    
+    try {
+      const results = await invoke<QueryResult>("execute_query", {
+        connectionId,
+        sql,
+      });
+      
+      // Add to history
+      const historyEntry: QueryHistoryEntry = {
+        id: crypto.randomUUID(),
+        sql,
+        connectionId,
+        connectionName: connection.name,
+        timestamp: startTime,
+        rowCount: results.row_count,
+        executionTimeMs: results.execution_time_ms,
+        error: null,
+      };
+      
+      const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
+      set({
+        queryResults: results,
+        isExecuting: false,
+        queryHistory: newHistory,
+      });
+      // Persist history to disk
+      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+    } catch (error) {
+      const historyEntry: QueryHistoryEntry = {
+        id: crypto.randomUUID(),
+        sql,
+        connectionId,
+        connectionName: connection.name,
+        timestamp: startTime,
+        rowCount: null,
+        executionTimeMs: null,
+        error: error as string,
+      };
+      
+      const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
+      set({
+        queryError: error as string,
+        isExecuting: false,
+        queryResults: null,
+        queryHistory: newHistory,
+      });
+      // Persist history to disk
+      invoke("save_query_history", { entries: newHistory }).catch(console.error);
     }
   },
 
   clearResults: () => {
     set({ queryResults: null, queryError: null });
+  },
+
+  loadQueryHistory: async () => {
+    try {
+      const entries = await invoke<QueryHistoryEntry[]>("load_query_history");
+      set({ queryHistory: entries });
+    } catch (error) {
+      console.error("Failed to load query history:", error);
+    }
+  },
+
+  clearQueryHistory: async () => {
+    set({ queryHistory: [] });
+    try {
+      await invoke("clear_query_history");
+    } catch (error) {
+      console.error("Failed to clear query history:", error);
+    }
   },
 
   // UI actions
