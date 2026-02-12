@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use sqlx::{Column, Row, TypeInfo, ValueRef};
@@ -186,6 +187,12 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             }
             if let Ok(v) = row.try_get::<f32, _>(i) {
                 return json!(v);
+            }
+            // PostgreSQL NUMERIC / DECIMAL (arbitrary precision)
+            if let Ok(v) = row.try_get::<Decimal, _>(i) {
+                // Serialize as a JSON number string to preserve full precision
+                // (JSON Number can lose precision for very large decimals)
+                return json!(v.to_string());
             }
             if let Ok(v) = row.try_get::<bool, _>(i) {
                 return json!(v);

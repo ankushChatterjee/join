@@ -948,13 +948,35 @@ export const useAppStore = create<AppState>((set, get) => ({
       }>("load_tabs");
 
       if (tabsState.tabs.length > 0) {
-        const openScripts: OpenScript[] = tabsState.tabs.map((tab) => ({
-          id: tab.id,
-          name: tab.name,
-          content: tab.content,
-          connectionId: tab.connection_id,
-          isDirty: tab.is_dirty,
-        }));
+        // Load fresh content from .sql files for each tab to ensure
+        // we always have the latest persisted content (e.g. from AI edits
+        // that were saved to .sql but not to tabs.json)
+        const openScripts: OpenScript[] = await Promise.all(
+          tabsState.tabs.map(async (tab) => {
+            try {
+              const script = await invoke<Script>("get_script", {
+                connectionId: tab.connection_id,
+                scriptId: tab.id,
+              });
+              return {
+                id: tab.id,
+                name: script.name ?? tab.name,
+                content: script.content,
+                connectionId: tab.connection_id,
+                isDirty: false,
+              };
+            } catch {
+              // Script file may have been deleted — fall back to tabs.json content
+              return {
+                id: tab.id,
+                name: tab.name,
+                content: tab.content,
+                connectionId: tab.connection_id,
+                isDirty: tab.is_dirty,
+              };
+            }
+          })
+        );
 
         set({
           openScripts,

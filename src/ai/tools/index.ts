@@ -1,0 +1,32 @@
+// ============================================================================
+// AI Agent - All Tools (aggregated export)
+// ============================================================================
+
+import {
+  listSchemas,
+  listTables,
+  describeTable,
+  listViews,
+  describeView,
+  listFunctions,
+} from "./schemaTools";
+import { executeReadonlySql, getQueryHistory } from "./queryTools";
+import { getEditorContext, insertSql, replaceEditorContentTool } from "./editorTools";
+
+/** All tools available to the AI agent, keyed by tool name */
+export const allTools = {
+  list_schemas: listSchemas,
+  list_tables: listTables,
+  describe_table: describeTable,
+  list_views: listViews,
+  describe_view: describeView,
+  list_functions: listFunctions,
+  execute_readonly_sql: executeReadonlySql,
+  get_query_history: getQueryHistory,
+  get_editor_context: getEditorContext,
+  insert_sql: insertSql,
+  replace_editor_content: replaceEditorContentTool,
+};
+
+export type AllToolsType = typeof allTools;
+

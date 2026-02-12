@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Clock, X, Trash2, AlertCircle, Check } from "lucide-react";
+import { Clock, X, Trash2, AlertCircle, Check, Sparkles } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
+import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import { cn } from "@/lib/utils";
 import type { QueryHistoryEntry } from "@/stores/types";
@@ -208,6 +209,25 @@ function QueryHistoryDropdown() {
   );
 }
 
+function AiChatToggle() {
+  const { isPanelOpen, togglePanel } = useAiStore();
+
+  return (
+    <button
+      onClick={togglePanel}
+      className={cn(
+        "w-6 h-6 flex items-center justify-center rounded transition-all duration-150 cursor-pointer shrink-0",
+        isPanelOpen
+          ? "bg-accent-500/20 text-accent-400"
+          : "text-base-400 hover:text-base-200 hover:bg-base-700/40"
+      )}
+      title="AI Chat (⌘+L)"
+    >
+      <Sparkles className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
 export function TitleBar() {
   return (
     <header 
@@ -225,8 +245,9 @@ export function TitleBar() {
       </div>
 
       {/* Right side - Action buttons */}
-      <div className="flex items-center relative z-10">
+      <div className="flex items-center gap-1 relative z-10">
         <QueryHistoryDropdown />
+        <AiChatToggle />
       </div>
     </header>
   );

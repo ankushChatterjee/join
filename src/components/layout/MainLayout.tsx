@@ -9,7 +9,9 @@ import { TitleBar } from "./TitleBar";
 import { SqlEditor } from "@/components/editor/SqlEditor";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { ResultsPanel } from "@/components/results/ResultsPanel";
+import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { useAppStore } from "@/stores/appStore";
+import { useAiStore } from "@/stores/aiStore";
 
 function NoConnectionState() {
   return (
@@ -125,6 +127,7 @@ function NoScriptsState() {
 
 export function MainLayout() {
   const { connections, openScripts } = useAppStore();
+  const { isPanelOpen } = useAiStore();
   
   // Check if any connection exists (not necessarily connected)
   const hasAnyConnection = connections.length > 0;
@@ -144,7 +147,7 @@ export function MainLayout() {
         <Separator className="w-px bg-border-subtle hover:bg-accent-500 transition-colors data-[separator-active]:bg-accent-500" />
         
         {/* Main Content Area */}
-        <Panel defaultSize="82%" minSize="50%">
+        <Panel defaultSize={isPanelOpen ? "57%" : "82%"} minSize="35%">
           {!hasAnyConnection && !hasOpenScripts ? (
             <NoConnectionState />
           ) : !hasOpenScripts ? (
@@ -170,6 +173,16 @@ export function MainLayout() {
             </Group>
           )}
         </Panel>
+
+        {/* AI Chat Panel */}
+        {isPanelOpen && (
+          <>
+            <Separator className="w-px bg-border-subtle hover:bg-accent-500 transition-colors data-[separator-active]:bg-accent-500" />
+            <Panel defaultSize="25%" minSize="18%" maxSize="40%">
+              <AiChatPanel />
+            </Panel>
+          </>
+        )}
       </Group>
     </div>
   );

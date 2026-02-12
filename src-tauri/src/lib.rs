@@ -393,6 +393,44 @@ async fn export_to_csv(file_path: String, data: ExportData) -> Result<(), String
 }
 
 // ============================================================================
+// Tauri Commands - Environment Variables (for AI API keys)
+// ============================================================================
+
+#[tauri::command]
+fn get_env_var(name: String) -> Result<String, String> {
+    // Only allow specific env vars for security
+    let allowed = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY"];
+    if !allowed.contains(&name.as_str()) {
+        return Err(format!("Access to environment variable '{}' is not allowed", name));
+    }
+    std::env::var(&name).map_err(|_| format!("Environment variable '{}' is not set", name))
+}
+
+// ============================================================================
+// Tauri Commands - Chat Persistence
+// ============================================================================
+
+#[tauri::command]
+fn list_chat_sessions() -> Result<Vec<storage::chats::ChatSessionMeta>, String> {
+    storage::chats::list_chat_sessions().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_chat_session(session_id: String) -> Result<storage::chats::ChatSession, String> {
+    storage::chats::get_chat_session(&session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_chat_session(session: storage::chats::ChatSession) -> Result<(), String> {
+    storage::chats::save_chat_session(&session).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_chat_session(session_id: String) -> Result<(), String> {
+    storage::chats::delete_chat_session(&session_id).map_err(|e| e.to_string())
+}
+
+// ============================================================================
 // App Entry Point
 // ============================================================================
 
@@ -401,6 +439,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             // Connections
             list_connections,
@@ -439,6 +478,13 @@ pub fn run() {
             clear_query_history,
             // Export
             export_to_csv,
+            // Environment Variables
+            get_env_var,
+            // Chat Persistence
+            list_chat_sessions,
+            get_chat_session,
+            save_chat_session,
+            delete_chat_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

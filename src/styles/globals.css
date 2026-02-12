@@ -243,6 +243,11 @@ body {
   background: var(--color-accent-500);
 }
 
+/* AI chat panel — suppress the global gold focus ring */
+.ai-chat-panel *:focus-visible {
+  outline: none;
+}
+
 /* Subtle glow effect on buttons */
 .glow-on-hover:hover {
   box-shadow: 0 0 20px var(--color-accent-glow);

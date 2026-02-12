@@ -104,6 +104,46 @@ export function insertTextAtCursor(text: string): void {
   }
 }
 
+// Get currently selected text in the editor
+export function getSelectedText(): string | null {
+  if (!editorView) return null;
+  const selection = editorView.state.selection.main;
+  if (selection.empty) return null;
+  return editorView.state.sliceDoc(selection.from, selection.to);
+}
+
+// Get the full content of the editor
+export function getFullEditorContent(): string {
+  if (!editorView) return "";
+  return editorView.state.doc.toString();
+}
+
+// Get cursor position in the editor
+export function getCursorPosition(): { line: number; col: number } | null {
+  if (!editorView) return null;
+  const pos = editorView.state.selection.main.head;
+  const line = editorView.state.doc.lineAt(pos);
+  return { line: line.number, col: pos - line.from + 1 };
+}
+
+// Replace the entire editor content
+export function replaceEditorContent(text: string): void {
+  const view = getEditorView();
+  if (!view) return;
+
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: text },
+  });
+
+  view.focus();
+
+  // Also update the store
+  const { activeScriptId, updateScriptContent } = useAppStore.getState();
+  if (activeScriptId) {
+    updateScriptContent(activeScriptId, text);
+  }
+}
+
 // Generate SELECT statement for a table
 export function generateSelectStatement(
   schema: string,

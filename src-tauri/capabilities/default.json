@@ -7,6 +7,13 @@
     "core:default",
     "core:window:allow-start-dragging",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" }
+      ]
+    }
   ]
 }
