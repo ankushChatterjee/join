@@ -110,7 +110,7 @@ function QueryHistoryDropdown() {
           "w-6 h-6 flex items-center justify-center rounded transition-all duration-150 cursor-pointer shrink-0 relative",
           isOpen
             ? "bg-base-700/60 text-accent-400"
-            : "text-base-400 hover:text-base-200 hover:bg-base-700/40"
+            : "text-base-300 hover:text-base-100 hover:bg-base-700/50"
         )}
         title="Query history"
       >
@@ -130,7 +130,7 @@ function QueryHistoryDropdown() {
               {queryHistory.length > 0 && (
                 <button
                   onClick={handleClear}
-                  className="p-1 rounded hover:bg-base-700/50 text-base-400 hover:text-base-200 transition-colors"
+                  className="p-1 rounded hover:bg-base-700/60 text-base-300 hover:text-base-100 transition-colors"
                   title="Clear history"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -138,7 +138,7 @@ function QueryHistoryDropdown() {
               )}
               <button
                 onClick={handleClose}
-                className="p-1 rounded hover:bg-base-700/50 text-base-400 hover:text-base-200 transition-colors"
+                className="p-1 rounded hover:bg-base-700/60 text-base-300 hover:text-base-100 transition-colors"
                 title="Close"
               >
                 <X className="w-3.5 h-3.5" />
@@ -147,9 +147,9 @@ function QueryHistoryDropdown() {
           </div>
 
           {/* History list */}
-          <div className="overflow-auto max-h-[340px]">
+          <div className="overflow-auto panel-scroll max-h-[340px]">
             {queryHistory.length === 0 ? (
-              <div className="px-3 py-8 text-center text-base-400 text-sm">
+              <div className="px-3 py-8 text-center text-base-300 text-sm">
                 No queries executed yet
               </div>
             ) : (
@@ -174,7 +174,7 @@ function QueryHistoryDropdown() {
                       <p className="text-xs font-mono text-base-200 truncate">
                         {truncateSql(entry.sql)}
                       </p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-base-400">
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-base-300">
                         <span>{entry.connectionName}</span>
                         <span>•</span>
                         <span>{formatRelativeTime(entry.timestamp)}</span>
@@ -192,7 +192,7 @@ function QueryHistoryDropdown() {
                         )}
                       </div>
                       {entry.error && (
-                        <p className="text-[10px] text-red-400 truncate mt-0.5">
+                        <p className="text-[11px] text-red-300 truncate mt-0.5">
                           {entry.error}
                         </p>
                       )}
@@ -217,9 +217,9 @@ function AiChatToggle() {
       onClick={togglePanel}
       className={cn(
         "w-6 h-6 flex items-center justify-center rounded transition-all duration-150 cursor-pointer shrink-0",
-        isPanelOpen
-          ? "bg-accent-500/20 text-accent-400"
-          : "text-base-400 hover:text-base-200 hover:bg-base-700/40"
+          isPanelOpen
+            ? "bg-accent-500/20 text-accent-400"
+            : "text-base-300 hover:text-base-100 hover:bg-base-700/50"
       )}
       title="AI Chat (⌘+L)"
     >
@@ -239,7 +239,7 @@ export function TitleBar() {
 
       {/* Center - App title (pointer-events-none so it doesn't block dragging) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-xs font-semibold text-base-300 tracking-wide">
+        <span className="text-xs font-semibold text-base-200 tracking-wide">
           Join
         </span>
       </div>
@@ -252,4 +252,3 @@ export function TitleBar() {
     </header>
   );
 }
-

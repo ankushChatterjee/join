@@ -9,9 +9,9 @@ const icons = {
 };
 
 const styles = {
-  error: "bg-red-500/10 border-red-500/30 text-red-400",
-  success: "bg-green-500/10 border-green-500/30 text-green-400",
-  info: "bg-accent-500/10 border-accent-500/30 text-accent-400",
+  error: "bg-red-500/12 border-red-400/45 text-red-200",
+  success: "bg-green-500/12 border-green-400/45 text-green-200",
+  info: "bg-accent-500/14 border-accent-500/45 text-accent-200",
 };
 
 function ToastItem({ toast }: { toast: ToastType }) {
@@ -29,7 +29,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
       <p className="flex-1 text-sm">{toast.message}</p>
       <button
         onClick={() => dismissToast(toast.id)}
-        className="p-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
+        className="p-0.5 rounded text-current/90 hover:text-current hover:bg-white/15 transition-colors cursor-pointer"
       >
         <X className="w-4 h-4" />
       </button>

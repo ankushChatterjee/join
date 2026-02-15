@@ -65,7 +65,7 @@ interface AiState {
 
 export const useAiStore = create<AiState>((set, get) => ({
   // Initial state
-  isPanelOpen: false,
+  isPanelOpen: true,
   selectedModelId: "claude-sonnet-4-5-20250929",
   sessions: [],
   activeSessionId: null,

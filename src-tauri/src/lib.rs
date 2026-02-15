@@ -317,8 +317,13 @@ fn get_script(connection_id: String, script_id: String) -> Result<storage::Scrip
 }
 
 #[tauri::command]
-fn update_script_content(connection_id: String, script_id: String, content: String) -> Result<(), String> {
-    storage::scripts::update_script_content(&connection_id, &script_id, &content).map_err(|e| e.to_string())
+fn update_script_content(
+    connection_id: String,
+    script_id: String,
+    sheet: storage::SqlSheetDocument,
+) -> Result<(), String> {
+    storage::scripts::update_script_content(&connection_id, &script_id, &sheet)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

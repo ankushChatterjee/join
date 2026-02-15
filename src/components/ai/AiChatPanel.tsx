@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   ChevronDown,
+  ChevronRight,
   MessageSquare,
   X,
   Sparkles,
@@ -50,20 +51,20 @@ function ModelSelector() {
           "flex items-center gap-1.5 px-2 py-1 rounded text-[11px] outline-none transition-colors",
           isOpen
             ? "bg-base-750 text-base-200"
-            : "text-base-400 hover:text-base-300 hover:bg-base-800/60"
+            : "text-base-300 hover:text-base-100 hover:bg-base-800/60"
         )}
       >
         <span className="truncate max-w-[130px]">
           {selectedModel?.name || "Select model"}
         </span>
-        <ChevronDown className="w-3 h-3 text-base-500" />
+        <ChevronDown className="w-3 h-3 text-base-300" />
       </button>
 
       {isOpen && (
         <div className="absolute top-full right-0 mt-1 w-52 bg-base-850 border border-base-700/60 rounded-lg shadow-xl shadow-black/50 z-50 overflow-hidden animate-dropdown-in">
           {providers.map((provider) => (
             <div key={provider.providerId}>
-              <div className="px-3 py-1 text-[10px] font-medium text-base-500 uppercase tracking-wider">
+              <div className="px-3 py-1 text-[10px] font-medium text-base-300 uppercase tracking-wider">
                 {provider.providerName}
               </div>
               {provider.models.map((model) => (
@@ -82,7 +83,7 @@ function ModelSelector() {
                 >
                   <span className="flex-1">{model.name}</span>
                   {model.id === selectedModelId && (
-                    <span className="text-base-400 text-[10px]">✓</span>
+                    <span className="text-base-300 text-[10px]">✓</span>
                   )}
                 </button>
               ))}
@@ -122,14 +123,14 @@ function SessionList({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-0.5">
           <button
             onClick={handleNewChat}
-            className="p-1 rounded outline-none hover:bg-base-800/60 text-base-500 hover:text-base-300 transition-colors"
+            className="p-1 rounded outline-none hover:bg-base-800/60 text-base-300 hover:text-base-100 transition-colors"
             title="New chat"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClose}
-            className="p-1 rounded outline-none hover:bg-base-800/60 text-base-500 hover:text-base-300 transition-colors"
+            className="p-1 rounded outline-none hover:bg-base-800/60 text-base-300 hover:text-base-100 transition-colors"
             title="Close"
           >
             <X className="w-3.5 h-3.5" />
@@ -139,7 +140,7 @@ function SessionList({ onClose }: { onClose: () => void }) {
 
       <div className="flex-1 overflow-auto sidebar-scroll">
         {sessions.length === 0 ? (
-          <div className="px-3 py-8 text-center text-base-500 text-[11px]">
+          <div className="px-3 py-8 text-center text-base-300 text-[11px]">
             No conversations yet
           </div>
         ) : (
@@ -154,16 +155,16 @@ function SessionList({ onClose }: { onClose: () => void }) {
                   : "hover:bg-base-800/25"
               )}
             >
-              <MessageSquare className="w-3 h-3 text-base-500 shrink-0" />
+              <MessageSquare className="w-3 h-3 text-base-300 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] text-base-300 truncate">{session.title}</p>
-                <p className="text-[10px] text-base-500 mt-0.5">
+                <p className="text-[11px] text-base-300 mt-0.5">
                   {new Date(session.updatedAt).toLocaleDateString()}
                 </p>
               </div>
               <button
                 onClick={(e) => handleDelete(e, session.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded outline-none text-base-500 hover:text-red-400/80 transition-all shrink-0"
+                className="opacity-60 group-hover:opacity-100 p-0.5 rounded outline-none text-base-300 hover:text-red-300 transition-all shrink-0"
                 title="Delete"
               >
                 <Trash2 className="w-3 h-3" />
@@ -188,6 +189,7 @@ export function AiChatPanel() {
     sendMessage,
     stopStreaming,
     createSession,
+    togglePanel,
   } = useAiStore();
 
   const [inputText, setInputText] = useState("");
@@ -239,10 +241,10 @@ export function AiChatPanel() {
           <button
             onClick={() => setShowSessions(!showSessions)}
             className={cn(
-              "p-1 rounded outline-none transition-colors",
+                "p-1 rounded outline-none transition-colors",
               showSessions
                 ? "bg-base-750 text-base-300"
-                : "text-base-500 hover:text-base-300 hover:bg-base-800/60"
+                : "text-base-300 hover:text-base-100 hover:bg-base-800/60"
             )}
             title="Chat history"
           >
@@ -250,14 +252,23 @@ export function AiChatPanel() {
           </button>
           <button
             onClick={handleNewChat}
-            className="p-1 rounded outline-none text-base-500 hover:text-base-300 hover:bg-base-800/60 transition-colors"
+            className="p-1 rounded outline-none text-base-300 hover:text-base-100 hover:bg-base-800/60 transition-colors"
             title="New chat"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <ModelSelector />
+        <div className="flex items-center gap-1">
+          <ModelSelector />
+          <button
+            onClick={togglePanel}
+            className="p-1 rounded outline-none text-base-300 hover:text-base-100 hover:bg-base-800/60 transition-colors"
+            title="Collapse AI panel"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Session list overlay */}
@@ -270,9 +281,9 @@ export function AiChatPanel() {
         {messages.length === 0 && !isStreaming ? (
           <div className="h-full flex flex-col items-center justify-center px-6">
             <div className="w-9 h-9 rounded-lg bg-base-800/40 flex items-center justify-center mb-3">
-              <Sparkles className="w-4 h-4 text-base-500" />
+              <Sparkles className="w-4 h-4 text-base-300" />
             </div>
-            <p className="text-[11px] text-base-400 text-center max-w-[200px] leading-relaxed">
+            <p className="text-[12px] text-base-300 text-center max-w-[220px] leading-relaxed">
               Ask about your database, write queries, or explore schema
             </p>
           </div>
@@ -314,7 +325,7 @@ export function AiChatPanel() {
             placeholder="Ask anything..."
             disabled={isStreaming && pendingApprovals.length === 0}
             rows={1}
-            className="w-full pl-3 pr-12 py-2.5 bg-transparent text-[13px] leading-[1.4] text-base-100 placeholder:text-base-500 focus:outline-none resize-none disabled:opacity-40"
+            className="w-full pl-3 pr-12 py-2.5 bg-transparent text-[13px] leading-[1.4] text-base-100 placeholder:text-base-400 focus:outline-none resize-none disabled:opacity-40"
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {isStreaming ? (
@@ -333,7 +344,7 @@ export function AiChatPanel() {
                   "w-8 h-8 flex items-center justify-center rounded-lg outline-none transition-all duration-200",
                   inputText.trim()
                     ? "bg-accent-500/20 text-accent-400 hover:bg-accent-500/30 hover:text-accent-300 border border-accent-500/30 hover:border-accent-500/40 shadow-sm"
-                    : "bg-base-800/30 text-base-600 cursor-not-allowed border border-base-700/30"
+                    : "bg-base-800/30 text-base-500 cursor-not-allowed border border-base-700/30"
                 )}
                 title="Send message (Enter)"
               >
@@ -343,8 +354,8 @@ export function AiChatPanel() {
           </div>
         </div>
         <div className="flex items-center justify-between mt-1.5 px-1">
-          <p className="text-[10px] text-base-400">
-            <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-300 font-mono text-[9px] border border-base-700/40">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-300 font-mono text-[9px] border border-base-700/40">Shift+Enter</kbd> for new line
+          <p className="text-[10px] text-base-300">
+            <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-200 font-mono text-[9px] border border-base-700/40">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-200 font-mono text-[9px] border border-base-700/40">Shift+Enter</kbd> for new line
           </p>
         </div>
       </div>

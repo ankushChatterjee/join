@@ -131,7 +131,7 @@ function CellPopover({
                 IDX
               </span>
             )}
-            <span className="text-xs text-base-500">
+            <span className="text-xs text-base-300">
               {arrayLength !== undefined 
                 ? `${arrayLength.toLocaleString()} elements`
                 : `${value.length.toLocaleString()} chars`}
@@ -140,7 +140,7 @@ function CellPopover({
           <div className="flex items-center gap-1">
             <button
               onClick={handleCopy}
-              className="p-1 rounded hover:bg-base-700/50 text-base-400 hover:text-base-200 transition-colors"
+              className="p-1 rounded hover:bg-base-700/50 text-base-300 hover:text-base-100 transition-colors"
               title="Copy to clipboard"
             >
               {copied ? (
@@ -151,7 +151,7 @@ function CellPopover({
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-base-700/50 text-base-400 hover:text-base-200 transition-colors"
+              className="p-1 rounded hover:bg-base-700/50 text-base-300 hover:text-base-100 transition-colors"
               title="Close"
             >
               <X className="w-3.5 h-3.5" />
@@ -162,7 +162,7 @@ function CellPopover({
         {/* Content */}
         <div
           className={cn(
-            "overflow-auto",
+            "overflow-auto panel-scroll",
             isLongContent || isJson ? "max-h-[400px]" : "max-h-[200px]",
             !arrayItems && "p-3"
           )}
@@ -171,7 +171,7 @@ function CellPopover({
             <div className="divide-y divide-base-700/50">
               {arrayItems.map((item, i) => (
                 <div key={i} className="px-3 py-2 flex gap-3">
-                  <span className="text-base-500 text-xs font-mono shrink-0">[{i}]</span>
+                  <span className="text-base-300 text-xs font-mono shrink-0">[{i}]</span>
                   <span className="text-xs text-base-200 font-mono break-all">
                     {formatArrayItem(item)}
                   </span>
@@ -256,7 +256,7 @@ function ClickableCell({
 function JsonCellDisplay({ preview }: { preview: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Braces className="w-3 h-3 shrink-0 text-base-500" />
+      <Braces className="w-3 h-3 shrink-0 text-base-300" />
       <span className="truncate">{preview}</span>
     </span>
   );
@@ -277,8 +277,8 @@ function CompositeTypeCellDisplay({ preview, typeName }: { preview: string; type
 function ArrayCellDisplay({ preview, count }: { preview: string; count: number }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <List className="w-3 h-3 shrink-0 text-base-500" />
-      <span className="text-base-400 text-[10px] font-medium">[{count}]</span>
+      <List className="w-3 h-3 shrink-0 text-base-300" />
+      <span className="text-base-300 text-[10px] font-medium">[{count}]</span>
       <span className="truncate">{preview}</span>
     </span>
   );
@@ -320,7 +320,7 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
               sqlType={sqlType}
               isPrimaryKey={isPrimaryKey}
               isIndexed={isIndexed}
-              displayValue={<span className="text-base-500 italic">NULL</span>}
+              displayValue={<span className="text-base-300 italic">NULL</span>}
             />
           );
         }
@@ -387,7 +387,7 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
                     "px-1.5 py-0.5 rounded text-xs font-medium",
                     value
                       ? "bg-success/20 text-success"
-                      : "bg-base-700 text-base-400"
+                      : "bg-base-700 text-base-300"
                   )}
                 >
                   {value ? "true" : "false"}

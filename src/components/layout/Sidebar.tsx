@@ -1,11 +1,15 @@
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import { SchemaTree } from "@/components/connections/SchemaTree";
 
-export function Sidebar() {
+interface SidebarProps {
+  onCollapse: () => void;
+}
+
+export function Sidebar({ onCollapse }: SidebarProps) {
   return (
     <div className="h-full flex flex-col bg-base-900">
       {/* Connections section */}
-      <ConnectionsList />
+      <ConnectionsList onCollapseSidebar={onCollapse} />
       
       {/* Schema tree - takes remaining space */}
       <div className="flex-1 overflow-hidden">

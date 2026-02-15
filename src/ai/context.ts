@@ -82,19 +82,41 @@ export function buildSystemPrompt(): string {
   const activeScript = state.openScripts.find(
     (s) => s.id === state.activeScriptId
   );
+  const selectedCell = activeScript?.cells.find(
+    (cell) => cell.id === activeScript.selectedCellId
+  );
 
   if (editorContent || selectedText) {
     parts.push(`\n## Current Editor State`);
     if (activeScript) {
-      parts.push(`**Script**: ${activeScript.name}`);
+      parts.push(`**SQL Sheet**: ${activeScript.name}`);
+      parts.push(
+        `**Selected Cell**: ${
+          selectedCell
+            ? activeScript.cells.findIndex((cell) => cell.id === selectedCell.id) + 1
+            : "None"
+        }`
+      );
+      if (activeScript.cells.length > 0) {
+        parts.push(`**Sheet Cell Count**: ${activeScript.cells.length}`);
+      }
     }
     if (selectedText) {
       parts.push(`**Selected SQL**:\n\`\`\`sql\n${selectedText}\n\`\`\``);
     }
     if (editorContent && editorContent !== selectedText) {
       parts.push(
-        `**Full Editor Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
+        `**Selected Cell Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
       );
+    }
+    if (activeScript?.cells.length) {
+      const cellSummary = activeScript.cells
+        .map((cell, index) => {
+          const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
+          return `- Cell ${index + 1}${marker}`;
+        })
+        .join("\n");
+      parts.push(`**Cells**:\n${cellSummary}`);
     }
     if (cursorPos) {
       parts.push(`**Cursor**: Line ${cursorPos.line}, Column ${cursorPos.col}`);
@@ -110,7 +132,10 @@ export function buildSystemPrompt(): string {
     `- When writing SQL, always use the correct dialect for the connected database.`
   );
   parts.push(
-    `- Use \`insert_sql\` to add SQL at the cursor position, or \`replace_editor_content\` to replace all editor content.`
+    `- \`insert_sql\` and \`replace_editor_content\` only modify the currently selected cell.`
+  );
+  parts.push(
+    `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected).`
   );
   parts.push(
     `- The \`execute_readonly_sql\` tool requires user approval and should only be used when truly needed to verify data or test queries. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE).`
@@ -124,4 +149,3 @@ export function buildSystemPrompt(): string {
 
   return parts.join("\n");
 }
-

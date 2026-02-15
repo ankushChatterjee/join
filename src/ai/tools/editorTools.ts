@@ -9,6 +9,7 @@ import {
   getSelectedText,
   getFullEditorContent,
   getCursorPosition,
+  getEditorView,
   insertTextAtCursor,
   replaceEditorContent,
 } from "@/components/editor/editorUtils";
@@ -16,11 +17,18 @@ import {
 // --- get_editor_context ---
 export const getEditorContext = tool({
   description:
-    "Get the current state of the SQL editor including the full content, any selected text, and cursor position.",
+    "Get the current SQL sheet editor state including selected cell details, cell content, selected text, and cursor position.",
   inputSchema: z.object({}),
   execute: async () => {
     const { openScripts, activeScriptId } = useAppStore.getState();
     const activeScript = openScripts.find((s) => s.id === activeScriptId);
+    const selectedCell = activeScript?.cells.find(
+      (cell) => cell.id === activeScript.selectedCellId
+    );
+    const selectedCellIndex =
+      selectedCell && activeScript
+        ? activeScript.cells.findIndex((cell) => cell.id === selectedCell.id) + 1
+        : null;
 
     const fullContent = getFullEditorContent();
     const selectedText = getSelectedText();
@@ -28,8 +36,21 @@ export const getEditorContext = tool({
 
     return JSON.stringify(
       {
-        scriptName: activeScript?.name || null,
-        fullContent: fullContent || "",
+        sheetName: activeScript?.name || null,
+        selectedCellId: activeScript?.selectedCellId || null,
+        selectedCellNumber: selectedCellIndex,
+        selectedCellContent: fullContent || "",
+        cellCount: activeScript?.cells.length ?? 0,
+        cells:
+          activeScript?.cells.map((cell, index) => ({
+            id: cell.id,
+            number: index + 1,
+            isSelected: cell.id === activeScript.selectedCellId,
+            sql: cell.sql,
+            lastRunAt: cell.last_run_at,
+            lastRunDurationMs: cell.last_run_duration_ms,
+            lastRunSuccessful: cell.last_run_successful,
+          })) ?? [],
         selectedText: selectedText || null,
         cursorPosition: cursorPos,
         isDirty: activeScript?.isDirty || false,
@@ -43,27 +64,87 @@ export const getEditorContext = tool({
 // --- insert_sql ---
 export const insertSql = tool({
   description:
-    "Insert SQL text into the editor at the current cursor position. Use this when you want to add SQL without replacing existing content.",
+    "Insert SQL into the currently selected cell at the cursor position. This tool never edits other cells.",
   inputSchema: z.object({
     sql: z.string().describe("The SQL text to insert at the cursor position"),
   }),
   execute: async ({ sql }) => {
+    const { openScripts, activeScriptId, updateScriptContent } = useAppStore.getState();
+    const activeScript = openScripts.find((s) => s.id === activeScriptId);
+    if (!activeScript?.selectedCellId) {
+      return "No cell is selected. Use add_cell to create/select a cell first.";
+    }
+
+    if (!getEditorView()) {
+      const selectedCell = activeScript.cells.find(
+        (cell) => cell.id === activeScript.selectedCellId
+      );
+      if (!selectedCell) {
+        return "No selected cell found. Use add_cell to create/select a cell first.";
+      }
+      updateScriptContent(activeScript.id, `${selectedCell.sql}${sql}`);
+      useAppStore.getState().saveOpenTabs();
+      return "Inserted SQL into the selected cell.";
+    }
+
     insertTextAtCursor(sql);
     useAppStore.getState().saveOpenTabs();
-    return `Successfully inserted SQL into the editor.`;
+    return "Inserted SQL into the selected cell.";
   },
 });
 
 // --- replace_editor_content ---
 export const replaceEditorContentTool = tool({
   description:
-    "Replace the entire content of the SQL editor. Use this when you want to completely rewrite the editor content.",
+    "Replace only the currently selected cell content. This tool never edits other cells.",
   inputSchema: z.object({
     sql: z.string().describe("The SQL text to replace the editor content with"),
   }),
   execute: async ({ sql }) => {
+    const { openScripts, activeScriptId, updateScriptContent } = useAppStore.getState();
+    const activeScript = openScripts.find((s) => s.id === activeScriptId);
+    if (!activeScript?.selectedCellId) {
+      return "No cell is selected. Use add_cell to create/select a cell first.";
+    }
+
+    if (!getEditorView()) {
+      updateScriptContent(activeScript.id, sql);
+      useAppStore.getState().saveOpenTabs();
+      return "Replaced content in the selected cell.";
+    }
+
     replaceEditorContent(sql);
     useAppStore.getState().saveOpenTabs();
-    return `Successfully replaced editor content.`;
+    return "Replaced content in the selected cell.";
+  },
+});
+
+// --- add_cell ---
+export const addCellTool = tool({
+  description:
+    "Add a new SQL cell to the active sheet. Use this when no cell is selected or when you want to create a new cell for a separate query.",
+  inputSchema: z.object({
+    sql: z
+      .string()
+      .optional()
+      .describe("Optional SQL content for the new cell"),
+  }),
+  execute: async ({ sql }) => {
+    const { openScripts, activeScriptId, addScriptCell } = useAppStore.getState();
+    const activeScript = openScripts.find((s) => s.id === activeScriptId);
+
+    if (!activeScript) {
+      return "No active SQL sheet is open.";
+    }
+
+    const hadSelectedCell = Boolean(activeScript.selectedCellId);
+    const newCellId = await addScriptCell(activeScript.id, sql ?? "", true);
+    if (!newCellId) {
+      return "Failed to add a new cell.";
+    }
+
+    return hadSelectedCell
+      ? "Added a new cell after the selected cell."
+      : "No cell was selected, so I created and selected a new cell.";
   },
 });

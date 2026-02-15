@@ -82,7 +82,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         "group flex items-center gap-2 h-7 px-3 rounded text-[13px] font-medium transition-colors duration-100 shrink-0",
         isActive
           ? "bg-base-750 text-base-100"
-          : "text-base-400 hover:text-base-200 hover:bg-base-800/50"
+          : "text-base-300 hover:text-base-100 hover:bg-base-800/60"
       )}
     >
       {/* Disconnected indicator */}
@@ -104,7 +104,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           e.stopPropagation();
           closeScript(script.id);
         }}
-        className="p-0.5 -mr-1 rounded hover:bg-base-600/50 text-base-400 hover:text-base-200"
+        className="p-0.5 -mr-1 rounded hover:bg-base-600/60 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -175,7 +175,7 @@ export function EditorTabs() {
         <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-surface to-transparent z-10 pointer-events-none" />
       )}
 
-      {/* Scripts */}
+      {/* SQL sheets */}
       <div
         ref={scrollContainerRef}
         className="flex items-center gap-0.5 overflow-x-auto editor-tabs-scroll h-full"
@@ -195,12 +195,12 @@ export function EditorTabs() {
         <div className="absolute right-8 top-0 bottom-0 w-6 bg-gradient-to-l from-surface to-transparent z-10 pointer-events-none" />
       )}
 
-      {/* New script - only show when there's an active connection */}
+      {/* New SQL sheet - only show when there's an active connection */}
       {activeConnectionId && (
         <button
           onClick={handleNewScript}
-          className="ml-1 p-1.5 rounded text-base-400 hover:text-base-200 hover:bg-base-800/50 transition-colors shrink-0"
-          title="New script"
+          className="ml-1 p-1.5 rounded text-base-300 hover:text-base-100 hover:bg-base-800/60 transition-colors shrink-0"
+          title="New SQL sheet"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>

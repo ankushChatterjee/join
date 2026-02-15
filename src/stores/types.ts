@@ -121,7 +121,21 @@ export interface EditorTab {
   createdAt: number;
 }
 
-// Scripts stored as .sql files
+export interface SqlSheetCell {
+  id: string;
+  sql: string;
+  last_run_at: number | null;
+  last_run_duration_ms: number | null;
+  last_run_successful: boolean | null;
+}
+
+export interface SqlSheetDocument {
+  version: number;
+  selected_cell_id: string | null;
+  cells: SqlSheetCell[];
+}
+
+// SQL sheets metadata
 export interface ScriptMetadata {
   id: string;
   name: string;
@@ -130,9 +144,7 @@ export interface ScriptMetadata {
   updated_at: number;
 }
 
-export interface Script extends ScriptMetadata {
-  content: string;
-}
+export interface Script extends ScriptMetadata, SqlSheetDocument {}
 
 // Query history entry for tracking executed queries
 export interface QueryHistoryEntry {

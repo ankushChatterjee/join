@@ -96,7 +96,7 @@ function MarkdownContent({ content }: { content: string }) {
         ),
         li: ({ children }) => (
           <li className="flex gap-2 text-sm text-base-200 pl-2 list-none">
-            <span className="text-base-400 shrink-0">•</span>
+            <span className="text-base-300 shrink-0">•</span>
             <span>{children}</span>
           </li>
         ),
@@ -123,7 +123,7 @@ function MarkdownContent({ content }: { content: string }) {
         ),
         // Strikethrough
         del: ({ children }) => (
-          <del className="text-base-400 line-through">{children}</del>
+          <del className="text-base-300 line-through">{children}</del>
         ),
       }}
     >
@@ -151,14 +151,14 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   return (
     <div className="my-2 rounded-lg border border-base-700/50 overflow-hidden bg-base-900">
       <div className="flex items-center justify-between px-3 py-1.5 bg-base-800/50 border-b border-base-700/50">
-        <span className="text-[10px] font-mono text-base-400 uppercase">
+        <span className="text-[10px] font-mono text-base-300 uppercase">
           {language || "code"}
         </span>
         <div className="flex items-center gap-1">
           {isSql && (
             <button
               onClick={handleInsert}
-              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-base-400 hover:text-accent-400 hover:bg-base-700/50 transition-colors"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-base-300 hover:text-accent-300 hover:bg-base-700/50 transition-colors"
               title="Insert to editor"
             >
               <ArrowDownToLine className="w-3 h-3" />
@@ -167,7 +167,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-base-400 hover:text-base-200 hover:bg-base-700/50 transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-base-300 hover:text-base-100 hover:bg-base-700/50 transition-colors"
             title="Copy"
           >
             {copied ? (
@@ -203,7 +203,7 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
       case "denied":
         return <ShieldAlert className="w-3 h-3 text-red-400" />;
       default:
-        return <Loader2 className="w-3 h-3 text-base-400 animate-spin" />;
+        return <Loader2 className="w-3 h-3 text-base-300 animate-spin" />;
     }
   }, [toolCall.status, toolCall.isError]);
 
@@ -214,11 +214,11 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
         className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-base-800/30 transition-colors"
       >
         {isExpanded ? (
-          <ChevronDown className="w-3 h-3 text-base-400 shrink-0" />
+          <ChevronDown className="w-3 h-3 text-base-300 shrink-0" />
         ) : (
-          <ChevronRight className="w-3 h-3 text-base-400 shrink-0" />
+          <ChevronRight className="w-3 h-3 text-base-300 shrink-0" />
         )}
-        <Wrench className="w-3 h-3 text-base-400 shrink-0" />
+        <Wrench className="w-3 h-3 text-base-300 shrink-0" />
         <span className="text-xs font-mono text-base-300 truncate">
           {toolCall.name}
         </span>
@@ -227,18 +227,18 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
 
       {isExpanded && (
         <div className="px-3 py-2 border-t border-base-700/30 text-xs">
-          <div className="text-base-400 mb-1">Input:</div>
+          <div className="text-base-300 mb-1">Input:</div>
           <pre className="text-base-300 font-mono overflow-x-auto mb-2 text-[11px]">
             {JSON.stringify(toolCall.input, null, 2)}
           </pre>
           {toolCall.result && (
             <>
-              <div className="text-base-400 mb-1">
+              <div className="text-base-300 mb-1">
                 {toolCall.isError ? "Error:" : "Result:"}
               </div>
               <pre
                 className={cn(
-                  "font-mono overflow-x-auto text-[11px] max-h-[200px] overflow-y-auto",
+                  "font-mono overflow-x-auto panel-scroll text-[11px] max-h-[200px] overflow-y-auto",
                   toolCall.isError ? "text-red-400" : "text-base-300"
                 )}
               >
@@ -335,7 +335,7 @@ export function ChatMessageComponent({
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-red-300 mb-0.5">Something went wrong</p>
-            <p className="text-xs text-red-300/70 leading-relaxed break-words">{content}</p>
+            <p className="text-xs text-red-300 leading-relaxed break-words">{content}</p>
           </div>
         </div>
       </div>
@@ -365,7 +365,7 @@ export function ChatMessageComponent({
 
       {/* Streaming indicator */}
       {isStreaming && !content && toolCalls.length === 0 && (
-        <div className="flex items-center gap-2 text-xs text-base-400">
+        <div className="flex items-center gap-2 text-xs text-base-300">
           <Loader2 className="w-3 h-3 animate-spin" />
           <span>Thinking...</span>
         </div>
@@ -378,4 +378,3 @@ export function ChatMessageComponent({
     </div>
   );
 }
-

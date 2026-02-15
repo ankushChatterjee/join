@@ -8,5 +8,5 @@ pub mod tabs;
 pub use config::*;
 pub use credentials::*;
 pub use history::{QueryHistory, QueryHistoryEntry};
-pub use scripts::{Script, ScriptMetadata};
+pub use scripts::{Script, ScriptMetadata, SqlSheetDocument};
 pub use tabs::TabsState;

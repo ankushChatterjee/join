@@ -15,6 +15,8 @@ import type {
   QueryResult,
   ScriptMetadata,
   Script,
+  SqlSheetCell,
+  SqlSheetDocument,
   QueryHistoryEntry,
 } from "./types";
 
@@ -29,7 +31,8 @@ interface OpenScript {
   id: string;
   name: string;
   connectionId: string;
-  content: string;
+  cells: SqlSheetCell[];
+  selectedCellId: string | null;
   isDirty: boolean;
 }
 
@@ -62,7 +65,7 @@ interface AppState {
   schemaObjectDetails: TypeDetailInfo | FunctionDetailInfo | null;
   isLoadingSchemaObjectDetails: boolean;
 
-  // Scripts (stored as .sql files per connection)
+  // SQL sheets (stored as JSON files per connection)
   scriptsByConnection: Record<string, ScriptMetadata[]>; // connectionId -> scripts
   isScriptsFolderExpanded: boolean;
 
@@ -76,6 +79,7 @@ interface AppState {
   // Query
   queryResults: QueryResult | null;
   isExecuting: boolean;
+  executingCell: { scriptId: string; cellId: string } | null;
   queryError: string | null;
   previewSource: string | null; // "schema.table" when previewing a table/view
 
@@ -124,6 +128,15 @@ interface AppState {
   openScript: (connectionId: string, scriptId: string) => Promise<void>;
   closeScript: (scriptId: string) => void;
   setActiveScript: (scriptId: string) => void;
+  setSelectedScriptCell: (scriptId: string, cellId: string | null) => void;
+  addScriptCell: (scriptId: string, sql?: string, selectNewCell?: boolean) => Promise<string | null>;
+  removeScriptCell: (scriptId: string, cellId: string) => Promise<void>;
+  updateScriptCellRunMetadata: (
+    scriptId: string,
+    cellId: string,
+    updates: Pick<SqlSheetCell, "last_run_at" | "last_run_duration_ms" | "last_run_successful">
+  ) => Promise<void>;
+  executeScriptCell: (scriptId: string, cellId: string) => Promise<void>;
   updateScriptContent: (scriptId: string, content: string) => void;
   saveScript: (scriptId: string) => Promise<void>;
   renameScript: (scriptId: string, name: string) => Promise<void>;
@@ -153,6 +166,41 @@ interface AppState {
   closeConnectionDialog: () => void;
   showToast: (type: Toast["type"], message: string) => void;
   dismissToast: (id: string) => void;
+}
+
+const SHEET_FORMAT_VERSION = 1;
+
+function createEmptyCell(sql = ""): SqlSheetCell {
+  return {
+    id: `cell-${crypto.randomUUID()}`,
+    sql,
+    last_run_at: null,
+    last_run_duration_ms: null,
+    last_run_successful: null,
+  };
+}
+
+function normalizeCells(cells: SqlSheetCell[]): SqlSheetCell[] {
+  if (cells.length === 0) {
+    return [createEmptyCell()];
+  }
+  return cells;
+}
+
+function pickSelectedCellId(cells: SqlSheetCell[], selectedCellId: string | null): string | null {
+  if (cells.length === 0) return null;
+  if (selectedCellId && cells.some((c) => c.id === selectedCellId)) {
+    return selectedCellId;
+  }
+  return cells[0].id;
+}
+
+function toSheetDocument(openScript: OpenScript): SqlSheetDocument {
+  return {
+    version: SHEET_FORMAT_VERSION,
+    selected_cell_id: pickSelectedCellId(openScript.cells, openScript.selectedCellId),
+    cells: normalizeCells(openScript.cells),
+  };
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -190,6 +238,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   queryResults: null,
   isExecuting: false,
+  executingCell: null,
   queryError: null,
   previewSource: null,
 
@@ -697,19 +746,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   createScript: async (connectionId: string) => {
     const { connections, scriptsByConnection } = get();
     const connection = connections.find((c) => c.id === connectionId);
-    
+
     if (!connection) {
       console.error("Cannot create script: connection not found");
       return null;
     }
-    
+
     // Generate name: <connection_name>_<number>
     const existingScripts = scriptsByConnection[connectionId] || [];
     const name = `${connection.name}_${existingScripts.length + 1}`;
-    
+
     try {
       const script = await invoke<Script>("create_script", { connectionId, name });
-      
+
+      const cells = normalizeCells(script.cells || []);
+      const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
+
       // Update scripts list
       set((state) => ({
         scriptsByConnection: {
@@ -717,35 +769,36 @@ export const useAppStore = create<AppState>((set, get) => ({
           [connectionId]: [...(state.scriptsByConnection[connectionId] || []), script],
         },
       }));
-      
+
       // Open the new script
       const openScript: OpenScript = {
         id: script.id,
         name: script.name,
         connectionId: script.connection_id,
-        content: script.content,
+        cells,
+        selectedCellId,
         isDirty: false,
       };
-      
+
       set((state) => ({
         openScripts: [...state.openScripts, openScript],
         activeScriptId: script.id,
       }));
-      
+
       // Save tabs state
       get().saveOpenTabs();
-      
+
       return script.id;
     } catch (error) {
       console.error("Failed to create script:", error);
-      get().showToast("error", `Failed to create script: ${error}`);
+      get().showToast("error", `Failed to create SQL sheet: ${error}`);
       return null;
     }
   },
 
   openScript: async (connectionId: string, scriptId: string) => {
     const { openScripts } = get();
-    
+
     // Check if already open
     const existing = openScripts.find((s) => s.id === scriptId);
     if (existing) {
@@ -753,28 +806,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().saveOpenTabs();
       return;
     }
-    
+
     try {
       const script = await invoke<Script>("get_script", { connectionId, scriptId });
-      
+      const cells = normalizeCells(script.cells || []);
+      const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
+
       const openScript: OpenScript = {
         id: script.id,
         name: script.name,
         connectionId: script.connection_id,
-        content: script.content,
+        cells,
+        selectedCellId,
         isDirty: false,
       };
-      
+
       set((state) => ({
         openScripts: [...state.openScripts, openScript],
         activeScriptId: scriptId,
       }));
-      
+
       // Save tabs state
       get().saveOpenTabs();
     } catch (error) {
       console.error("Failed to open script:", error);
-      get().showToast("error", `Failed to open script: ${error}`);
+      get().showToast("error", `Failed to open SQL sheet: ${error}`);
     }
   },
 
@@ -782,7 +838,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { openScripts, activeScriptId } = get();
     const scriptIndex = openScripts.findIndex((s) => s.id === scriptId);
     const newOpenScripts = openScripts.filter((s) => s.id !== scriptId);
-    
+
     // If closing active script, switch to adjacent one
     let newActiveId: string | null = activeScriptId;
     if (activeScriptId === scriptId) {
@@ -798,7 +854,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       openScripts: newOpenScripts,
       activeScriptId: newActiveId,
     });
-    
+
     // Save tabs state
     get().saveOpenTabs();
   },
@@ -808,36 +864,210 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().saveOpenTabs();
   },
 
-  updateScriptContent: (scriptId: string, content: string) => {
+  setSelectedScriptCell: (scriptId: string, cellId: string | null) => {
+    set((state) => ({
+      openScripts: state.openScripts.map((script) => {
+        if (script.id !== scriptId) return script;
+        return {
+          ...script,
+          selectedCellId: pickSelectedCellId(script.cells, cellId),
+          isDirty: true,
+        };
+      }),
+    }));
+
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    if (!script) return;
+
+    invoke("update_script_content", {
+      connectionId: script.connectionId,
+      scriptId,
+      sheet: toSheetDocument(script),
+    }).catch((e) => console.error("Failed to persist selected cell:", e));
+    get().saveOpenTabs();
+  },
+
+  addScriptCell: async (scriptId: string, sql = "", selectNewCell = true) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    if (!script) return null;
+
+    const newCell = createEmptyCell(sql);
+    const selectedIndex = script.selectedCellId
+      ? script.cells.findIndex((cell) => cell.id === script.selectedCellId)
+      : -1;
+    const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : script.cells.length;
+    const cells = [...script.cells];
+    cells.splice(insertAt, 0, newCell);
+
+    const selectedCellId = selectNewCell
+      ? newCell.id
+      : pickSelectedCellId(cells, script.selectedCellId);
+
+    const updatedScript: OpenScript = {
+      ...script,
+      cells,
+      selectedCellId,
+      isDirty: true,
+    };
+
     set((state) => ({
       openScripts: state.openScripts.map((s) =>
-        s.id === scriptId ? { ...s, content, isDirty: true } : s
+        s.id === scriptId ? updatedScript : s
       ),
     }));
-    
-    // Auto-save after a short delay (debounced in component)
-    // For now, save immediately
-    const script = get().openScripts.find((s) => s.id === scriptId);
-    if (script) {
-      invoke("update_script_content", {
+
+    try {
+      await invoke("update_script_content", {
         connectionId: script.connectionId,
         scriptId,
-        content,
-      }).catch((e) => console.error("Failed to save script:", e));
+        sheet: toSheetDocument(updatedScript),
+      });
+      get().saveOpenTabs();
+      return newCell.id;
+    } catch (error) {
+      console.error("Failed to add cell:", error);
+      get().showToast("error", `Failed to add cell: ${error}`);
+      return null;
     }
+  },
+
+  removeScriptCell: async (scriptId: string, cellId: string) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    if (!script) return;
+
+    const targetIndex = script.cells.findIndex((cell) => cell.id === cellId);
+    if (targetIndex === -1) return;
+
+    const nextCells = script.cells.filter((cell) => cell.id !== cellId);
+    const normalizedCells = normalizeCells(nextCells);
+    const fallbackSelectedId =
+      normalizedCells[Math.max(0, Math.min(targetIndex, normalizedCells.length - 1))]?.id ?? null;
+    const selectedCellId =
+      script.selectedCellId === cellId
+        ? fallbackSelectedId
+        : pickSelectedCellId(normalizedCells, script.selectedCellId);
+
+    const updatedScript: OpenScript = {
+      ...script,
+      cells: normalizedCells,
+      selectedCellId,
+      isDirty: true,
+    };
+
+    set((state) => ({
+      openScripts: state.openScripts.map((s) =>
+        s.id === scriptId ? updatedScript : s
+      ),
+    }));
+
+    try {
+      await invoke("update_script_content", {
+        connectionId: script.connectionId,
+        scriptId,
+        sheet: toSheetDocument(updatedScript),
+      });
+      get().saveOpenTabs();
+    } catch (error) {
+      console.error("Failed to remove cell:", error);
+      get().showToast("error", `Failed to remove cell: ${error}`);
+    }
+  },
+
+  updateScriptCellRunMetadata: async (scriptId: string, cellId: string, updates) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    if (!script) return;
+
+    const updatedScript: OpenScript = {
+      ...script,
+      cells: script.cells.map((cell) =>
+        cell.id === cellId ? { ...cell, ...updates } : cell
+      ),
+      isDirty: true,
+    };
+
+    set((state) => ({
+      openScripts: state.openScripts.map((s) =>
+        s.id === scriptId ? updatedScript : s
+      ),
+    }));
+
+    try {
+      await invoke("update_script_content", {
+        connectionId: script.connectionId,
+        scriptId,
+        sheet: toSheetDocument(updatedScript),
+      });
+    } catch (error) {
+      console.error("Failed to persist run metadata:", error);
+    }
+  },
+
+  executeScriptCell: async (scriptId: string, cellId: string) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    const cell = script?.cells.find((c) => c.id === cellId);
+    if (!script || !cell) return;
+
+    const sql = cell.sql.trim();
+    if (!sql) return;
+
+    const runStartedAt = Date.now();
+    set({ executingCell: { scriptId, cellId } });
+
+    try {
+      await get().executeQueryDirect(script.connectionId, sql);
+      const { queryError, queryResults } = get();
+      const elapsedMs = Date.now() - runStartedAt;
+
+      await get().updateScriptCellRunMetadata(scriptId, cellId, {
+        last_run_at: runStartedAt,
+        last_run_duration_ms: queryError ? elapsedMs : (queryResults?.execution_time_ms ?? elapsedMs),
+        last_run_successful: !queryError,
+      });
+    } finally {
+      set({ executingCell: null });
+    }
+  },
+
+  updateScriptContent: (scriptId: string, content: string) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    if (!script) return;
+
+    const selectedCellId = pickSelectedCellId(script.cells, script.selectedCellId);
+    if (!selectedCellId) return;
+
+    const updatedScript: OpenScript = {
+      ...script,
+      selectedCellId,
+      cells: script.cells.map((cell) =>
+        cell.id === selectedCellId ? { ...cell, sql: content } : cell
+      ),
+      isDirty: true,
+    };
+
+    set((state) => ({
+      openScripts: state.openScripts.map((s) =>
+        s.id === scriptId ? updatedScript : s
+      ),
+    }));
+
+    invoke("update_script_content", {
+      connectionId: updatedScript.connectionId,
+      scriptId,
+      sheet: toSheetDocument(updatedScript),
+    }).catch((e) => console.error("Failed to save script:", e));
   },
 
   saveScript: async (scriptId: string) => {
     const script = get().openScripts.find((s) => s.id === scriptId);
     if (!script) return;
-    
+
     try {
       await invoke("update_script_content", {
         connectionId: script.connectionId,
         scriptId,
-        content: script.content,
+        sheet: toSheetDocument(script),
       });
-      
+
       set((state) => ({
         openScripts: state.openScripts.map((s) =>
           s.id === scriptId ? { ...s, isDirty: false } : s
@@ -874,7 +1104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }));
           } catch (error) {
             console.error("Failed to rename script:", error);
-            get().showToast("error", `Failed to rename: ${error}`);
+            get().showToast("error", `Failed to rename SQL sheet: ${error}`);
           }
           return;
         }
@@ -899,7 +1129,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
     } catch (error) {
       console.error("Failed to rename script:", error);
-      get().showToast("error", `Failed to rename: ${error}`);
+      get().showToast("error", `Failed to rename SQL sheet: ${error}`);
     }
   },
 
@@ -921,7 +1151,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save tabs state
       get().saveOpenTabs();
       
-      get().showToast("success", "Script deleted");
+      get().showToast("success", "SQL sheet deleted");
     } catch (error) {
       console.error("Failed to delete script:", error);
       get().showToast("error", `Failed to delete: ${error}`);
@@ -948,9 +1178,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }>("load_tabs");
 
       if (tabsState.tabs.length > 0) {
-        // Load fresh content from .sql files for each tab to ensure
-        // we always have the latest persisted content (e.g. from AI edits
-        // that were saved to .sql but not to tabs.json)
+        // Load fresh content from sheet files for each tab.
         const openScripts: OpenScript[] = await Promise.all(
           tabsState.tabs.map(async (tab) => {
             try {
@@ -958,19 +1186,24 @@ export const useAppStore = create<AppState>((set, get) => ({
                 connectionId: tab.connection_id,
                 scriptId: tab.id,
               });
+              const cells = normalizeCells(script.cells || []);
+              const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
               return {
                 id: tab.id,
                 name: script.name ?? tab.name,
-                content: script.content,
+                cells,
+                selectedCellId,
                 connectionId: tab.connection_id,
                 isDirty: false,
               };
             } catch {
               // Script file may have been deleted — fall back to tabs.json content
+              const fallbackCell = createEmptyCell(tab.content);
               return {
                 id: tab.id,
                 name: tab.name,
-                content: tab.content,
+                cells: [fallbackCell],
+                selectedCellId: fallbackCell.id,
                 connectionId: tab.connection_id,
                 isDirty: tab.is_dirty,
               };
@@ -995,7 +1228,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: openScripts.map((script) => ({
         id: script.id,
         name: script.name,
-        content: script.content,
+        content:
+          script.cells.find((cell) => cell.id === script.selectedCellId)?.sql ??
+          script.cells[0]?.sql ??
+          "",
         connection_id: script.connectionId,
         is_dirty: script.isDirty,
         created_at: Date.now(),

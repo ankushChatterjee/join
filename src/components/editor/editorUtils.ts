@@ -5,20 +5,37 @@ import type { DatabaseType } from "@/stores/types";
 
 // Store editor view reference for query execution
 let editorView: EditorView | null = null;
+let activeEditorCellId: string | null = null;
 
-export function setEditorView(view: EditorView | null) {
+export function setEditorView(view: EditorView | null, cellId?: string | null) {
   editorView = view;
+  if (cellId !== undefined) {
+    activeEditorCellId = cellId;
+  }
 }
 
 export function getEditorView(): EditorView | null {
   return editorView;
 }
 
-// Get selected text if any, otherwise return active script's content
-export function getQueryToRun(): string {
+function getActiveScript() {
   const { openScripts, activeScriptId } = useAppStore.getState();
-  const activeScript = openScripts.find((s) => s.id === activeScriptId);
-  const content = activeScript?.content ?? "";
+  return openScripts.find((s) => s.id === activeScriptId) ?? null;
+}
+
+function getSelectedCellSql(): string {
+  const activeScript = getActiveScript();
+  if (!activeScript) return "";
+
+  const selectedCellId = activeScript.selectedCellId ?? activeEditorCellId;
+  if (!selectedCellId) return "";
+
+  return activeScript.cells.find((cell) => cell.id === selectedCellId)?.sql ?? "";
+}
+
+// Get selected text if any, otherwise return active selected cell content
+export function getQueryToRun(): string {
+  const content = getSelectedCellSql();
   
   if (editorView) {
     const selection = editorView.state.selection.main;
@@ -31,8 +48,7 @@ export function getQueryToRun(): string {
 
 // Get the effective connection ID for the active script
 export function getEffectiveConnectionId(): string | null {
-  const { openScripts, activeScriptId } = useAppStore.getState();
-  const activeScript = openScripts.find((s) => s.id === activeScriptId);
+  const activeScript = getActiveScript();
   return activeScript?.connectionId ?? null;
 }
 
@@ -71,10 +87,10 @@ export function formatEditorContent(dialect: DatabaseType): void {
       changes: { from: 0, to: view.state.doc.length, insert: formatted },
     });
 
-    // Also update the store so the script is marked dirty
-    const { activeScriptId, updateScriptContent } = useAppStore.getState();
-    if (activeScriptId) {
-      updateScriptContent(activeScriptId, formatted);
+    // Also update the selected cell in the store so the sheet is marked dirty
+    const activeScript = getActiveScript();
+    if (activeScript) {
+      useAppStore.getState().updateScriptContent(activeScript.id, formatted);
     }
   } catch (error) {
     console.error("Failed to format SQL:", error);
@@ -96,11 +112,11 @@ export function insertTextAtCursor(text: string): void {
   
   view.focus();
 
-  // Also update the store
-  const { activeScriptId, updateScriptContent } = useAppStore.getState();
-  if (activeScriptId) {
+  // Also update the selected cell in the store
+  const activeScript = getActiveScript();
+  if (activeScript) {
     const newContent = view.state.doc.toString();
-    updateScriptContent(activeScriptId, newContent);
+    useAppStore.getState().updateScriptContent(activeScript.id, newContent);
   }
 }
 
@@ -114,8 +130,10 @@ export function getSelectedText(): string | null {
 
 // Get the full content of the editor
 export function getFullEditorContent(): string {
-  if (!editorView) return "";
-  return editorView.state.doc.toString();
+  if (editorView) {
+    return editorView.state.doc.toString();
+  }
+  return getSelectedCellSql();
 }
 
 // Get cursor position in the editor
@@ -137,10 +155,10 @@ export function replaceEditorContent(text: string): void {
 
   view.focus();
 
-  // Also update the store
-  const { activeScriptId, updateScriptContent } = useAppStore.getState();
-  if (activeScriptId) {
-    updateScriptContent(activeScriptId, text);
+  // Also update the selected cell in the store
+  const activeScript = getActiveScript();
+  if (activeScript) {
+    useAppStore.getState().updateScriptContent(activeScript.id, text);
   }
 }
 

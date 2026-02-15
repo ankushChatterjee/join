@@ -35,14 +35,14 @@ function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClos
           {details.type_kind}
         </span>
         {details.schema && (
-          <span className="text-xs text-base-400">
+          <span className="text-xs text-base-300">
             in {details.schema}
           </span>
         )}
         <div className="flex-1" />
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-base-800/50 text-base-400 hover:text-base-200 transition-colors"
+          className="p-1 rounded hover:bg-base-800/50 text-base-300 hover:text-base-100 transition-colors"
           title="Close"
         >
           <X className="w-4 h-4" />
@@ -50,7 +50,7 @@ function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClos
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto panel-scroll p-4">
         {details.type_kind === "enum" || details.type_kind === "set" ? (
           <div>
             <h3 className="text-xs font-medium text-base-300 uppercase tracking-wide mb-3">
@@ -67,14 +67,14 @@ function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClos
                 <tbody>
                   {details.values?.map((value, index) => (
                     <tr key={index} className="hover:bg-base-800/30 transition-colors">
-                      <td className="px-4 py-2 text-base-400 font-mono text-xs border-b border-base-800/50">{index + 1}</td>
+                      <td className="px-4 py-2 text-base-300 font-mono text-xs border-b border-base-800/50">{index + 1}</td>
                       <td className="px-4 py-2 text-base-200 font-mono border-b border-base-800/50">{value}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 text-xs text-base-400">
+            <div className="mt-3 text-xs text-base-300">
               {details.values?.length || 0} value{(details.values?.length || 0) !== 1 ? 's' : ''}
             </div>
           </div>
@@ -101,7 +101,7 @@ function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClos
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 text-xs text-base-400">
+            <div className="mt-3 text-xs text-base-300">
               {details.fields?.length || 0} field{(details.fields?.length || 0) !== 1 ? 's' : ''}
             </div>
           </div>
@@ -127,7 +127,7 @@ function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClos
             )}
           </div>
         ) : (
-          <div className="text-base-400">Unknown type kind: {details.type_kind}</div>
+          <div className="text-base-300">Unknown type kind: {details.type_kind}</div>
         )}
       </div>
     </div>
@@ -160,14 +160,14 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
           {details.is_aggregate ? "aggregate" : "function"}
         </span>
         {details.schema && (
-          <span className="text-xs text-base-400">
+          <span className="text-xs text-base-300">
             in {details.schema}
           </span>
         )}
         <div className="flex-1" />
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-base-800/50 text-base-400 hover:text-base-200 transition-colors"
+          className="p-1 rounded hover:bg-base-800/50 text-base-300 hover:text-base-100 transition-colors"
           title="Close"
         >
           <X className="w-4 h-4" />
@@ -175,7 +175,7 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto panel-scroll p-4 space-y-4">
         {/* Description if available */}
         {details.description && (
           <div>
@@ -196,26 +196,26 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
           <div className="bg-base-850 border border-base-700 rounded-lg px-4 py-3">
             <code className="font-mono text-sm text-base-200">
               <span className="text-teal-400">{details.name}</span>
-              <span className="text-base-400">(</span>
+              <span className="text-base-300">(</span>
               {details.arguments.length > 0 ? (
                 details.arguments.map((arg, index) => (
                   <span key={index}>
-                    {index > 0 && <span className="text-base-400">, </span>}
+                    {index > 0 && <span className="text-base-300">, </span>}
                     {arg.mode !== "IN" && (
                       <span className="text-purple-400">{arg.mode} </span>
                     )}
                     {arg.name && <span className="text-base-200">{arg.name} </span>}
                     <span className="text-accent-400">{arg.data_type}</span>
                     {arg.has_default && (
-                      <span className="text-base-500"> = ...</span>
+                      <span className="text-base-300"> = ...</span>
                     )}
                   </span>
                 ))
               ) : (
-                <span className="text-base-500 italic">no arguments</span>
+                <span className="text-base-300 italic">no arguments</span>
               )}
-              <span className="text-base-400">)</span>
-              <span className="text-base-400"> → </span>
+              <span className="text-base-300">)</span>
+              <span className="text-base-300"> → </span>
               <span className="text-accent-400">{details.return_type || "void"}</span>
             </code>
           </div>
@@ -241,7 +241,7 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
                   {details.arguments.map((arg, index) => (
                     <tr key={index} className="hover:bg-base-800/30 transition-colors">
                       <td className="px-4 py-2 text-base-200 font-mono border-b border-base-800/50">
-                        {arg.name || <span className="text-base-500 italic">unnamed</span>}
+                        {arg.name || <span className="text-base-300 italic">unnamed</span>}
                       </td>
                       <td className="px-4 py-2 text-accent-400 font-mono text-xs border-b border-base-800/50">{arg.data_type}</td>
                       <td className="px-4 py-2 border-b border-base-800/50">
@@ -254,7 +254,7 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
                           {arg.mode}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-base-400 border-b border-base-800/50">
+                      <td className="px-4 py-2 text-base-300 border-b border-base-800/50">
                         {arg.has_default ? "Yes" : "-"}
                       </td>
                     </tr>
@@ -268,9 +268,9 @@ function FunctionDetailsView({ details, onClose }: { details: FunctionDetailInfo
         {/* Metadata badges */}
         <div className="flex flex-wrap gap-2">
           {details.language && (
-            <span className="px-2 py-1 rounded text-xs font-medium bg-base-700/50 text-base-300">
-              Language: {details.language}
-            </span>
+          <span className="px-2 py-1 rounded text-xs font-medium bg-base-700/50 text-base-200">
+            Language: {details.language}
+          </span>
           )}
           {details.volatility && (
             <span className={`px-2 py-1 rounded text-xs font-medium ${getVolatilityColor()}`}>
@@ -375,13 +375,13 @@ export function ResultsPanel() {
           <div className="flex-1" />
           <button
             onClick={clearSchemaObjectSelection}
-            className="p-1 rounded hover:bg-base-800/50 text-base-400 hover:text-base-200 transition-colors"
+            className="p-1 rounded hover:bg-base-800/50 text-base-300 hover:text-base-100 transition-colors"
             title="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 flex items-center justify-center text-base-400">
+        <div className="flex-1 flex items-center justify-center text-base-300">
           <div className="flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-accent-500" />
             Loading...
@@ -416,7 +416,7 @@ export function ResultsPanel() {
     return (
       <div className="h-full flex flex-col bg-surface">
         <div className="h-9 border-b border-border-subtle shrink-0" />
-        <div className="flex-1 flex items-center justify-center text-base-400">
+        <div className="flex-1 flex items-center justify-center text-base-300">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
             Executing query...
@@ -437,7 +437,7 @@ export function ResultsPanel() {
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
             <div className="font-mono text-sm">
               <div className="font-medium">{isConnectionError ? "Connection failed" : "Query failed"}</div>
-              <div className="mt-1 text-red-400/80 whitespace-pre-wrap">
+              <div className="mt-1 text-red-300 whitespace-pre-wrap">
                 {isConnectionError ? queryError.replace("Connection failed: ", "") : queryError}
               </div>
             </div>
@@ -463,7 +463,7 @@ export function ResultsPanel() {
             )}
             
             {/* Stats */}
-            <div className="flex items-center gap-4 text-xs text-base-400">
+            <div className="flex items-center gap-4 text-xs text-base-300">
               <div className="flex items-center gap-1.5">
                 <Rows3 className="w-3.5 h-3.5" />
                 <span>
@@ -485,7 +485,7 @@ export function ResultsPanel() {
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-base-800/50 text-base-400 hover:text-base-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+              className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-base-800/50 text-base-300 hover:text-base-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
               title="Export to CSV"
             >
               <Download className="w-3.5 h-3.5" />
@@ -493,7 +493,7 @@ export function ResultsPanel() {
             </button>
           </>
         ) : (
-          <div className="text-xs text-base-400">Results</div>
+          <div className="text-xs text-base-300">Results</div>
         )}
       </div>
 
@@ -502,7 +502,7 @@ export function ResultsPanel() {
         {queryResults ? (
           <DataTable data={tableData} columns={columns} />
         ) : (
-          <div className="h-full flex items-center justify-center text-base-400 text-sm">
+          <div className="h-full flex items-center justify-center text-base-300 text-sm">
             Run a query to see results
           </div>
         )}

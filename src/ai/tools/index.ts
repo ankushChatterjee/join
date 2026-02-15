@@ -11,7 +11,12 @@ import {
   listFunctions,
 } from "./schemaTools";
 import { executeReadonlySql, getQueryHistory } from "./queryTools";
-import { getEditorContext, insertSql, replaceEditorContentTool } from "./editorTools";
+import {
+  getEditorContext,
+  insertSql,
+  replaceEditorContentTool,
+  addCellTool,
+} from "./editorTools";
 
 /** All tools available to the AI agent, keyed by tool name */
 export const allTools = {
@@ -26,7 +31,7 @@ export const allTools = {
   get_editor_context: getEditorContext,
   insert_sql: insertSql,
   replace_editor_content: replaceEditorContentTool,
+  add_cell: addCellTool,
 };
 
 export type AllToolsType = typeof allTools;
-

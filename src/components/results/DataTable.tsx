@@ -43,7 +43,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
 
   if (data.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-base-400 text-sm">
+      <div className="h-full flex items-center justify-center text-base-300 text-sm">
         No data to display
       </div>
     );
@@ -52,7 +52,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
   const virtualRows = virtualizer.getVirtualItems();
 
   return (
-    <div ref={tableContainerRef} className="h-full overflow-auto">
+    <div ref={tableContainerRef} className="h-full overflow-auto panel-scroll">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -65,7 +65,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                   <th
                     key={header.id}
                     className={cn(
-                      "h-8 px-3 text-left font-medium text-base-300 bg-base-850 border-b border-border-subtle whitespace-nowrap",
+                      "h-8 px-3 text-left font-medium text-base-200 bg-base-850 border-b border-border-subtle whitespace-nowrap",
                       canSort && "cursor-pointer select-none hover:bg-base-800 transition-colors"
                     )}
                     onClick={header.column.getToggleSortingHandler()}
@@ -78,13 +78,13 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                             header.getContext()
                           )}
                       {canSort && (
-                        <span className="ml-1 text-base-500">
+                        <span className="ml-1 text-base-300">
                           {sortDirection === "asc" ? (
                             <ChevronUp className="w-3.5 h-3.5 text-accent-400" />
                           ) : sortDirection === "desc" ? (
                             <ChevronDown className="w-3.5 h-3.5 text-accent-400" />
                           ) : (
-                            <ChevronsUpDown className="w-3.5 h-3.5 opacity-50" />
+                            <ChevronsUpDown className="w-3.5 h-3.5 opacity-80" />
                           )}
                         </span>
                       )}
@@ -119,7 +119,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className="h-8 px-3 text-base-200 whitespace-nowrap font-mono text-xs"
+                    className="h-8 px-3 text-base-100 whitespace-nowrap font-mono text-xs"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
