@@ -184,7 +184,7 @@ export function AiChatPanel() {
     isStreaming,
     streamingText,
     streamingToolCalls,
-    pendingApproval,
+    pendingApprovals,
     sendMessage,
     stopStreaming,
     createSession,
@@ -294,7 +294,7 @@ export function AiChatPanel() {
                 isStreaming={true}
                 streamingText={streamingText}
                 streamingToolCalls={streamingToolCalls}
-                pendingApproval={pendingApproval}
+                pendingApprovals={pendingApprovals}
               />
             )}
 
@@ -304,43 +304,48 @@ export function AiChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="p-1.5 shrink-0">
-        <div className="relative rounded-lg bg-base-800/50 border border-base-700/20">
+      <div className="p-2 shrink-0 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.3)]">
+        <div className="relative rounded-lg bg-base-800 border border-base-700/60 shadow-sm hover:border-base-700/80 focus-within:border-accent-500/40 focus-within:bg-base-800 transition-all duration-200">
           <textarea
             ref={inputRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask anything..."
-            disabled={isStreaming && !pendingApproval}
+            disabled={isStreaming && pendingApprovals.length === 0}
             rows={1}
-            className="w-full pl-3 pr-11 pt-[9px] pb-[7px] bg-transparent text-[13px] leading-normal text-base-200 placeholder:text-base-600 focus:outline-none resize-none disabled:opacity-40"
+            className="w-full pl-3 pr-12 py-2.5 bg-transparent text-[13px] leading-[1.4] text-base-100 placeholder:text-base-500 focus:outline-none resize-none disabled:opacity-40"
           />
-          <div className="absolute right-1.5 bottom-1.5 flex items-center">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {isStreaming ? (
               <button
                 onClick={stopStreaming}
-                className="w-7 h-7 flex items-center justify-center rounded-md outline-none bg-base-700/40 text-base-300 hover:text-red-400 hover:bg-base-700/60 transition-colors"
-                title="Stop"
+                className="w-8 h-8 flex items-center justify-center rounded-lg outline-none bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/30 transition-all duration-200 shadow-sm"
+                title="Stop generating"
               >
-                <Square className="w-3.5 h-3.5" />
+                <Square className="w-4 h-4 fill-current" />
               </button>
             ) : (
               <button
                 onClick={handleSend}
                 disabled={!inputText.trim()}
                 className={cn(
-                  "w-7 h-7 flex items-center justify-center rounded-md outline-none transition-colors",
+                  "w-8 h-8 flex items-center justify-center rounded-lg outline-none transition-all duration-200",
                   inputText.trim()
-                    ? "bg-base-700/40 text-base-300 hover:text-base-100 hover:bg-base-700/60"
-                    : "text-base-700 cursor-default"
+                    ? "bg-accent-500/20 text-accent-400 hover:bg-accent-500/30 hover:text-accent-300 border border-accent-500/30 hover:border-accent-500/40 shadow-sm"
+                    : "bg-base-800/30 text-base-600 cursor-not-allowed border border-base-700/30"
                 )}
-                title="Send (Enter)"
+                title="Send message (Enter)"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
               </button>
             )}
           </div>
+        </div>
+        <div className="flex items-center justify-between mt-1.5 px-1">
+          <p className="text-[10px] text-base-400">
+            <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-300 font-mono text-[9px] border border-base-700/40">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-base-800/60 text-base-300 font-mono text-[9px] border border-base-700/40">Shift+Enter</kbd> for new line
+          </p>
         </div>
       </div>
     </div>

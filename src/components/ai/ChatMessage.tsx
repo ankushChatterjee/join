@@ -2,7 +2,6 @@
 // Chat Message Component
 // ============================================================================
 
-import type { ReactNode } from "react";
 import { useState, useMemo } from "react";
 import {
   ChevronDown,
@@ -20,180 +19,117 @@ import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval } from "@/ai/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
-// --- Simple Markdown Renderer ---
+// --- Markdown Renderer ---
 
-function renderMarkdown(text: string): ReactNode[] {
-  const lines = text.split("\n");
-  const elements: ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeBlockContent: string[] = [];
-  let codeBlockLang = "";
-  let blockIndex = 0;
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+      components={{
+        // Code blocks
+        code(props) {
+          const { node, className, children, ...rest } = props as any;
+          const match = /language-(\w+)/.exec(className || "");
+          const language = match ? match[1] : "";
+          const codeString = String(children).replace(/\n$/, "");
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+          // If there's no className, it's likely inline code
+          const isInline = !className || !className.includes("language-");
 
-    // Code block start/end
-    if (line.startsWith("```")) {
-      if (inCodeBlock) {
-        // End code block
-        elements.push(
-          <CodeBlock
-            key={`code-${blockIndex++}`}
-            code={codeBlockContent.join("\n")}
-            language={codeBlockLang}
-          />
-        );
-        inCodeBlock = false;
-        codeBlockContent = [];
-        codeBlockLang = "";
-      } else {
-        // Start code block
-        inCodeBlock = true;
-        codeBlockLang = line.slice(3).trim();
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBlockContent.push(line);
-      continue;
-    }
-
-    // Empty line
-    if (!line.trim()) {
-      elements.push(<div key={`br-${i}`} className="h-2" />);
-      continue;
-    }
-
-    // Headings
-    if (line.startsWith("### ")) {
-      elements.push(
-        <h3 key={`h3-${i}`} className="text-sm font-semibold text-base-100 mt-3 mb-1">
-          {line.slice(4)}
-        </h3>
-      );
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      elements.push(
-        <h2 key={`h2-${i}`} className="text-sm font-semibold text-base-100 mt-3 mb-1">
-          {line.slice(3)}
-        </h2>
-      );
-      continue;
-    }
-    if (line.startsWith("# ")) {
-      elements.push(
-        <h1 key={`h1-${i}`} className="text-base font-bold text-base-100 mt-3 mb-1">
-          {line.slice(2)}
-        </h1>
-      );
-      continue;
-    }
-
-    // List items
-    if (line.match(/^[-*]\s/)) {
-      elements.push(
-        <div key={`li-${i}`} className="flex gap-2 text-sm text-base-200 pl-2">
-          <span className="text-base-400 shrink-0">•</span>
-          <span>{renderInline(line.slice(2))}</span>
-        </div>
-      );
-      continue;
-    }
-
-    // Numbered list
-    if (line.match(/^\d+\.\s/)) {
-      const match = line.match(/^(\d+)\.\s(.*)/);
-      if (match) {
-        elements.push(
-          <div key={`ol-${i}`} className="flex gap-2 text-sm text-base-200 pl-2">
-            <span className="text-base-400 shrink-0">{match[1]}.</span>
-            <span>{renderInline(match[2])}</span>
+          return !isInline ? (
+            <CodeBlock code={codeString} language={language} />
+          ) : (
+            <code
+              className="px-1.5 py-0.5 rounded bg-base-800 text-accent-400 font-mono text-xs"
+              {...rest}
+            >
+              {children}
+            </code>
+          );
+        },
+        // Headings
+        h1: ({ children }) => (
+          <div className="text-base font-bold text-base-100 mt-3 mb-1" role="heading" aria-level={1}>
+            {children}
           </div>
-        );
-        continue;
-      }
-    }
-
-    // Regular paragraph
-    elements.push(
-      <p key={`p-${i}`} className="text-sm text-base-200 leading-relaxed">
-        {renderInline(line)}
-      </p>
-    );
-  }
-
-  // Handle unclosed code block
-  if (inCodeBlock && codeBlockContent.length > 0) {
-    elements.push(
-      <CodeBlock
-        key={`code-${blockIndex++}`}
-        code={codeBlockContent.join("\n")}
-        language={codeBlockLang}
-      />
-    );
-  }
-
-  return elements;
-}
-
-function renderInline(text: string): (string | ReactNode)[] {
-  const parts: (string | ReactNode)[] = [];
-  let remaining = text;
-  let keyIdx = 0;
-
-  while (remaining.length > 0) {
-    // Bold
-    const boldMatch = remaining.match(/\*\*(.*?)\*\*/);
-    // Inline code
-    const codeMatch = remaining.match(/`([^`]+)`/);
-
-    // Find the earliest match
-    let earliest: { type: string; match: RegExpMatchArray; index: number } | null = null; // eslint-disable-line
-
-    if (boldMatch && boldMatch.index !== undefined) {
-      earliest = { type: "bold", match: boldMatch, index: boldMatch.index };
-    }
-    if (codeMatch && codeMatch.index !== undefined) {
-      if (!earliest || codeMatch.index < earliest.index) {
-        earliest = { type: "code", match: codeMatch, index: codeMatch.index };
-      }
-    }
-
-    if (!earliest) {
-      parts.push(remaining);
-      break;
-    }
-
-    // Add text before match
-    if (earliest.index > 0) {
-      parts.push(remaining.slice(0, earliest.index));
-    }
-
-    if (earliest.type === "bold") {
-      parts.push(
-        <strong key={`b-${keyIdx++}`} className="font-semibold text-base-100">
-          {earliest.match[1]}
-        </strong>
-      );
-    } else if (earliest.type === "code") {
-      parts.push(
-        <code
-          key={`ic-${keyIdx++}`}
-          className="px-1.5 py-0.5 rounded bg-base-800 text-accent-400 font-mono text-xs"
-        >
-          {earliest.match[1]}
-        </code>
-      );
-    }
-
-    remaining = remaining.slice(earliest.index + earliest.match[0].length);
-  }
-
-  return parts;
+        ),
+        h2: ({ children }) => (
+          <div className="text-sm font-semibold text-base-100 mt-3 mb-1" role="heading" aria-level={2}>
+            {children}
+          </div>
+        ),
+        h3: ({ children }) => (
+          <div className="text-sm font-semibold text-base-100 mt-3 mb-1" role="heading" aria-level={3}>
+            {children}
+          </div>
+        ),
+        h4: ({ children }) => (
+          <div className="text-sm font-semibold text-base-100 mt-2 mb-1" role="heading" aria-level={4}>
+            {children}
+          </div>
+        ),
+        h5: ({ children }) => (
+          <div className="text-xs font-semibold text-base-100 mt-2 mb-0.5" role="heading" aria-level={5}>
+            {children}
+          </div>
+        ),
+        h6: ({ children }) => (
+          <div className="text-xs font-semibold text-base-200 mt-2 mb-0.5" role="heading" aria-level={6}>
+            {children}
+          </div>
+        ),
+        // Paragraphs
+        p: ({ children }) => (
+          <p className="text-sm text-base-200 leading-relaxed mb-2">{children}</p>
+        ),
+        // Lists
+        ul: ({ children }) => (
+          <ul className="list-none space-y-1 my-2">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="list-none space-y-1 my-2">{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li className="flex gap-2 text-sm text-base-200 pl-2 list-none">
+            <span className="text-base-400 shrink-0">•</span>
+            <span>{children}</span>
+          </li>
+        ),
+        // Horizontal rule
+        hr: () => <hr className="border-base-700/50 my-2" />,
+        // Links
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent-400 hover:text-accent-300 underline underline-offset-2"
+          >
+            {children}
+          </a>
+        ),
+        // Strong/Bold
+        strong: ({ children }) => (
+          <strong className="font-semibold text-base-100">{children}</strong>
+        ),
+        // Emphasis/Italic
+        em: ({ children }) => (
+          <em className="italic text-base-200">{children}</em>
+        ),
+        // Strikethrough
+        del: ({ children }) => (
+          <del className="text-base-400 line-through">{children}</del>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 // --- Code Block Component ---
@@ -338,14 +274,14 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
         </pre>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => approveToolCall(true)}
+            onClick={() => approveToolCall(approval.toolCallId, true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs font-medium border border-green-600/30 transition-colors"
           >
             <Check className="w-3 h-3" />
             Approve
           </button>
           <button
-            onClick={() => approveToolCall(false)}
+            onClick={() => approveToolCall(approval.toolCallId, false)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600/10 hover:bg-red-600/20 text-red-400 text-xs font-medium border border-red-600/20 transition-colors"
           >
             <X className="w-3 h-3" />
@@ -364,7 +300,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   streamingText?: string;
   streamingToolCalls?: ToolCallDisplay[];
-  pendingApproval?: PendingApproval | null;
+  pendingApprovals?: PendingApproval[];
 }
 
 export function ChatMessageComponent({
@@ -372,7 +308,7 @@ export function ChatMessageComponent({
   isStreaming,
   streamingText,
   streamingToolCalls,
-  pendingApproval,
+  pendingApprovals = [],
 }: ChatMessageProps) {
   if (message.role === "user") {
     return (
@@ -408,20 +344,24 @@ export function ChatMessageComponent({
 
   return (
     <div className="px-3 py-2.5 border-b border-base-700/20">
-      {/* Tool calls */}
+      {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
       {toolCalls.length > 0 && (
         <div className="mb-2">
-          {toolCalls.map((tc) => (
-            <ToolCallItem key={tc.id} toolCall={tc} />
-          ))}
+          {toolCalls
+            .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
+            .map((tc) => (
+              <ToolCallItem key={tc.id} toolCall={tc} />
+            ))}
         </div>
       )}
 
-      {/* Pending approval */}
-      {pendingApproval && <SqlApprovalCard approval={pendingApproval} />}
+      {/* Pending approvals */}
+      {pendingApprovals.map((approval) => (
+        <SqlApprovalCard key={approval.toolCallId} approval={approval} />
+      ))}
 
       {/* Message content */}
-      {content && <div>{renderMarkdown(content)}</div>}
+      {content && <MarkdownContent content={content} />}
 
       {/* Streaming indicator */}
       {isStreaming && !content && toolCalls.length === 0 && (

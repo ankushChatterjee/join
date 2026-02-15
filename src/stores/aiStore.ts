@@ -40,8 +40,8 @@ interface AiState {
   streamingToolCalls: ToolCallDisplay[];
   abortController: AbortController | null;
 
-  // Approval state
-  pendingApproval: PendingApproval | null;
+  // Approval state (multiple tools may request approval concurrently)
+  pendingApprovals: PendingApproval[];
 
   // Actions
   togglePanel: () => void;
@@ -57,7 +57,7 @@ interface AiState {
   // Chat actions
   sendMessage: (text: string) => Promise<void>;
   stopStreaming: () => void;
-  approveToolCall: (approved: boolean) => void;
+  approveToolCall: (toolCallId: string, approved: boolean) => void;
 
   // Persistence
   saveActiveSession: () => Promise<void>;
@@ -74,7 +74,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   streamingText: "",
   streamingToolCalls: [],
   abortController: null,
-  pendingApproval: null,
+  pendingApprovals: [],
 
   // Toggle the AI panel
   togglePanel: () => {
@@ -283,7 +283,9 @@ export const useAiStore = create<AiState>((set, get) => ({
             }));
           },
           onRequestApproval: (approval: PendingApproval) => {
-            set({ pendingApproval: approval });
+            set((state) => ({
+              pendingApprovals: [...state.pendingApprovals, approval],
+            }));
           },
           onComplete: (assistantMessage: ChatMessage) => {
             // Include tool calls from streaming state
@@ -310,7 +312,7 @@ export const useAiStore = create<AiState>((set, get) => ({
                 streamingText: "",
                 streamingToolCalls: [],
                 abortController: null,
-                pendingApproval: null,
+                pendingApprovals: [],
               };
             });
 
@@ -343,7 +345,7 @@ export const useAiStore = create<AiState>((set, get) => ({
                 streamingText: "",
                 streamingToolCalls: [],
                 abortController: null,
-                pendingApproval: null,
+                pendingApprovals: [],
               };
             });
 
@@ -381,38 +383,49 @@ export const useAiStore = create<AiState>((set, get) => ({
             streamingText: "",
             streamingToolCalls: [],
             abortController: null,
-            pendingApproval: null,
+            pendingApprovals: [],
           };
         });
 
         get().saveActiveSession();
       } else {
+        // Reject any pending approvals on abort
+        for (const a of get().pendingApprovals) {
+          a.resolve(false);
+        }
         set({
           isStreaming: false,
           streamingText: "",
           streamingToolCalls: [],
           abortController: null,
-          pendingApproval: null,
+          pendingApprovals: [],
         });
       }
     }
   },
 
   stopStreaming: () => {
-    const { abortController } = get();
+    const { abortController, pendingApprovals } = get();
+    // Reject all pending approvals
+    for (const a of pendingApprovals) {
+      a.resolve(false);
+    }
     abortController?.abort();
     set({
       isStreaming: false,
       abortController: null,
-      pendingApproval: null,
+      pendingApprovals: [],
     });
   },
 
-  approveToolCall: (approved: boolean) => {
-    const { pendingApproval } = get();
-    if (pendingApproval) {
-      pendingApproval.resolve(approved);
-      set({ pendingApproval: null });
+  approveToolCall: (toolCallId: string, approved: boolean) => {
+    const { pendingApprovals } = get();
+    const target = pendingApprovals.find((a) => a.toolCallId === toolCallId);
+    if (target) {
+      target.resolve(approved);
+      set({
+        pendingApprovals: pendingApprovals.filter((a) => a.toolCallId !== toolCallId),
+      });
     }
   },
 
