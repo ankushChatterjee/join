@@ -19,18 +19,18 @@ function NoConnectionState() {
     <div className="h-full flex flex-col items-center justify-center bg-surface relative overflow-hidden">
       {/* Subtle background pattern */}
       <div className="absolute inset-0 opacity-[0.02]">
-        <div 
-          className="absolute inset-0" 
+        <div
+          className="absolute inset-0"
           style={{
             backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
             backgroundSize: '32px 32px',
           }}
         />
       </div>
-      
+
       {/* Ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-accent-500/[0.03] rounded-full blur-3xl pointer-events-none" />
-      
+
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center text-center px-8">
         {/* Icon */}
@@ -42,7 +42,7 @@ function NoConnectionState() {
             <Zap className="w-3 h-3 text-accent-400" />
           </div>
         </div>
-        
+
         {/* Text */}
         <h2 className="text-lg font-semibold text-base-100 mb-2">
           No active connection
@@ -50,7 +50,7 @@ function NoConnectionState() {
         <p className="text-sm text-base-200 max-w-[280px] leading-relaxed">
           Connect to a database from the sidebar to start writing queries
         </p>
-        
+
         {/* Keyboard hint */}
         <div className="mt-8 flex items-center gap-2 text-xs text-base-300">
           <span>or press</span>
@@ -66,7 +66,7 @@ function NoConnectionState() {
 
 function NoSheetsState() {
   const { activeConnectionId, connections, createScript } = useAppStore();
-  
+
   // Find any connected database to use for new sheet
   const connectedDb = connections.find((c) => c.is_connected);
   const canCreateScript = activeConnectionId || connectedDb;
@@ -82,8 +82,8 @@ function NoSheetsState() {
     <div className="h-full flex flex-col items-center justify-center bg-surface relative overflow-hidden">
       {/* Subtle background pattern */}
       <div className="absolute inset-0 opacity-[0.015]">
-        <div 
-          className="absolute inset-0" 
+        <div
+          className="absolute inset-0"
           style={{
             backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px),
                               linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
@@ -91,7 +91,7 @@ function NoSheetsState() {
           }}
         />
       </div>
-      
+
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center text-center px-8">
         {/* Icon */}
@@ -100,17 +100,17 @@ function NoSheetsState() {
             <FileCode2 className="w-5 h-5 text-base-200" strokeWidth={1.5} />
           </div>
         </div>
-        
+
         {/* Text */}
         <h2 className="text-base font-medium text-base-200 mb-1.5">
           No open SQL sheets
         </h2>
         <p className="text-sm text-base-300 mb-5">
-          {canCreateScript 
+          {canCreateScript
             ? "Create a SQL sheet to start writing queries"
             : "Connect to a database first, then create a SQL sheet"}
         </p>
-        
+
         {/* New SQL sheet button */}
         {canCreateScript && (
           <button
@@ -134,7 +134,7 @@ export function MainLayout() {
     const saved = window.localStorage.getItem("join:left-sidebar-open");
     return saved === null ? true : saved === "true";
   });
-  
+
   // Check if any connection exists (not necessarily connected)
   const hasAnyConnection = connections.length > 0;
   const hasOpenScripts = openScripts.length > 0;
@@ -147,12 +147,12 @@ export function MainLayout() {
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
       {/* Custom Title Bar */}
       <TitleBar />
-      
+
       <Group orientation="horizontal" className="flex-1">
         {/* Left Sidebar */}
         {isLeftSidebarOpen ? (
           <>
-            <Panel defaultSize="18%" minSize="14%" maxSize="30%">
+            <Panel id="sidebar" defaultSize="18%" minSize="14%" maxSize="30%">
               <Sidebar onCollapse={() => setIsLeftSidebarOpen(false)} />
             </Panel>
             <Separator className="w-px bg-border-subtle hover:bg-accent-500 transition-colors data-[separator-active]:bg-accent-500" />
@@ -168,9 +168,9 @@ export function MainLayout() {
             </button>
           </div>
         )}
-        
+
         {/* Main Content Area */}
-        <Panel defaultSize={isPanelOpen ? "52%" : "82%"} minSize="35%">
+        <Panel id="main-content" defaultSize={isPanelOpen ? "52%" : "82%"} minSize="35%">
           {!hasAnyConnection && !hasOpenScripts ? (
             <NoConnectionState />
           ) : !hasOpenScripts ? (
@@ -178,7 +178,7 @@ export function MainLayout() {
           ) : (
             <Group orientation="vertical" className="h-full">
               {/* Editor Area */}
-              <Panel defaultSize="65%" minSize="30%">
+              <Panel id="editor" defaultSize="65%" minSize="30%">
                 <div className="h-full flex flex-col bg-surface">
                   <EditorToolbar />
                   <div className="flex-1 overflow-hidden">
@@ -186,11 +186,11 @@ export function MainLayout() {
                   </div>
                 </div>
               </Panel>
-              
+
               <Separator className="h-px bg-border-subtle hover:bg-accent-500 transition-colors data-[separator-active]:bg-accent-500" />
-              
+
               {/* Results Panel */}
-              <Panel defaultSize="35%" minSize="15%" maxSize="70%">
+              <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
                 <ResultsPanel />
               </Panel>
             </Group>
@@ -201,7 +201,7 @@ export function MainLayout() {
         {isPanelOpen && (
           <>
             <Separator className="w-px bg-border-subtle hover:bg-accent-500 transition-colors data-[separator-active]:bg-accent-500" />
-            <Panel defaultSize="30%" minSize="20%" maxSize="55%">
+            <Panel id="ai-chat" defaultSize="30%" minSize="20%" maxSize="55%">
               <AiChatPanel />
             </Panel>
           </>

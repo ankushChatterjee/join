@@ -177,7 +177,11 @@ function SqlCell({
         )}
       >
         <button
-          onClick={onToggleCollapse}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollapse();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
           className="w-5 h-5 flex items-center justify-center rounded text-base-200 hover:bg-base-700/70 transition-colors"
           title={isCollapsed ? "Expand cell" : "Collapse cell"}
         >
@@ -293,8 +297,8 @@ export function SqlEditor() {
     activeConnection?.db_type === "mysql"
       ? MySQL
       : activeConnection?.db_type === "sqlite"
-      ? SQLite
-      : PostgreSQL;
+        ? SQLite
+        : PostgreSQL;
 
   const completionSchema = useMemo(
     () => buildCompletionSchema(tablesBySchema, viewsBySchema, columns),
@@ -333,7 +337,7 @@ export function SqlEditor() {
   }
 
   return (
-    <div className="h-full w-full overflow-auto p-1.5 space-y-2">
+    <div className="h-full w-full overflow-auto p-1.5 space-y-2 panel-scroll scrollbar-stable">
       {activeScript.cells.map((cell, index) => {
         const isSelected = activeScript.selectedCellId === cell.id;
         const isRunning =
@@ -366,7 +370,7 @@ export function SqlEditor() {
 
       <button
         onClick={handleAddCell}
-        className="group w-full h-10 rounded-lg border border-base-600/80 bg-gradient-to-r from-base-800/95 to-base-750/95 hover:from-base-750 hover:to-base-700 text-base-100 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center gap-2"
+        className="group mx-auto flex w-fit h-9 px-4 rounded-full border border-base-600/80 bg-base-800/95 hover:bg-base-750 text-base-100 transition-colors items-center justify-center gap-2"
       >
         <Plus className="w-4 h-4 text-accent-300 group-hover:text-accent-200" />
         <span className="text-sm font-medium tracking-wide">Add Cell</span>
