@@ -36,6 +36,15 @@ pub struct IndexInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForeignKeyInfo {
+    pub constraint_name: String,
+    pub column_name: String,
+    pub foreign_table_schema: String,
+    pub foreign_table_name: String,
+    pub foreign_column_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInfo {
     pub name: String,
     pub return_type: Option<String>,
@@ -437,6 +446,104 @@ pub async fn get_indexes(
                     name,
                     is_unique: unique == 1,
                     is_primary: origin == "pk",
+                }
+            }).collect())
+        }
+    }
+}
+
+pub async fn get_foreign_keys(
+    connection_id: &str,
+    table: &str,
+    schema: Option<&str>,
+) -> Result<Vec<ForeignKeyInfo>, DbError> {
+    let pool = get_pool(connection_id).await?;
+
+    match pool {
+        DatabasePool::Postgres(pool) => {
+            let schema_name = schema.unwrap_or("public");
+            let query = format!(
+                "SELECT
+                    rc.constraint_name,
+                    kcu.column_name,
+                    ccu.table_schema AS foreign_table_schema,
+                    ccu.table_name AS foreign_table_name,
+                    ccu.column_name AS foreign_column_name
+                FROM information_schema.referential_constraints rc
+                JOIN information_schema.key_column_usage kcu
+                    ON kcu.constraint_name = rc.constraint_name
+                    AND kcu.table_schema = rc.constraint_schema
+                JOIN information_schema.constraint_column_usage ccu
+                    ON ccu.constraint_name = rc.unique_constraint_name
+                    AND ccu.table_schema = rc.unique_constraint_schema
+                WHERE kcu.table_schema = '{}' AND kcu.table_name = '{}'
+                ORDER BY rc.constraint_name, kcu.ordinal_position",
+                schema_name, table
+            );
+
+            let rows = sqlx::query(&query)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows.iter().map(|row| ForeignKeyInfo {
+                constraint_name: row.get("constraint_name"),
+                column_name: row.get("column_name"),
+                foreign_table_schema: row.get("foreign_table_schema"),
+                foreign_table_name: row.get("foreign_table_name"),
+                foreign_column_name: row.get("foreign_column_name"),
+            }).collect())
+        }
+        DatabasePool::MySql(pool) => {
+            let schema_clause = schema
+                .map(|s| format!("TABLE_SCHEMA = '{}'", s))
+                .unwrap_or_else(|| "TABLE_SCHEMA = DATABASE()".to_string());
+            let query = format!(
+                "SELECT
+                    CAST(CONSTRAINT_NAME AS CHAR) as constraint_name,
+                    CAST(COLUMN_NAME AS CHAR) as column_name,
+                    CAST(REFERENCED_TABLE_SCHEMA AS CHAR) as foreign_table_schema,
+                    CAST(REFERENCED_TABLE_NAME AS CHAR) as foreign_table_name,
+                    CAST(REFERENCED_COLUMN_NAME AS CHAR) as foreign_column_name
+                FROM information_schema.KEY_COLUMN_USAGE
+                WHERE {} AND TABLE_NAME = '{}'
+                  AND REFERENCED_TABLE_NAME IS NOT NULL
+                ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION",
+                schema_clause, table
+            );
+
+            let rows = sqlx::query(&query)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows.iter().map(|row| ForeignKeyInfo {
+                constraint_name: row.get("constraint_name"),
+                column_name: row.get("column_name"),
+                foreign_table_schema: row.get("foreign_table_schema"),
+                foreign_table_name: row.get("foreign_table_name"),
+                foreign_column_name: row.get("foreign_column_name"),
+            }).collect())
+        }
+        DatabasePool::Sqlite(pool) => {
+            // PRAGMA foreign_key_list returns: id, seq, table, from, to, on_update, on_delete, match
+            let query = format!("PRAGMA foreign_key_list('{}')", table);
+
+            let rows = sqlx::query(&query)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows.iter().enumerate().map(|(i, row)| {
+                let foreign_table: String = row.get("table");
+                let from_col: String = row.get("from");
+                let to_col: String = row.get("to");
+                ForeignKeyInfo {
+                    constraint_name: format!("fk_{}_{}", table, i),
+                    column_name: from_col,
+                    foreign_table_schema: "main".to_string(),
+                    foreign_table_name: foreign_table,
+                    foreign_column_name: to_col,
                 }
             }).collect())
         }

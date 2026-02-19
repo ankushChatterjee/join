@@ -12,6 +12,7 @@ import type {
   ColumnInfo,
   ViewInfo,
   IndexInfo,
+  ForeignKeyInfo,
   FunctionInfo,
 } from "@/stores/types";
 
@@ -63,7 +64,7 @@ export const listTables = tool({
 // --- describe_table ---
 export const describeTable = tool({
   description:
-    "Get detailed information about a table including columns, data types, primary keys, and indexes.",
+    "Get detailed information about a table including columns, data types, primary keys, indexes, and foreign keys.",
   inputSchema: z.object({
     schema: z.string().describe("The schema name"),
     table: z.string().describe("The table name"),
@@ -71,13 +72,18 @@ export const describeTable = tool({
   execute: async ({ schema, table }) => {
     const connectionId = getConnectionId();
 
-    const [columns, indexes] = await Promise.all([
+    const [columns, indexes, foreignKeys] = await Promise.all([
       invoke<ColumnInfo[]>("get_columns", {
         connectionId,
         table,
         schema,
       }),
       invoke<IndexInfo[]>("get_indexes", {
+        connectionId,
+        table,
+        schema,
+      }),
+      invoke<ForeignKeyInfo[]>("get_foreign_keys", {
         connectionId,
         table,
         schema,
@@ -97,6 +103,11 @@ export const describeTable = tool({
           name: i.name,
           unique: i.is_unique,
           primary: i.is_primary,
+        })),
+        foreignKeys: foreignKeys.map((fk) => ({
+          constraint: fk.constraint_name,
+          column: fk.column_name,
+          references: `${fk.foreign_table_schema}.${fk.foreign_table_name}(${fk.foreign_column_name})`,
         })),
       },
       null,

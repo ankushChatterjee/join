@@ -30,7 +30,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
     
     match pool {
         DatabasePool::Postgres(pool) => {
-            let rows = sqlx::query(sql)
+            let rows = sqlx::raw_sql(sql)
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
@@ -72,7 +72,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
             })
         }
         DatabasePool::MySql(pool) => {
-            let rows = sqlx::query(sql)
+            let rows = sqlx::raw_sql(sql)
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
@@ -114,7 +114,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
             })
         }
         DatabasePool::Sqlite(pool) => {
-            let rows = sqlx::query(sql)
+            let rows = sqlx::raw_sql(sql)
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
@@ -401,4 +401,3 @@ fn convert_sqlite_row(row: &sqlx::sqlite::SqliteRow) -> Vec<JsonValue> {
         })
         .collect()
 }
-

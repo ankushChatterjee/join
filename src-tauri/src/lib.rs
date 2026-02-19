@@ -237,6 +237,17 @@ async fn get_indexes(
 }
 
 #[tauri::command]
+async fn get_foreign_keys(
+    connection_id: String,
+    table: String,
+    schema: Option<String>,
+) -> Result<Vec<db::ForeignKeyInfo>, String> {
+    db::get_foreign_keys(&connection_id, &table, schema.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_functions(connection_id: String, schema: Option<String>) -> Result<Vec<db::FunctionInfo>, String> {
     db::get_functions(&connection_id, schema.as_deref())
         .await
@@ -461,6 +472,7 @@ pub fn run() {
             get_columns,
             get_views,
             get_indexes,
+            get_foreign_keys,
             get_functions,
             get_custom_types,
             get_type_details,

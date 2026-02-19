@@ -50,6 +50,14 @@ export interface IndexInfo {
   is_primary: boolean;
 }
 
+export interface ForeignKeyInfo {
+  constraint_name: string;
+  column_name: string;
+  foreign_table_schema: string;
+  foreign_table_name: string;
+  foreign_column_name: string;
+}
+
 export interface FunctionInfo {
   name: string;
   return_type: string | null;

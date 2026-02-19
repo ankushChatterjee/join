@@ -161,6 +161,9 @@ export function buildSystemPrompt(): string {
     `- The \`execute_readonly_sql\` tool requires user approval and should only be used when truly needed to verify data or test queries. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
   );
   parts.push(
+    `- When writing JOINs, prefer using foreign key relationships surfaced by \`describe_table\` to ensure correct join conditions.`
+  );
+  parts.push(
     `- Always explain your reasoning and the SQL you're writing.`
   );
   parts.push(
