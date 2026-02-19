@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Warm charcoal base palette - darker, cleaner, and more professional */
@@ -253,9 +253,17 @@ body {
   background: var(--color-accent-500);
 }
 
-/* AI chat panel — suppress the global gold focus ring */
-.ai-chat-panel *:focus-visible {
-  outline: none;
+/* AI chat panel focus style */
+.ai-chat-panel button:focus-visible,
+.ai-chat-panel [role="button"]:focus-visible {
+  outline: 2px solid rgba(212, 173, 122, 0.65);
+  outline-offset: 1px;
+}
+
+.ai-chat-panel textarea:focus,
+.ai-chat-panel textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Subtle glow effect on buttons */
@@ -267,7 +275,7 @@ body {
 button,
 a,
 [role="button"] {
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   cursor: pointer;
 }
 

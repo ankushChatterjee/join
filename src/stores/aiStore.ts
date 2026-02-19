@@ -12,6 +12,8 @@ import type {
   ToolCallDisplay,
 } from "@/ai/types";
 import { runAgent } from "@/ai/agent";
+import { encodingForModel, TiktokenModel } from "js-tiktoken";
+import { buildSystemPrompt } from "@/ai/context";
 
 interface ChatSessionMeta {
   id: string;
@@ -43,6 +45,11 @@ interface AiState {
   // Approval state (multiple tools may request approval concurrently)
   pendingApprovals: PendingApproval[];
 
+  // Context Management
+  tokenUsage: number;
+  maxTokens: number;
+  isCompacting: boolean;
+
   // Actions
   togglePanel: () => void;
   setSelectedModel: (modelId: string) => void;
@@ -61,6 +68,10 @@ interface AiState {
 
   // Persistence
   saveActiveSession: () => Promise<void>;
+
+  // Context Actions
+  calculateTokenUsage: () => Promise<void>;
+  compactContext: () => Promise<void>;
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -75,6 +86,11 @@ export const useAiStore = create<AiState>((set, get) => ({
   streamingToolCalls: [],
   abortController: null,
   pendingApprovals: [],
+
+  // Context Management
+  tokenUsage: 0,
+  maxTokens: 200000,
+  isCompacting: false,
 
   // Toggle the AI panel
   togglePanel: () => {
@@ -141,6 +157,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         sessions: [meta, ...state.sessions],
         activeSessionId: session.id,
         activeSession: { ...session },
+        tokenUsage: 0,
       }));
 
       return session.id;
@@ -159,6 +176,8 @@ export const useAiStore = create<AiState>((set, get) => ({
         activeSessionId: sessionId,
         activeSession: session,
       });
+      // Recalculate tokens when loading a session
+      get().calculateTokenUsage();
     } catch (error) {
       console.error("Failed to load chat session:", error);
     }
@@ -204,6 +223,12 @@ export const useAiStore = create<AiState>((set, get) => ({
       if (!session) return;
     }
 
+    // Check token usage and compact if necessary
+    await get().calculateTokenUsage();
+    if (get().tokenUsage > get().maxTokens * 0.9) {
+      await get().compactContext();
+    }
+
     // Add user message
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -230,6 +255,9 @@ export const useAiStore = create<AiState>((set, get) => ({
       streamingText: "",
       streamingToolCalls: [],
     });
+
+    // Update tokens immediately for the user message
+    get().calculateTokenUsage();
 
     // Update session title in the sessions list
     set((state) => ({
@@ -273,11 +301,11 @@ export const useAiStore = create<AiState>((set, get) => ({
               streamingToolCalls: state.streamingToolCalls.map((tc) =>
                 tc.id === toolCallId
                   ? {
-                      ...tc,
-                      status: "completed" as const,
-                      result,
-                      isError,
-                    }
+                    ...tc,
+                    status: "completed" as const,
+                    result,
+                    isError,
+                  }
                   : tc
               ),
             }));
@@ -318,6 +346,9 @@ export const useAiStore = create<AiState>((set, get) => ({
 
             // Persist session
             get().saveActiveSession();
+
+            // Recalculate once complete
+            get().calculateTokenUsage();
           },
           onError: (error: Error) => {
             console.error("[AI Store] Agent onError callback:", error, typeof error);
@@ -350,6 +381,7 @@ export const useAiStore = create<AiState>((set, get) => ({
             });
 
             get().saveActiveSession();
+            get().calculateTokenUsage();
           },
         },
         abortController.signal
@@ -388,6 +420,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         });
 
         get().saveActiveSession();
+        get().calculateTokenUsage();
       } else {
         // Reject any pending approvals on abort
         for (const a of get().pendingApprovals) {
@@ -429,7 +462,6 @@ export const useAiStore = create<AiState>((set, get) => ({
     }
   },
 
-  // Persistence
   saveActiveSession: async () => {
     const { activeSession } = get();
     if (!activeSession) return;
@@ -440,4 +472,117 @@ export const useAiStore = create<AiState>((set, get) => ({
       console.error("Failed to save chat session:", error);
     }
   },
+
+  calculateTokenUsage: async () => {
+    const { activeSession, selectedModelId } = get();
+    if (!activeSession) return;
+
+    try {
+      // Use a generic model for encoding if specific one fails or is custom
+      const modelKey = selectedModelId.includes("claude") ? "gpt-4" : "gpt-4";
+      // Note: Anthropic doesn't have a public tokenizer that matches perfectly in JS, 
+      // but gpt-4 is a decent approximation for length. 
+      // ideally we would use a specific anthropic tokenizer if available.
+
+      const enc = encodingForModel(modelKey as TiktokenModel);
+
+      const systemPrompt = buildSystemPrompt();
+      let count = enc.encode(systemPrompt).length;
+
+      for (const msg of activeSession.messages) {
+        count += enc.encode(msg.content).length;
+        if (msg.toolCalls) {
+          for (const tool of msg.toolCalls) {
+            count += enc.encode(JSON.stringify(tool)).length;
+          }
+        }
+      }
+
+      set({ tokenUsage: count });
+    } catch (e) {
+      console.error("Failed to calculate token usage:", e);
+    }
+  },
+
+  compactContext: async () => {
+    set({ isCompacting: true });
+    const { activeSession, selectedModelId } = get();
+    if (!activeSession || activeSession.messages.length < 4) {
+      set({ isCompacting: false });
+      return;
+    }
+
+    try {
+      // Strategy: Summarize the first 50% of messages
+      const messagesToSummarize = activeSession.messages.slice(0, Math.floor(activeSession.messages.length / 2));
+      const remainingMessages = activeSession.messages.slice(Math.floor(activeSession.messages.length / 2));
+
+      // Construct a prompt for summarization
+      const summarizationText = "Summarize the following conversation history into a concise paragraph that retains all key technical details, schema names, and user requirements:";
+
+      // We use the same agent structure but with a specific summarization task
+      // We create a temporary session-like structure or just invoke the agent
+      // For simplicity and to reuse execute logic, we can just call runAgent with a specific prompt
+      // using the messages we want to summarize.
+
+      // But runAgent expects to append the user text. 
+      // Let's manually construct a call similar to runAgent but just for summarization.
+      // Or simpler: We just use the raw provider APIs if we can, but we want to stick to the store's pattern.
+
+      // Let's use `runAgent` but with a trick: 
+      // System prompt: "You are a helpful summarizer."
+      // User prompt: "Summarize this..."
+
+      //  Actually, using the current model to summarize is good.
+
+      const messagesContent = messagesToSummarize.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+
+      // We'll treat this as a separate "one-off" completion
+      // We can't easily reuse runAgent because it updates the store state (streamingText etc).
+      // We need a non-intrusive way to get a completion.
+
+      // We can assume we have access to the model.
+      // Let's create a minimal direct call here since we have `activeSession` and `selectedModelId`
+      const { getModel } = await import("@/ai/providers");
+      const { generateText } = await import("ai");
+
+      const model = await getModel(selectedModelId);
+
+      const result = await generateText({
+        model,
+        prompt: `${summarizationText}\n\n${messagesContent}`,
+      });
+
+      const summary = result.text;
+
+      const summaryMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "system", // Or 'assistant' acting as context
+        content: `[Previous Context Summary]: ${summary}`,
+        timestamp: Date.now()
+      };
+
+      // Update session
+      const newMessages = [summaryMessage, ...remainingMessages];
+      const newSession = {
+        ...activeSession,
+        messages: newMessages,
+        updatedAt: Date.now()
+      };
+
+      set({
+        activeSession: newSession,
+        // Don't forget to save
+      });
+      get().saveActiveSession();
+
+      // Recalculate usage
+      get().calculateTokenUsage();
+
+    } catch (e) {
+      console.error("Context compaction failed:", e);
+    } finally {
+      set({ isCompacting: false });
+    }
+  }
 }));

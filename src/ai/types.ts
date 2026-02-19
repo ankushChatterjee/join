@@ -9,7 +9,7 @@ export type { ProviderId, ModelConfig } from "./providers";
 
 // --- Chat Session Types (UI) ---
 
-export type ChatMessageRole = "user" | "assistant";
+export type ChatMessageRole = "user" | "assistant" | "system";
 
 export interface ToolCallDisplay {
   id: string;
