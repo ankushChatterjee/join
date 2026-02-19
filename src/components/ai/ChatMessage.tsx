@@ -366,37 +366,37 @@ const ChatMessageComponentInner = ({
   return (
     <div className="py-1.5">
       <div className="rounded-xl border border-base-700/40 bg-base-900/35 px-3 py-2.5">
-      {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
-      {toolCalls.length > 0 && (
-        <div className="mb-2">
-          {toolCalls
-            .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
-            .map((tc) => (
-              <ToolCallItem key={tc.id} toolCall={tc} />
-            ))}
-        </div>
-      )}
+        {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
+        {toolCalls.length > 0 && (
+          <div className="mb-2">
+            {toolCalls
+              .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
+              .map((tc) => (
+                <ToolCallItem key={tc.id} toolCall={tc} />
+              ))}
+          </div>
+        )}
 
-      {/* Pending approvals */}
-      {pendingApprovals.map((approval) => (
-        <SqlApprovalCard key={approval.toolCallId} approval={approval} />
-      ))}
+        {/* Pending approvals */}
+        {pendingApprovals.map((approval) => (
+          <SqlApprovalCard key={approval.toolCallId} approval={approval} />
+        ))}
 
-      {/* Message content */}
-      {content && <MarkdownContent content={content} />}
+        {/* Message content */}
+        {content && <MarkdownContent content={content} />}
 
-      {/* Streaming indicator */}
-      {isStreaming && !content && toolCalls.length === 0 && (
-        <div className="flex items-center gap-2 py-0.5 text-xs text-base-300">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          <span>Thinking...</span>
-        </div>
-      )}
+        {/* Streaming indicator */}
+        {isStreaming && !content && toolCalls.length === 0 && (
+          <div className="flex items-center gap-2 py-0.5 text-xs text-base-300">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Thinking...</span>
+          </div>
+        )}
 
-      {/* Streaming cursor */}
-      {isStreaming && content && (
-        <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
-      )}
+        {/* Streaming cursor */}
+        {isStreaming && content && (
+          <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
+        )}
       </div>
     </div>
   );

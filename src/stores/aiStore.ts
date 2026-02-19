@@ -13,7 +13,7 @@ import type {
 } from "@/ai/types";
 import { runAgent } from "@/ai/agent";
 import { encodingForModel, TiktokenModel } from "js-tiktoken";
-import { buildSystemPrompt } from "@/ai/context";
+import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 
 interface ChatSessionMeta {
   id: string;
@@ -226,11 +226,18 @@ export const useAiStore = create<AiState>((set, get) => ({
       await get().compactContext();
     }
 
-    // Add user message
+    // Capture the editor/cell context snapshot at the moment of sending.
+    // This is appended to the user message so each message in history carries
+    // its own frozen context rather than relying on the (always-current) system prompt.
+    const messageContext = buildMessageContext();
+    const rawText = text.trim();
+    const fullText = messageContext ? `${rawText}${messageContext}` : rawText;
+
+    // Add user message — store only the raw typed text
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: text.trim(),
+      content: rawText,
       timestamp: Date.now(),
     };
 
@@ -273,7 +280,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       await runAgent(
         selectedModelId,
         session.messages, // Pass raw ChatMessage[] — agent converts to ModelMessage[]
-        text.trim(),
+        fullText,         // Pass the full text (with context) to the model
         {
           onToken: (token: string) => {
             set((state) => ({

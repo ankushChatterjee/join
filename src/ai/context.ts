@@ -10,6 +10,70 @@ import {
 } from "@/components/editor/editorUtils";
 
 /**
+ * Capture the current editor / cell state as a context block to be appended
+ * to a user message at the moment the message is sent.  This keeps per-message
+ * context tied to the message rather than living in the (shared) system prompt.
+ *
+ * Returns an empty string when there is nothing useful to include.
+ */
+export function buildMessageContext(): string {
+  const state = useAppStore.getState();
+  const parts: string[] = [];
+
+  const activeScript = state.openScripts.find(
+    (s) => s.id === state.activeScriptId
+  );
+
+  // Nothing open -> no context to attach
+  if (!activeScript) return "";
+
+  const selectedCell = activeScript.cells.find(
+    (cell) => cell.id === activeScript.selectedCellId
+  );
+
+  const editorContent = getFullEditorContent();
+  const selectedText = getSelectedText();
+  const cursorPos = getCursorPosition();
+
+  parts.push(`\n---\n**Context at time of message**`);
+  parts.push(`**SQL Sheet**: ${activeScript.name}`);
+
+  if (selectedCell) {
+    const cellIndex =
+      activeScript.cells.findIndex((c) => c.id === selectedCell.id) + 1;
+    parts.push(`**Selected Cell**: Cell ${cellIndex}`);
+  } else {
+    parts.push(`**Selected Cell**: None`);
+  }
+
+  if (activeScript.cells.length > 0) {
+    const cellSummary = activeScript.cells
+      .map((cell, index) => {
+        const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
+        return `- Cell ${index + 1}${marker}`;
+      })
+      .join("\n");
+    parts.push(`**Sheet Cells**:\n${cellSummary}`);
+  }
+
+  if (selectedText) {
+    parts.push(`**Selected SQL**:\n\`\`\`sql\n${selectedText}\n\`\`\``);
+  }
+
+  if (editorContent && editorContent !== selectedText) {
+    parts.push(
+      `**Selected Cell Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
+    );
+  }
+
+  if (cursorPos) {
+    parts.push(`**Cursor**: Line ${cursorPos.line}, Column ${cursorPos.col}`);
+  }
+
+  return parts.join("\n");
+}
+
+/**
  * Build the system prompt with full context about the current state.
  * This includes connection info, schema summary, editor state, etc.
  */
@@ -75,52 +139,9 @@ export function buildSystemPrompt(): string {
     }
   }
 
-  // --- Editor Context ---
-  const editorContent = getFullEditorContent();
-  const selectedText = getSelectedText();
-  const cursorPos = getCursorPosition();
-  const activeScript = state.openScripts.find(
-    (s) => s.id === state.activeScriptId
-  );
-  const selectedCell = activeScript?.cells.find(
-    (cell) => cell.id === activeScript.selectedCellId
-  );
-
-  if (editorContent || selectedText) {
-    parts.push(`\n## Current Editor State`);
-    if (activeScript) {
-      parts.push(`**SQL Sheet**: ${activeScript.name}`);
-      parts.push(
-        `**Selected Cell**: ${selectedCell
-          ? activeScript.cells.findIndex((cell) => cell.id === selectedCell.id) + 1
-          : "None"
-        }`
-      );
-      if (activeScript.cells.length > 0) {
-        parts.push(`**Sheet Cell Count**: ${activeScript.cells.length}`);
-      }
-    }
-    if (selectedText) {
-      parts.push(`**Selected SQL**:\n\`\`\`sql\n${selectedText}\n\`\`\``);
-    }
-    if (editorContent && editorContent !== selectedText) {
-      parts.push(
-        `**Selected Cell Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
-      );
-    }
-    if (activeScript?.cells.length) {
-      const cellSummary = activeScript.cells
-        .map((cell, index) => {
-          const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
-          return `- Cell ${index + 1}${marker}`;
-        })
-        .join("\n");
-      parts.push(`**Cells**:\n${cellSummary}`);
-    }
-    if (cursorPos) {
-      parts.push(`**Cursor**: Line ${cursorPos.line}, Column ${cursorPos.col}`);
-    }
-  }
+  // Note: Editor/cell context is NOT included here — it is captured at send time
+  // via buildMessageContext() and appended to each user message individually.
+  // This ensures the context snapshot is tied to the message, not shared globally.
 
   // --- Instructions ---
   parts.push(`\n## Instructions`);
