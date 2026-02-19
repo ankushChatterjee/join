@@ -97,21 +97,9 @@ export const useAiStore = create<AiState>((set, get) => ({
     const { isPanelOpen, sessions, activeSessionId } = get();
     set({ isPanelOpen: !isPanelOpen });
 
-    // Load sessions when opening panel for the first time
-    if (!isPanelOpen && sessions.length === 0) {
+    // Load sessions when opening panel if not already active
+    if (!isPanelOpen && (!activeSessionId || sessions.length === 0)) {
       get().loadSessions();
-    }
-
-    // Create a session if none exists
-    if (!isPanelOpen && !activeSessionId) {
-      get().loadSessions().then(() => {
-        if (get().sessions.length === 0) {
-          get().createSession();
-        } else if (!get().activeSessionId) {
-          // Load the most recent session
-          get().loadSession(get().sessions[0].id);
-        }
-      });
     }
   },
 
@@ -124,6 +112,15 @@ export const useAiStore = create<AiState>((set, get) => ({
     try {
       const sessions = await invoke<ChatSessionMeta[]>("list_chat_sessions");
       set({ sessions });
+
+      const { activeSessionId } = get();
+      if (!activeSessionId) {
+        if (sessions.length > 0) {
+          get().loadSession(sessions[0].id);
+        } else {
+          get().createSession();
+        }
+      }
     } catch (error) {
       console.error("Failed to load chat sessions:", error);
     }
