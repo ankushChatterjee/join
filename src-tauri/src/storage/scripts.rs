@@ -26,6 +26,8 @@ pub struct SqlSheetCell {
     pub last_run_duration_ms: Option<i64>,
     #[serde(default)]
     pub last_run_successful: Option<bool>,
+    #[serde(default)]
+    pub proposed_sql: Option<String>,
 }
 
 fn default_sheet_version() -> i64 {
@@ -97,6 +99,7 @@ fn create_default_cell(sql: String) -> SqlSheetCell {
         last_run_at: None,
         last_run_duration_ms: None,
         last_run_successful: None,
+        proposed_sql: None,
     }
 }
 
@@ -132,7 +135,10 @@ fn normalize_sheet(mut sheet: SqlSheetDocument) -> SqlSheetDocument {
 }
 
 /// Load a script's metadata
-fn load_script_metadata(connection_id: &str, script_id: &str) -> Result<ScriptMetadata, ConfigError> {
+fn load_script_metadata(
+    connection_id: &str,
+    script_id: &str,
+) -> Result<ScriptMetadata, ConfigError> {
     let meta_path = get_script_meta_path(connection_id, script_id);
     let content = fs::read_to_string(&meta_path)?;
     let metadata: ScriptMetadata = serde_json::from_str(&content)?;
@@ -147,7 +153,10 @@ fn save_script_metadata(metadata: &ScriptMetadata) -> Result<(), ConfigError> {
     Ok(())
 }
 
-fn load_script_sheet(connection_id: &str, script_id: &str) -> Result<SqlSheetDocument, ConfigError> {
+fn load_script_sheet(
+    connection_id: &str,
+    script_id: &str,
+) -> Result<SqlSheetDocument, ConfigError> {
     let sheet_path = get_script_sheet_path(connection_id, script_id);
 
     if sheet_path.exists() {
@@ -157,8 +166,8 @@ fn load_script_sheet(connection_id: &str, script_id: &str) -> Result<SqlSheetDoc
     }
 
     // Legacy migration path: if there is only a .sql file, convert it to one sheet cell.
-    let legacy_content = fs::read_to_string(get_script_sql_path(connection_id, script_id))
-        .unwrap_or_default();
+    let legacy_content =
+        fs::read_to_string(get_script_sql_path(connection_id, script_id)).unwrap_or_default();
     let sheet = create_default_sheet(legacy_content);
     save_script_sheet(connection_id, script_id, &sheet)?;
     Ok(sheet)
@@ -179,17 +188,17 @@ fn save_script_sheet(
 /// List all scripts for a connection
 pub fn list_scripts(connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigError> {
     let dir = get_connection_scripts_dir(connection_id);
-    
+
     if !dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut scripts = Vec::new();
-    
+
     for entry in fs::read_dir(&dir)? {
         let entry = entry?;
         let path = entry.path();
-        
+
         // Only process .meta.json files
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             if name.ends_with(".meta.json") {
@@ -203,7 +212,7 @@ pub fn list_scripts(connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigEr
 
     // Sort by created_at
     scripts.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-    
+
     Ok(scripts)
 }
 
@@ -222,15 +231,12 @@ pub fn create_script(connection_id: &str, name: &str) -> Result<Script, ConfigEr
 
     // Save metadata
     save_script_metadata(&metadata)?;
-    
+
     // Create default sheet JSON (single empty cell)
     let sheet = create_default_sheet(String::new());
     save_script_sheet(connection_id, &script_id, &sheet)?;
 
-    Ok(Script {
-        metadata,
-        sheet,
-    })
+    Ok(Script { metadata, sheet })
 }
 
 /// Get a script by ID
@@ -248,7 +254,7 @@ pub fn update_script_content(
     sheet: &SqlSheetDocument,
 ) -> Result<(), ConfigError> {
     save_script_sheet(connection_id, script_id, sheet)?;
-    
+
     // Update the metadata timestamp
     let mut metadata = load_script_metadata(connection_id, script_id)?;
     metadata.updated_at = chrono::Utc::now().timestamp_millis();
@@ -258,7 +264,11 @@ pub fn update_script_content(
 }
 
 /// Rename a script
-pub fn rename_script(connection_id: &str, script_id: &str, new_name: &str) -> Result<ScriptMetadata, ConfigError> {
+pub fn rename_script(
+    connection_id: &str,
+    script_id: &str,
+    new_name: &str,
+) -> Result<ScriptMetadata, ConfigError> {
     let mut metadata = load_script_metadata(connection_id, script_id)?;
     metadata.name = new_name.to_string();
     metadata.updated_at = chrono::Utc::now().timestamp_millis();
@@ -271,7 +281,7 @@ pub fn delete_script(connection_id: &str, script_id: &str) -> Result<(), ConfigE
     let sheet_path = get_script_sheet_path(connection_id, script_id);
     let legacy_sql_path = get_script_sql_path(connection_id, script_id);
     let meta_path = get_script_meta_path(connection_id, script_id);
-    
+
     // Remove all known files (ignore errors if they don't exist)
     fs::remove_file(&sheet_path).ok();
     fs::remove_file(&legacy_sql_path).ok();

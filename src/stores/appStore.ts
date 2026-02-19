@@ -136,13 +136,16 @@ interface AppState {
     cellId: string,
     updates: Pick<SqlSheetCell, "last_run_at" | "last_run_duration_ms" | "last_run_successful">
   ) => Promise<void>;
+  updateScriptCellProposal: (scriptId: string, cellId: string, proposedSql: string | null) => void;
+  acceptScriptCellProposal: (scriptId: string, cellId: string) => void;
+  rejectScriptCellProposal: (scriptId: string, cellId: string) => void;
   executeScriptCell: (scriptId: string, cellId: string) => Promise<void>;
   updateScriptContent: (scriptId: string, content: string) => void;
   saveScript: (scriptId: string) => Promise<void>;
   renameScript: (scriptId: string, name: string) => Promise<void>;
   deleteScript: (connectionId: string, scriptId: string) => Promise<void>;
   toggleScriptsFolderExpanded: () => void;
-  
+
   // Actions - Tabs Persistence
   loadOpenTabs: () => Promise<void>;
   saveOpenTabs: () => Promise<void>;
@@ -177,6 +180,7 @@ function createEmptyCell(sql = ""): SqlSheetCell {
     last_run_at: null,
     last_run_duration_ms: null,
     last_run_successful: null,
+    proposed_sql: null,
   };
 }
 
@@ -309,7 +313,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   connect: async (id: string) => {
     // Clear any previous errors and results when attempting to connect
     set({ queryError: null, queryResults: null });
-    
+
     try {
       await invoke("connect", { connectionId: id });
     } catch (error) {
@@ -320,7 +324,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Refresh connection status
     await get().loadConnections();
     // Set as active and load schema
-    set({ 
+    set({
       activeConnectionId: id,
       isDbExpanded: true,
       isScriptsFolderExpanded: true,
@@ -342,13 +346,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().loadSchemas(),
       get().loadScripts(id),
     ]);
-    
+
     // Eager load tables/views for all schemas (for autocomplete)
     const { schemas } = get();
     await Promise.all(
       schemas.map((schema) => get().loadTablesForSchema(schema.name))
     );
-    
+
     // Eager load columns for all tables/views (for autocomplete)
     const { tablesBySchema, viewsBySchema } = get();
     const columnLoadPromises: Promise<void>[] = [];
@@ -364,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     // Load columns in parallel - await so autocomplete schema is ready
     await Promise.all(columnLoadPromises);
-    
+
     // Auto-create a script if none exists
     const { scriptsByConnection } = get();
     const scripts = scriptsByConnection[id] || [];
@@ -403,7 +407,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveConnection: (id: string | null) => {
-    set({ 
+    set({
       activeConnectionId: id,
       expandedSchemas: new Set(),
       expandedTables: new Set(),
@@ -438,7 +442,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       const activeSchema = schemas.length > 0 ? schemas[0].name : null;
       set({ schemas, activeSchema, isLoadingSchema: false });
-      
+
       // Auto-expand and load first schema if only one exists
       if (schemas.length === 1) {
         const schemaName = schemas[0].name;
@@ -540,13 +544,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           schema,
         }),
         // Only load indexes if not already loaded
-        indexes[key] 
-          ? Promise.resolve(indexes[key]) 
+        indexes[key]
+          ? Promise.resolve(indexes[key])
           : invoke<IndexInfo[]>("get_indexes", {
-              connectionId: activeConnectionId,
-              table,
-              schema,
-            }),
+            connectionId: activeConnectionId,
+            table,
+            schema,
+          }),
       ]);
       set((state) => ({
         columns: { ...state.columns, [key]: cols },
@@ -606,7 +610,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshConnectionMetadata: async (connectionId: string) => {
     const { activeConnectionId, connections } = get();
     const connection = connections.find((c) => c.id === connectionId);
-    
+
     if (!connection?.is_connected) {
       get().showToast("error", "Connection is not active");
       return;
@@ -641,13 +645,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().loadSchemas(),
       get().loadScripts(connectionId),
     ]);
-    
+
     // Eager load tables/views for all schemas (for autocomplete)
     const { schemas } = get();
     await Promise.all(
       schemas.map((schema) => get().loadTablesForSchema(schema.name))
     );
-    
+
     // Eager load columns for all tables/views (for autocomplete)
     const { tablesBySchema, viewsBySchema } = get();
     const columnLoadPromises: Promise<void>[] = [];
@@ -663,7 +667,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     // Load columns in parallel
     await Promise.all(columnLoadPromises);
-    
+
     get().showToast("success", "Metadata refreshed");
   },
 
@@ -931,6 +935,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  updateScriptCellProposal: (scriptId: string, cellId: string, proposedSql: string | null) => {
+    set((state) => ({
+      openScripts: state.openScripts.map((s) => {
+        if (s.id !== scriptId) return s;
+        return {
+          ...s,
+          cells: s.cells.map((c) => (c.id === cellId ? { ...c, proposed_sql: proposedSql } : c)),
+        };
+      }),
+    }));
+  },
+
+  acceptScriptCellProposal: (scriptId: string, cellId: string) => {
+    const script = get().openScripts.find((s) => s.id === scriptId);
+    const cell = script?.cells.find((c) => c.id === cellId);
+    if (!cell || cell.proposed_sql == null) return;
+
+    const proposedSql = cell.proposed_sql;
+    // Apply changes: clear proposal and update cell SQL
+    get().updateScriptCellProposal(scriptId, cellId, null);
+    get().updateScriptContent(scriptId, proposedSql);
+  },
+
+  rejectScriptCellProposal: (scriptId: string, cellId: string) => {
+    get().updateScriptCellProposal(scriptId, cellId, null);
+  },
+
   removeScriptCell: async (scriptId: string, cellId: string) => {
     const script = get().openScripts.find((s) => s.id === scriptId);
     if (!script) return;
@@ -1082,14 +1113,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   renameScript: async (scriptId: string, name: string) => {
     const script = get().openScripts.find((s) => s.id === scriptId);
     const connectionId = script?.connectionId;
-    
+
     if (!connectionId) {
       // Find connectionId from scriptsByConnection
       for (const [connId, scripts] of Object.entries(get().scriptsByConnection)) {
         if (scripts.some((s) => s.id === scriptId)) {
           try {
             await invoke("rename_script", { connectionId: connId, scriptId, newName: name });
-            
+
             // Update in scriptsByConnection
             set((state) => ({
               scriptsByConnection: {
@@ -1111,10 +1142,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return;
     }
-    
+
     try {
       await invoke("rename_script", { connectionId, scriptId, newName: name });
-      
+
       // Update in both places
       set((state) => ({
         scriptsByConnection: {
@@ -1136,7 +1167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteScript: async (connectionId: string, scriptId: string) => {
     try {
       await invoke("delete_script", { connectionId, scriptId });
-      
+
       set((state) => ({
         scriptsByConnection: {
           ...state.scriptsByConnection,
@@ -1147,10 +1178,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         openScripts: state.openScripts.filter((s) => s.id !== scriptId),
         activeScriptId: state.activeScriptId === scriptId ? null : state.activeScriptId,
       }));
-      
+
       // Save tabs state
       get().saveOpenTabs();
-      
+
       get().showToast("success", "SQL sheet deleted");
     } catch (error) {
       console.error("Failed to delete script:", error);
@@ -1223,7 +1254,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveOpenTabs: async () => {
     const { openScripts, activeScriptId } = get();
-    
+
     const tabsState = {
       tabs: openScripts.map((script) => ({
         id: script.id,
@@ -1254,7 +1285,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleSchemaExpanded: (schema: string) => {
     const { expandedSchemas, tablesBySchema } = get();
     const newExpanded = new Set(expandedSchemas);
-    
+
     if (newExpanded.has(schema)) {
       newExpanded.delete(schema);
     } else {
@@ -1264,7 +1295,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().loadTablesForSchema(schema);
       }
     }
-    
+
     set({ expandedSchemas: newExpanded });
   },
 
@@ -1272,7 +1303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { expandedTables, columns } = get();
     const key = `${schema}.${table}`;
     const newExpanded = new Set(expandedTables);
-    
+
     if (newExpanded.has(key)) {
       newExpanded.delete(key);
     } else {
@@ -1282,7 +1313,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().loadColumns(table, schema);
       }
     }
-    
+
     set({ expandedTables: newExpanded });
   },
 
@@ -1290,7 +1321,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { expandedViews, columns } = get();
     const key = `${schema}.${view}`;
     const newExpanded = new Set(expandedViews);
-    
+
     if (newExpanded.has(key)) {
       newExpanded.delete(key);
     } else {
@@ -1300,7 +1331,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().loadColumns(view, schema);
       }
     }
-    
+
     set({ expandedViews: newExpanded });
   },
 
@@ -1308,7 +1339,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { expandedIndexFolders, indexes } = get();
     const key = `${schema}.${tableOrView}`;
     const newExpanded = new Set(expandedIndexFolders);
-    
+
     if (newExpanded.has(key)) {
       newExpanded.delete(key);
     } else {
@@ -1318,7 +1349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().loadIndexes(tableOrView, schema);
       }
     }
-    
+
     set({ expandedIndexFolders: newExpanded });
   },
 
@@ -1327,7 +1358,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { openScripts, activeScriptId, connections } = get();
     const activeScript = openScripts.find((s) => s.id === activeScriptId);
     const connectionId = activeScript?.connectionId;
-    
+
     if (!connectionId) {
       set({ queryError: "No active connection" });
       return;
@@ -1357,13 +1388,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: null });
     const startTime = Date.now();
-    
+
     try {
       const results = await invoke<QueryResult>("execute_query", {
         connectionId,
         sql,
       });
-      
+
       // Add to history on success
       const historyEntry: QueryHistoryEntry = {
         id: crypto.randomUUID(),
@@ -1375,7 +1406,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         executionTimeMs: results.execution_time_ms,
         error: null,
       };
-      
+
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
         queryResults: results,
@@ -1396,7 +1427,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         executionTimeMs: null,
         error: error as string,
       };
-      
+
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
         queryError: error as string,
@@ -1413,7 +1444,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   executeQueryDirect: async (connectionId: string, sql: string, previewSource?: string) => {
     const { connections } = get();
     const connection = connections.find((c) => c.id === connectionId);
-    
+
     if (!connection) {
       set({ queryError: "Connection not found" });
       return;
@@ -1435,13 +1466,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: previewSource || null });
     const startTime = Date.now();
-    
+
     try {
       const results = await invoke<QueryResult>("execute_query", {
         connectionId,
         sql,
       });
-      
+
       // Add to history
       const historyEntry: QueryHistoryEntry = {
         id: crypto.randomUUID(),
@@ -1453,7 +1484,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         executionTimeMs: results.execution_time_ms,
         error: null,
       };
-      
+
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
         queryResults: results,
@@ -1473,7 +1504,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         executionTimeMs: null,
         error: error as string,
       };
-      
+
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
         queryError: error as string,

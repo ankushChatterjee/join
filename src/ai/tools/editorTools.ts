@@ -11,7 +11,6 @@ import {
   getCursorPosition,
   getEditorView,
   insertTextAtCursor,
-  replaceEditorContent,
 } from "@/components/editor/editorUtils";
 
 // --- get_editor_context ---
@@ -101,21 +100,18 @@ export const replaceEditorContentTool = tool({
     sql: z.string().describe("The SQL text to replace the editor content with"),
   }),
   execute: async ({ sql }) => {
-    const { openScripts, activeScriptId, updateScriptContent } = useAppStore.getState();
-    const activeScript = openScripts.find((s) => s.id === activeScriptId);
+    const { activeScriptId, updateScriptCellProposal } = useAppStore.getState();
+    if (!activeScriptId) {
+      return "No active SQL sheet found.";
+    }
+
+    const activeScript = useAppStore.getState().openScripts.find((s) => s.id === activeScriptId);
     if (!activeScript?.selectedCellId) {
       return "No cell is selected. Use add_cell to create/select a cell first.";
     }
 
-    if (!getEditorView()) {
-      updateScriptContent(activeScript.id, sql);
-      useAppStore.getState().saveOpenTabs();
-      return "Replaced content in the selected cell.";
-    }
-
-    replaceEditorContent(sql);
-    useAppStore.getState().saveOpenTabs();
-    return "Replaced content in the selected cell.";
+    updateScriptCellProposal(activeScriptId, activeScript.selectedCellId, sql);
+    return "Proposed changes to the selected cell. Please review them in the diff viewer.";
   },
 });
 

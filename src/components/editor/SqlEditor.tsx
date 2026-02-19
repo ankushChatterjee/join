@@ -11,6 +11,7 @@ import type { SqlSheetCell } from "@/stores/types";
 import { setEditorView } from "./editorUtils";
 import { buildCompletionSchema } from "./completionSchema";
 import { cn } from "@/lib/utils";
+import { DiffViewer } from "./DiffViewer";
 
 // Custom dark theme for CodeMirror - warm retro palette with high contrast
 const customTheme = EditorView.theme(
@@ -223,7 +224,16 @@ function SqlCell({
         </div>
       </div>
 
-      {isCollapsed ? (
+      {cell.proposed_sql ? (
+        <div className="p-2 bg-base-950/30">
+          <DiffViewer
+            oldValue={cell.sql}
+            newValue={cell.proposed_sql}
+            onAccept={() => useAppStore.getState().acceptScriptCellProposal(scriptId, cell.id)}
+            onReject={() => useAppStore.getState().rejectScriptCellProposal(scriptId, cell.id)}
+          />
+        </div>
+      ) : isCollapsed ? (
         <div className="px-3 py-2 text-xs text-base-200 font-mono bg-base-900/40">{preview}</div>
       ) : (
         <CodeMirror

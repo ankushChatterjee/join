@@ -127,6 +127,7 @@ export interface SqlSheetCell {
   last_run_at: number | null;
   last_run_duration_ms: number | null;
   last_run_successful: boolean | null;
+  proposed_sql?: string | null;
 }
 
 export interface SqlSheetDocument {
@@ -144,7 +145,7 @@ export interface ScriptMetadata {
   updated_at: number;
 }
 
-export interface Script extends ScriptMetadata, SqlSheetDocument {}
+export interface Script extends ScriptMetadata, SqlSheetDocument { }
 
 // Query history entry for tracking executed queries
 export interface QueryHistoryEntry {
