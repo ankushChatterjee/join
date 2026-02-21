@@ -9,8 +9,9 @@ import {
   listViews,
   describeView,
   listFunctions,
+  findJoinPath,
 } from "./schemaTools";
-import { executeReadonlySql, getQueryHistory } from "./queryTools";
+import { executeReadonlySql, getQueryHistory, lintSqlSafety } from "./queryTools";
 import {
   getEditorContext,
   insertSql,
@@ -26,8 +27,10 @@ export const allTools = {
   list_views: listViews,
   describe_view: describeView,
   list_functions: listFunctions,
+  find_join_path: findJoinPath,
   execute_readonly_sql: executeReadonlySql,
   get_query_history: getQueryHistory,
+  lint_sql_safety: lintSqlSafety,
   get_editor_context: getEditorContext,
   insert_sql: insertSql,
   replace_editor_content: replaceEditorContentTool,

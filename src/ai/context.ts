@@ -19,58 +19,92 @@ import {
 export function buildMessageContext(): string {
   const state = useAppStore.getState();
   const parts: string[] = [];
+  let hasContext = false;
+
+  const schemaFocusParts: string[] = [];
+  if (state.activeSchema) {
+    schemaFocusParts.push(`- **Active Schema**: \`${state.activeSchema}\``);
+  }
+  if (state.previewSource) {
+    schemaFocusParts.push(`- **Previewing Object**: \`${state.previewSource}\``);
+  }
+
+  const expandedTables = Array.from(state.expandedTables).slice(0, 8);
+  const expandedViews = Array.from(state.expandedViews).slice(0, 8);
+  if (expandedTables.length > 0) {
+    schemaFocusParts.push(`- **Expanded Tables**: ${expandedTables.map((t) => `\`${t}\``).join(", ")}`);
+  }
+  if (expandedViews.length > 0) {
+    schemaFocusParts.push(`- **Expanded Views**: ${expandedViews.map((v) => `\`${v}\``).join(", ")}`);
+  }
+
+  if (state.selectedSchemaObject) {
+    const obj = state.selectedSchemaObject;
+    if (obj.type === "function") {
+      schemaFocusParts.push(
+        `- **Selected Function**: \`${obj.schema}.${obj.specificName || obj.name}\``
+      );
+    } else {
+      schemaFocusParts.push(`- **Selected Type**: \`${obj.schema}.${obj.name}\``);
+    }
+  }
 
   const activeScript = state.openScripts.find(
     (s) => s.id === state.activeScriptId
   );
 
-  // Nothing open -> no context to attach
-  if (!activeScript) return "";
-
-  const selectedCell = activeScript.cells.find(
-    (cell) => cell.id === activeScript.selectedCellId
-  );
-
-  const editorContent = getFullEditorContent();
-  const selectedText = getSelectedText();
-  const cursorPos = getCursorPosition();
-
-  parts.push(`\n---\n**Context at time of message**`);
-  parts.push(`**SQL Sheet**: ${activeScript.name}`);
-
-  if (selectedCell) {
-    const cellIndex =
-      activeScript.cells.findIndex((c) => c.id === selectedCell.id) + 1;
-    parts.push(`**Selected Cell**: Cell ${cellIndex}`);
-  } else {
-    parts.push(`**Selected Cell**: None`);
-  }
-
-  if (activeScript.cells.length > 0) {
-    const cellSummary = activeScript.cells
-      .map((cell, index) => {
-        const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
-        return `- Cell ${index + 1}${marker}`;
-      })
-      .join("\n");
-    parts.push(`**Sheet Cells**:\n${cellSummary}`);
-  }
-
-  if (selectedText) {
-    parts.push(`**Selected SQL**:\n\`\`\`sql\n${selectedText}\n\`\`\``);
-  }
-
-  if (editorContent && editorContent !== selectedText) {
-    parts.push(
-      `**Selected Cell Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
+  if (activeScript) {
+    const selectedCell = activeScript.cells.find(
+      (cell) => cell.id === activeScript.selectedCellId
     );
+
+    const editorContent = getFullEditorContent();
+    const selectedText = getSelectedText();
+    const cursorPos = getCursorPosition();
+
+    parts.push(`**SQL Sheet**: ${activeScript.name}`);
+    hasContext = true;
+
+    if (selectedCell) {
+      const cellIndex =
+        activeScript.cells.findIndex((c) => c.id === selectedCell.id) + 1;
+      parts.push(`**Selected Cell**: Cell ${cellIndex}`);
+    } else {
+      parts.push(`**Selected Cell**: None`);
+    }
+
+    if (activeScript.cells.length > 0) {
+      const cellSummary = activeScript.cells
+        .map((cell, index) => {
+          const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
+          return `- Cell ${index + 1}${marker}`;
+        })
+        .join("\n");
+      parts.push(`**Sheet Cells**:\n${cellSummary}`);
+    }
+
+    if (selectedText) {
+      parts.push(`**Selected SQL**:\n\`\`\`sql\n${selectedText}\n\`\`\``);
+    }
+
+    if (editorContent && editorContent !== selectedText) {
+      parts.push(
+        `**Selected Cell Content**:\n\`\`\`sql\n${editorContent}\n\`\`\``
+      );
+    }
+
+    if (cursorPos) {
+      parts.push(`**Cursor**: Line ${cursorPos.line}, Column ${cursorPos.col}`);
+    }
   }
 
-  if (cursorPos) {
-    parts.push(`**Cursor**: Line ${cursorPos.line}, Column ${cursorPos.col}`);
+  if (schemaFocusParts.length > 0) {
+    parts.push(`**Schema Tree Focus (high-priority context)**:\n${schemaFocusParts.join("\n")}`);
+    hasContext = true;
   }
 
-  return parts.join("\n");
+  if (!hasContext) return "";
+  return `\n---\n**Context at time of message**\n${parts.join("\n")}`;
 }
 
 /**
@@ -149,6 +183,9 @@ export function buildSystemPrompt(): string {
     `- Use the available tools to explore the database schema before writing queries when you need more detail.`
   );
   parts.push(
+    `- Treat \`Schema Tree Focus\` context attached to user messages as high-priority signals about what the user is working on.`
+  );
+  parts.push(
     `- When writing SQL, always use the correct dialect for the connected database.`
   );
   parts.push(
@@ -164,7 +201,13 @@ export function buildSystemPrompt(): string {
     `- When writing JOINs, prefer using foreign key relationships surfaced by \`describe_table\` to ensure correct join conditions.`
   );
   parts.push(
-    `- Always explain your reasoning and the SQL you're writing.`
+    `- When users ask for relationships across tables, use \`find_join_path\` before finalizing JOIN SQL if the path is not explicit.`
+  );
+  parts.push(
+    `- Before returning final SQL, run \`lint_sql_safety\` on your candidate query and address or explicitly mention warnings.`
+  );
+  parts.push(
+    `- Always explain your reasoning and the SQL you're writing, and when explaining give a brief about the SQL concept you are using if the concept is complex/esoteric`
   );
   parts.push(
     `- Always prioritize safety and performance, evaluate yourself and try to find out the problems that might come due to your query.`
@@ -172,6 +215,13 @@ export function buildSystemPrompt(): string {
   parts.push(
     `- When showing SQL in your response, format it cleanly with proper indentation.`
   );
+  parts.push(
+    `- Sometimes, whether a schema or a query is good or not depends on the usage of it in code or elsewhere, when such confusion arrives as the user that question.`
+  );
+  parts.push(
+    `- Use emojis only when absolutely necessary.`
+  );
+
 
   return parts.join("\n");
 }

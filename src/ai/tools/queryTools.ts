@@ -112,3 +112,108 @@ export const getQueryHistory = tool({
     return JSON.stringify(entries, null, 2);
   },
 });
+
+// --- lint_sql_safety ---
+export const lintSqlSafety = tool({
+  description:
+    "Run lightweight SQL safety and performance lint checks. Use this before returning final SQL to surface risky patterns.",
+  inputSchema: z.object({
+    sql: z.string().describe("The SQL query to lint for safety/performance issues"),
+  }),
+  execute: async ({ sql }) => {
+    const warnings: Array<{
+      severity: "high" | "medium" | "low";
+      code: string;
+      message: string;
+      suggestion: string;
+    }> = [];
+
+    const text = sql.trim();
+    const lower = text.toLowerCase();
+
+    const hasKeyword = (regex: RegExp) => regex.test(lower);
+    const pushWarning = (
+      severity: "high" | "medium" | "low",
+      code: string,
+      message: string,
+      suggestion: string
+    ) => {
+      warnings.push({ severity, code, message, suggestion });
+    };
+
+    if (hasKeyword(/\b(insert|update|delete|drop|truncate|alter|create|grant|revoke)\b/)) {
+      pushWarning(
+        "high",
+        "NON_READONLY_STATEMENT",
+        "Query appears to include write/DDL operations.",
+        "Keep AI-generated queries read-only unless the user explicitly asks for write operations."
+      );
+    }
+
+    if (hasKeyword(/\bselect\s+\*/)) {
+      pushWarning(
+        "medium",
+        "SELECT_STAR",
+        "Using SELECT * can pull unnecessary columns and increase payload size.",
+        "Select only the columns needed for the task."
+      );
+    }
+
+    const joinCount = (lower.match(/\bjoin\b/g) || []).length;
+    const onCount = (lower.match(/\bon\b/g) || []).length;
+    const usingCount = (lower.match(/\busing\s*\(/g) || []).length;
+    const naturalJoinCount = (lower.match(/\bnatural\s+join\b/g) || []).length;
+    if (joinCount > 0 && onCount + usingCount + naturalJoinCount < joinCount) {
+      pushWarning(
+        "high",
+        "POSSIBLE_CARTESIAN_JOIN",
+        "One or more JOIN clauses might be missing ON/USING predicates.",
+        "Ensure every join has an explicit and correct join condition."
+      );
+    }
+
+    const isSelectLike =
+      hasKeyword(/^\s*select\b/) ||
+      hasKeyword(/^\s*with\b/) ||
+      hasKeyword(/^\s*explain\b/);
+    const hasLimit = hasKeyword(/\blimit\s+\d+/);
+    const hasWhere = hasKeyword(/\bwhere\b/);
+
+    if (isSelectLike && !hasLimit && !hasWhere) {
+      pushWarning(
+        "medium",
+        "UNBOUNDED_SCAN",
+        "Query may scan a large amount of data without filters or row limits.",
+        "Add WHERE predicates and/or LIMIT when exploring data."
+      );
+    }
+
+    if (hasKeyword(/\border\s+by\b/) && !hasLimit) {
+      pushWarning(
+        "low",
+        "ORDER_BY_WITHOUT_LIMIT",
+        "ORDER BY without LIMIT can be expensive on large result sets.",
+        "Add LIMIT when only top rows are needed."
+      );
+    }
+
+    if (hasKeyword(/\bnot\s+in\s*\(\s*select\b/)) {
+      pushWarning(
+        "low",
+        "NOT_IN_SUBQUERY_NULL_RISK",
+        "NOT IN with subqueries can behave unexpectedly when NULLs are present.",
+        "Prefer NOT EXISTS or ensure subquery excludes NULL values."
+      );
+    }
+
+    return JSON.stringify(
+      {
+        safe: warnings.every((w) => w.severity !== "high"),
+        warning_count: warnings.length,
+        warnings,
+      },
+      null,
+      2
+    );
+  },
+});
