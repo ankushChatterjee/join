@@ -177,6 +177,21 @@ export function buildSystemPrompt(): string {
   // via buildMessageContext() and appended to each user message individually.
   // This ensures the context snapshot is tied to the message, not shared globally.
 
+  // --- Cell References ---
+  parts.push(`\n## Cell References`);
+  parts.push(
+    `- When referring to cells in your responses, ALWAYS use the markdown link format: [Cell N](cell://{scriptId}:{cellId}) where N is the 1-based cell index.`
+  );
+  parts.push(
+    `- Example: "I've updated [Cell 2](cell://script-abc:cell-xyz) with the JOIN query."`
+  );
+  parts.push(
+    `- The scriptId and cellId are available in the context. Use the current script's ID when referring to cells in the active sheet.`
+  );
+  parts.push(
+    `- These links will render as clickable pills that navigate directly to the referenced cell.`
+  );
+
   // --- Instructions ---
   parts.push(`\n## Instructions`);
   parts.push(
@@ -189,13 +204,16 @@ export function buildSystemPrompt(): string {
     `- When writing SQL, always use the correct dialect for the connected database.`
   );
   parts.push(
-    `- \`insert_sql\` and \`replace_editor_content\` only modify the currently selected cell.`
+    `- \`insert_sql\` and \`replace_editor_content\` only modify the currently selected cell (shown as "Cell N" where N is its position).`
   );
   parts.push(
     `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected).`
   );
   parts.push(
     `- The \`execute_readonly_sql\` tool requires user approval and should only be used when truly needed to verify data or test queries. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
+  );
+  parts.push(
+    `- When writing any SQL, via insert cell or replace content, always view all the SQL as a whole, wven when doing multiple tool calls to do each of them. Analyse if it makes sense to generate the whole SQL.`
   );
   parts.push(
     `- When writing JOINs, prefer using foreign key relationships surfaced by \`describe_table\` to ensure correct join conditions.`
@@ -219,9 +237,7 @@ export function buildSystemPrompt(): string {
     `- Sometimes, whether a schema or a query is good or not depends on the usage of it in code or elsewhere, when such confusion arrives as the user that question.`
   );
   parts.push(
-    `- Use emojis only when absolutely necessary.`
+    `- Use emojis only when absolutely necessary or explicitly requested. Avoid using them.`
   );
-
-
   return parts.join("\n");
 }

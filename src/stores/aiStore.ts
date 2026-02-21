@@ -14,6 +14,7 @@ import type {
 import { runAgent } from "@/ai/agent";
 import { encodingForModel, TiktokenModel } from "js-tiktoken";
 import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
+import { compactConversation } from "@/ai/compaction";
 
 interface ChatSessionMeta {
   id: string;
@@ -511,80 +512,44 @@ export const useAiStore = create<AiState>((set, get) => ({
   compactContext: async () => {
     set({ isCompacting: true });
     const { activeSession, selectedModelId } = get();
-    if (!activeSession || activeSession.messages.length < 4) {
+    if (!activeSession || activeSession.messages.length < 8) {
       set({ isCompacting: false });
       return;
     }
 
     try {
-      // Strategy: Summarize the first 50% of messages
-      const messagesToSummarize = activeSession.messages.slice(0, Math.floor(activeSession.messages.length / 2));
-      const remainingMessages = activeSession.messages.slice(Math.floor(activeSession.messages.length / 2));
-
-      // Construct a prompt for summarization
-      const summarizationText = "Summarize the following conversation history into a concise paragraph that retains all key technical details, schema names, and user requirements:";
-
-      // We use the same agent structure but with a specific summarization task
-      // We create a temporary session-like structure or just invoke the agent
-      // For simplicity and to reuse execute logic, we can just call runAgent with a specific prompt
-      // using the messages we want to summarize.
-
-      // But runAgent expects to append the user text. 
-      // Let's manually construct a call similar to runAgent but just for summarization.
-      // Or simpler: We just use the raw provider APIs if we can, but we want to stick to the store's pattern.
-
-      // Let's use `runAgent` but with a trick: 
-      // System prompt: "You are a helpful summarizer."
-      // User prompt: "Summarize this..."
-
-      //  Actually, using the current model to summarize is good.
-
-      const messagesContent = messagesToSummarize.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
-
-      // We'll treat this as a separate "one-off" completion
-      // We can't easily reuse runAgent because it updates the store state (streamingText etc).
-      // We need a non-intrusive way to get a completion.
-
-      // We can assume we have access to the model.
-      // Let's create a minimal direct call here since we have `activeSession` and `selectedModelId`
       const { getModel } = await import("@/ai/providers");
-      const { generateText } = await import("ai");
-
       const model = await getModel(selectedModelId);
 
-      const result = await generateText({
+      const result = await compactConversation(
+        activeSession.messages,
         model,
-        prompt: `${summarizationText}\n\n${messagesContent}`,
-      });
+        {
+          // Target 40% of current token usage
+          targetFraction: 0.4,
+          // Always keep the 6 most recent messages verbatim
+          recentWindowSize: 6,
+        }
+      );
 
-      const summary = result.text;
+      console.log(
+        `[AI Store] Compaction complete: ` +
+        `${result.stats.originalMessages} → ${result.messages.length} messages, ` +
+        `${result.stats.summariesGenerated} summaries generated, ` +
+        `saved ~${result.stats.estimatedSavedTokens} tokens`
+      );
 
-      const summaryMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "system", // Or 'assistant' acting as context
-        content: `[Previous Context Summary]: ${summary}`,
-        timestamp: Date.now()
-      };
-
-      // Update session
-      const newMessages = [summaryMessage, ...remainingMessages];
-      const newSession = {
+      const newSession: ChatSession = {
         ...activeSession,
-        messages: newMessages,
-        updatedAt: Date.now()
+        messages: result.messages,
+        updatedAt: Date.now(),
       };
 
-      set({
-        activeSession: newSession,
-        // Don't forget to save
-      });
+      set({ activeSession: newSession });
       get().saveActiveSession();
-
-      // Recalculate usage
       get().calculateTokenUsage();
-
     } catch (e) {
-      console.error("Context compaction failed:", e);
+      console.error("[AI Store] Context compaction failed:", e);
     } finally {
       set({ isCompacting: false });
     }

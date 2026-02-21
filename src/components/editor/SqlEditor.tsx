@@ -191,6 +191,7 @@ function SqlCell({
 
   return (
     <div
+      id={`cell-${cell.id}`}
       onMouseDown={onSelect}
       className={cn(
         "rounded-none border transition-colors-fast overflow-hidden",

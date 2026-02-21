@@ -17,17 +17,41 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
+import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval } from "@/ai/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CellPill } from "./CellPill";
+import { parseCellReferences } from "@/lib/cellLinkParser";
+import type { SqlSheetCell } from "@/stores/types";
 
 // --- Markdown Renderer ---
 
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({
+  content,
+  cells,
+  scriptId,
+}: {
+  content: string;
+  cells: SqlSheetCell[];
+  scriptId: string;
+}) {
+  // Pre-process content to convert cell references to links (fallback for AI-generated text)
+  const processedContent = useMemo(() => {
+    return parseCellReferences(content, cells, scriptId);
+  }, [content, cells, scriptId]);
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      urlTransform={(url) => {
+        // Preserve cell:// protocol URLs
+        if (url.startsWith("cell://")) {
+          return url;
+        }
+        return url;
+      }}
       components={{
         // Code blocks
         code(props) {
@@ -102,16 +126,42 @@ function MarkdownContent({ content }: { content: string }) {
         // Horizontal rule
         hr: () => <hr className="my-3 border-base-700/50" />,
         // Links
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 text-accent-400 hover:text-accent-300"
-          >
-            {children}
-          </a>
-        ),
+        a: ({ href, children }) => {
+          // Safety check: never allow cell:// URLs to be treated as external links
+          if (!href || href.startsWith("cell://")) {
+            if (href?.startsWith("cell://")) {
+              const linkData = href.replace("cell://", "");
+              const [linkScriptId, cellId] = linkData.split(":");
+
+              if (!linkScriptId || !cellId) {
+                return <span>{children}</span>;
+              }
+
+              let cellIndex = 0;
+              if (typeof children === "string") {
+                const match = children.match(/Cell\s+(\d+)/i);
+                if (match) {
+                  cellIndex = parseInt(match[1], 10);
+                }
+              }
+              return <CellPill cellIndex={cellIndex} cellId={cellId} scriptId={linkScriptId} />;
+            }
+            return <span>{children}</span>;
+          }
+
+          // Regular external link
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 text-accent-400 hover:text-accent-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </a>
+          );
+        },
         // Strong/Bold
         strong: ({ children }) => (
           <strong className="font-semibold text-base-100">{children}</strong>
@@ -144,7 +194,7 @@ function MarkdownContent({ content }: { content: string }) {
         ),
       }}
     >
-      {content}
+      {processedContent}
     </ReactMarkdown>
   );
 }
@@ -329,6 +379,12 @@ const ChatMessageComponentInner = ({
   streamingToolCalls,
   pendingApprovals = [],
 }: ChatMessageProps) => {
+  // Get active script cells for cell reference parsing
+  const openScripts = useAppStore((state) => state.openScripts);
+  const activeScriptId = useAppStore((state) => state.activeScriptId);
+  const activeScript = openScripts.find((s) => s.id === activeScriptId);
+  const cells = activeScript?.cells || [];
+
   if (message.role === "user") {
     return (
       <div className="py-1.5">
@@ -383,7 +439,7 @@ const ChatMessageComponentInner = ({
         ))}
 
         {/* Message content */}
-        {content && <MarkdownContent content={content} />}
+        {content && <MarkdownContent content={content} cells={cells} scriptId={activeScriptId || ""} />}
 
         {/* Streaming indicator */}
         {isStreaming && !content && toolCalls.length === 0 && (
