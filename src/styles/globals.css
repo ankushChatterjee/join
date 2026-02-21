@@ -31,7 +31,7 @@
   --color-success: #51c38d;
   --color-warning: #d7a24b;
   --color-error: #d46f6f;
-  --color-info: #6ea2d8;
+  --color-info: #c7925a;
 
   /* Semantic tokens */
   --color-background: var(--color-base-950);
@@ -180,7 +180,7 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb,
 .connections-scroll::-webkit-scrollbar-thumb,
 .panel-scroll::-webkit-scrollbar-thumb {
-  background: rgba(168, 178, 191, 0.25);
+  background: rgba(160, 160, 160, 0.25);
   border-radius: 9999px;
   transition: background 0.12s ease;
 }
@@ -188,7 +188,7 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb:hover,
 .connections-scroll::-webkit-scrollbar-thumb:hover,
 .panel-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(168, 178, 191, 0.45);
+  background: rgba(180, 180, 180, 0.45);
 }
 
 /* Editor tabs scrollbar - ultra thin with no layout shift */
@@ -278,7 +278,7 @@ body {
 }
 
 .cm-activeLine {
-  background-color: rgba(40, 49, 64, 0.45) !important;
+  background-color: rgba(42, 42, 42, 0.45) !important;
 }
 
 /* Panel resize handles (react-resizable-panels v4 uses data-separator) */

@@ -54,7 +54,7 @@ const customTheme = EditorView.theme(
       color: "#a8b2bf",
     },
     ".cm-activeLine": {
-      backgroundColor: "rgba(40, 49, 64, 0.4)",
+      backgroundColor: "rgba(42, 42, 42, 0.4)",
     },
     ".cm-matchingBracket": {
       backgroundColor: "rgba(244, 135, 52, 0.2)",
@@ -86,18 +86,38 @@ const sqlHighlightStyle = HighlightStyle.define([
   { tag: tags.special(tags.variableName), color: "#ffab71" },
 ]);
 
-function formatRunInfo(cell: SqlSheetCell): string {
+function formatRunMeta(cell: SqlSheetCell): { when: string; duration: string; status: string } {
   if (!cell.last_run_at) {
-    return "Never run";
+    return {
+      when: "NEVER",
+      duration: "--",
+      status: "IDLE",
+    };
   }
 
-  const when = new Date(cell.last_run_at).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const duration = cell.last_run_duration_ms != null ? `${cell.last_run_duration_ms} ms` : "n/a";
-  const status = cell.last_run_successful ? "success" : "failed";
-  return `${when} · ${duration} · ${status}`;
+  const lastRun = new Date(cell.last_run_at);
+  const now = new Date();
+  const isSameDay =
+    lastRun.getFullYear() === now.getFullYear() &&
+    lastRun.getMonth() === now.getMonth() &&
+    lastRun.getDate() === now.getDate();
+
+  const when = isSameDay
+    ? lastRun.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : lastRun.toLocaleDateString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
+  return {
+    when,
+    duration: cell.last_run_duration_ms != null ? `${cell.last_run_duration_ms}ms` : "--",
+    status: cell.last_run_successful ? "OK" : "FAIL",
+  };
 }
 
 interface SqlCellProps {
@@ -161,20 +181,28 @@ function SqlCell({
     return singleLine.length > 140 ? `${singleLine.slice(0, 140)}...` : singleLine;
   }, [cell.sql]);
 
+  const runMeta = useMemo(() => formatRunMeta(cell), [cell]);
+  const statusClass =
+    runMeta.status === "OK"
+      ? "text-green-300 border-green-500/35 bg-green-500/8"
+      : runMeta.status === "FAIL"
+        ? "text-red-300 border-red-500/35 bg-red-500/8"
+        : "text-base-300 border-base-700 bg-base-900";
+
   return (
     <div
       onMouseDown={onSelect}
       className={cn(
-        "rounded-sm border transition-colors-fast overflow-hidden",
-        isSelected ? "border-base-600 bg-base-900" : "border-base-750 bg-base-900/85"
+        "rounded-none border transition-colors-fast overflow-hidden",
+        isSelected ? "border-accent-500/45 bg-base-900" : "border-base-750 bg-base-900"
       )}
       data-script-id={scriptId}
       data-cell-id={cell.id}
     >
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 border-b",
-          isSelected ? "border-base-700 bg-base-850/80" : "border-base-800 bg-base-900"
+          "flex items-center gap-1.5 px-2 py-1 border-b font-mono",
+          isSelected ? "border-base-700 bg-base-850" : "border-base-800 bg-base-900"
         )}
       >
         <button
@@ -183,7 +211,7 @@ function SqlCell({
             onToggleCollapse();
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="w-[22px] h-[22px] flex items-center justify-center rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+          className="w-[20px] h-[20px] flex items-center justify-center rounded-none text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
           title={isCollapsed ? "Expand cell" : "Collapse cell"}
         >
           {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -191,35 +219,49 @@ function SqlCell({
 
         <div
           className={cn(
-            "min-w-[20px] h-[20px] px-1 rounded-sm text-[11px] font-semibold font-mono flex items-center justify-center border",
+            "h-[20px] px-1.5 text-[11px] font-semibold flex items-center justify-center border rounded-none",
             isSelected ? "bg-base-800 text-base-100 border-base-600" : "bg-base-900 text-base-300 border-base-700"
           )}
         >
-          {index + 1}
+          CELL {index + 1}
         </div>
 
-        <span className="text-[11px] text-base-200 truncate tracking-[0.02em]">{formatRunInfo(cell)}</span>
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="h-[20px] px-1.5 border border-base-700 text-[11px] text-base-300 flex items-center rounded-none shrink-0">
+            LAST {runMeta.when}
+          </span>
+          <span className="h-[20px] px-1.5 border border-base-700 text-[11px] text-base-300 flex items-center rounded-none shrink-0">
+            DUR {runMeta.duration}
+          </span>
+          <span className={cn("h-[20px] px-1.5 border text-[11px] font-semibold flex items-center rounded-none shrink-0", statusClass)}>
+            {runMeta.status}
+          </span>
+        </div>
 
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={onRun}
             disabled={isRunning}
-            className="w-[22px] h-[22px] flex items-center justify-center rounded-sm border border-accent-500/50 text-accent-300 hover:bg-accent-500/14 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast"
+            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-accent-500/55 text-accent-300 hover:bg-accent-500/12 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
             title="Run cell (⌘+Enter)"
           >
             {isRunning ? (
               <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
-              <Play className="w-3 h-3" fill="currentColor" />
+              <>
+                <Play className="w-3 h-3" fill="currentColor" />
+                <span>RUN</span>
+              </>
             )}
           </button>
           <button
             onClick={onRemove}
             disabled={!canRemove}
-            className="w-[22px] h-[22px] flex items-center justify-center rounded-sm text-base-300 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors-fast"
+            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-base-700 text-base-300 hover:text-red-300 hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
             title={canRemove ? "Remove cell" : "Cannot remove the only cell"}
           >
             <Trash2 className="w-3 h-3" />
+            <span>DEL</span>
           </button>
         </div>
       </div>
@@ -234,7 +276,10 @@ function SqlCell({
           />
         </div>
       ) : isCollapsed ? (
-        <div className="px-2.5 py-1.5 text-[12px] text-base-200 font-mono bg-base-900 border-t border-base-800">{preview}</div>
+        <div className="px-2.5 py-1.5 text-[12px] text-base-200 font-mono bg-base-900 border-t border-base-800">
+          <span className="text-base-400 mr-2">PREVIEW</span>
+          {preview}
+        </div>
       ) : (
         <CodeMirror
           value={cell.sql}
