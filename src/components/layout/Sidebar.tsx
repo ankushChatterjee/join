@@ -7,12 +7,12 @@ interface SidebarProps {
 
 export function Sidebar({ onCollapse }: SidebarProps) {
   return (
-    <div className="h-full flex flex-col bg-base-900">
+    <div className="h-full flex flex-col bg-base-900/95">
       {/* Connections section */}
       <ConnectionsList onCollapseSidebar={onCollapse} />
       
       {/* Schema tree - takes remaining space */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden border-t border-base-800/80">
         <SchemaTree />
       </div>
     </div>

@@ -43,7 +43,7 @@ function MarkdownContent({ content }: { content: string }) {
             <CodeBlock code={codeString} language={language} />
           ) : (
             <code
-              className="rounded bg-base-800/80 px-1.5 py-0.5 font-mono text-[12px] text-accent-400"
+              className="rounded-sm bg-base-850 px-1.5 py-0.5 font-mono text-[13px] text-accent-300"
               {...rest}
             >
               {children}
@@ -83,7 +83,7 @@ function MarkdownContent({ content }: { content: string }) {
         ),
         // Paragraphs
         p: ({ children }) => (
-          <p className="mb-2 text-[13px] leading-6 text-base-200">{children}</p>
+          <p className="mb-2 text-[13px] leading-[1.6] text-base-200">{children}</p>
         ),
         // Lists
         ul: ({ children }) => (
@@ -125,7 +125,7 @@ function MarkdownContent({ content }: { content: string }) {
           <del className="text-base-300 line-through">{children}</del>
         ),
         blockquote: ({ children }) => (
-          <blockquote className="my-2 border-l-2 border-base-600/70 pl-3 text-[13px] italic text-base-300">
+          <blockquote className="my-2 border-l-2 border-base-700 pl-3 text-[13px] italic text-base-300">
             {children}
           </blockquote>
         ),
@@ -135,12 +135,12 @@ function MarkdownContent({ content }: { content: string }) {
           </div>
         ),
         th: ({ children }) => (
-          <th className="border border-base-700/60 bg-base-800/65 px-2 py-1 text-left font-medium text-base-200">
+          <th className="border border-base-700 bg-base-850 px-2 py-1 text-left font-medium text-base-200">
             {children}
           </th>
         ),
         td: ({ children }) => (
-          <td className="border border-base-700/50 px-2 py-1 text-base-300">{children}</td>
+          <td className="border border-base-700/70 px-2 py-1 text-base-300">{children}</td>
         ),
       }}
     >
@@ -168,16 +168,16 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   };
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-base-700/60 bg-base-900">
-      <div className="flex items-center justify-between border-b border-base-700/50 bg-base-850/70 px-3 py-1.5">
-        <span className="font-mono text-[10px] uppercase text-base-400">
+    <div className="my-2 overflow-hidden rounded-sm border border-base-700 bg-base-900">
+      <div className="flex items-center justify-between border-b border-base-700 bg-base-850 px-2.5 py-1">
+        <span className="font-mono text-[11px] uppercase text-base-300">
           {language || "code"}
         </span>
         <div className="flex items-center gap-1">
           {isSql && (
             <button
               onClick={handleInsert}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-base-300 transition-colors hover:bg-base-700/50 hover:text-accent-300"
+              className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
               title="Insert to editor"
             >
               <ArrowDownToLine className="w-3 h-3" />
@@ -186,7 +186,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-base-300 transition-colors hover:bg-base-700/50 hover:text-base-100"
+            className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-base-100"
             title="Copy"
           >
             {copied ? (
@@ -197,7 +197,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           </button>
         </div>
       </div>
-      <pre className="panel-scroll overflow-x-auto px-3 py-2.5 text-xs">
+      <pre className="panel-scroll overflow-x-auto px-2.5 py-2 text-[13px]">
         <code className="font-mono leading-relaxed text-base-200">{code}</code>
       </pre>
     </div>
@@ -227,10 +227,10 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
   }, [toolCall.status, toolCall.isError]);
 
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-base-700/35 bg-base-850/50">
+    <div className="my-2 overflow-hidden rounded-sm border border-base-700/70 bg-base-900/60">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-base-800/30"
+        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors-fast hover:bg-base-850"
       >
         {isExpanded ? (
           <ChevronDown className="w-3 h-3 text-base-300 shrink-0" />
@@ -238,14 +238,14 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
           <ChevronRight className="w-3 h-3 text-base-300 shrink-0" />
         )}
         <Wrench className="w-3 h-3 text-base-300 shrink-0" />
-        <span className="truncate font-mono text-[11px] text-base-300">
+        <span className="truncate font-mono text-[12px] text-base-200">
           {toolCall.name}
         </span>
         <span className="ml-auto shrink-0">{statusIcon}</span>
       </button>
 
       {isExpanded && (
-        <div className="border-t border-base-700/35 px-3 py-2 text-xs">
+        <div className="border-t border-base-700/70 px-2.5 py-2 text-xs">
           <div className="mb-1 text-base-300">Input:</div>
           <pre className="mb-2 overflow-x-auto font-mono text-[11px] text-base-300">
             {JSON.stringify(toolCall.input, null, 2)}
@@ -277,31 +277,31 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
   const { approveToolCall } = useAiStore();
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-500/5">
-      <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2">
+    <div className="my-3 overflow-hidden rounded-sm border border-amber-500/30 bg-amber-500/5">
+      <div className="flex items-center gap-1.5 border-b border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5">
         <ShieldAlert className="w-4 h-4 text-amber-400" />
         <span className="text-xs font-medium text-amber-300">
           SQL Query Approval
         </span>
       </div>
-      <div className="p-3">
+      <div className="p-2.5">
         <p className="mb-2 text-xs text-base-300">
           The AI wants to run this query:
         </p>
-        <pre className="panel-scroll mb-3 overflow-x-auto rounded border border-base-700/50 bg-base-900 px-3 py-2 text-xs font-mono text-base-200">
+        <pre className="panel-scroll mb-2.5 overflow-x-auto rounded-sm border border-base-700 bg-base-900 px-2.5 py-2 text-xs font-mono text-base-200">
           {approval.sql}
         </pre>
         <div className="flex items-center gap-2">
           <button
             onClick={() => approveToolCall(approval.toolCallId, true)}
-            className="flex items-center gap-1.5 rounded-md border border-green-600/30 bg-green-600/20 px-3 py-1.5 text-xs font-medium text-green-400 transition-colors hover:bg-green-600/30"
+            className="flex items-center gap-1.5 rounded-sm border border-green-600/30 bg-green-600/20 px-2.5 py-1 text-xs font-medium text-green-400 transition-colors-fast hover:bg-green-600/30"
           >
             <Check className="w-3 h-3" />
             Approve
           </button>
           <button
             onClick={() => approveToolCall(approval.toolCallId, false)}
-            className="flex items-center gap-1.5 rounded-md border border-red-600/20 bg-red-600/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-600/20"
+            className="flex items-center gap-1.5 rounded-sm border border-red-600/20 bg-red-600/10 px-2.5 py-1 text-xs font-medium text-red-400 transition-colors-fast hover:bg-red-600/20"
           >
             <X className="w-3 h-3" />
             Deny
@@ -332,7 +332,7 @@ const ChatMessageComponentInner = ({
   if (message.role === "user") {
     return (
       <div className="py-1.5">
-        <div className="px-1">
+        <div className="px-0.5">
           <p className="whitespace-pre-wrap text-[13px] leading-6 text-base-100">
             {message.content}
           </p>
@@ -352,7 +352,7 @@ const ChatMessageComponentInner = ({
   if (isError && content) {
     return (
       <div className="py-1.5">
-        <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2.5">
+        <div className="flex items-start gap-2 rounded-sm border border-red-500/20 bg-red-500/8 px-2.5 py-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="mb-0.5 text-xs font-medium text-red-300">Something went wrong</p>
@@ -365,7 +365,7 @@ const ChatMessageComponentInner = ({
 
   return (
     <div className="py-1.5">
-      <div className="rounded-xl border border-base-700/40 bg-base-900/35 px-3 py-2.5">
+      <div className="rounded-sm border border-base-700/70 bg-base-900/50 px-2.5 py-2">
         {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
         {toolCalls.length > 0 && (
           <div className="mb-2">

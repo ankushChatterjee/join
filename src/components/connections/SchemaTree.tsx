@@ -64,7 +64,7 @@ interface TreeNodeProps {
 
 function TreeNode({ level, children }: TreeNodeProps) {
   return (
-    <div style={{ paddingLeft: `${level * 12}px` }}>
+    <div style={{ paddingLeft: `${level * 10}px` }}>
       {children}
     </div>
   );
@@ -80,10 +80,10 @@ function ColumnNode({ column, level }: ColumnNodeProps) {
   
   return (
     <TreeNode level={level}>
-      <div className="flex items-center gap-2 py-1 px-2 text-sm hover:bg-base-800/30 rounded transition-colors">
+      <div className="flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast">
         <Icon 
           className={cn(
-            "w-3.5 h-3.5 shrink-0",
+            "w-3 h-3 shrink-0",
             column.is_primary_key ? "text-warning" : "text-base-300"
           )} 
         />
@@ -94,7 +94,7 @@ function ColumnNode({ column, level }: ColumnNodeProps) {
           {column.name}
         </span>
         <span 
-          className="ml-auto text-xs text-base-300 font-mono shrink-0 truncate max-w-[12ch]"
+          className="ml-auto text-[11px] text-base-300 font-mono shrink-0 truncate max-w-[12ch]"
           title={column.data_type}
         >
           {column.data_type}
@@ -112,11 +112,11 @@ interface IndexNodeProps {
 function IndexNode({ index, level }: IndexNodeProps) {
   return (
     <TreeNode level={level}>
-      <div className="flex items-center gap-2 py-1 px-2 text-sm hover:bg-base-800/30 rounded transition-colors">
+      <div className="flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast">
         <Fingerprint 
           className={cn(
-            "w-3.5 h-3.5 shrink-0",
-            index.is_primary ? "text-warning" : index.is_unique ? "text-cyan-500" : "text-base-300"
+            "w-3 h-3 shrink-0",
+            index.is_primary ? "text-warning" : index.is_unique ? "text-accent-400" : "text-base-300"
           )} 
         />
         <span className={cn(
@@ -126,7 +126,7 @@ function IndexNode({ index, level }: IndexNodeProps) {
           {index.name}
         </span>
         {(index.is_primary || index.is_unique) && (
-          <span className="ml-auto text-xs text-base-300 font-mono shrink-0">
+          <span className="ml-auto text-[11px] text-base-300 font-mono shrink-0">
             {index.is_primary ? "PK" : "UNIQUE"}
           </span>
         )}
@@ -154,15 +154,15 @@ function IndexFolderNode({ tableOrViewName, schema, level }: IndexFolderNodeProp
       <TreeNode level={level}>
         <button
           onClick={() => toggleIndexFolderExpanded(schema, tableOrViewName)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <ListTree className="w-4 h-4 text-rose-400 shrink-0" />
+          <ListTree className="w-3.5 h-3.5 text-rose-400 shrink-0" />
           <span className="text-base-300 group-hover:text-base-100 truncate text-left">
             Indexes
           </span>
@@ -173,7 +173,7 @@ function IndexFolderNode({ tableOrViewName, schema, level }: IndexFolderNodeProp
       </TreeNode>
       
       {isExpanded && tableIndexes && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {tableIndexes.length > 0 ? (
             tableIndexes.map((index) => (
               <IndexNode
@@ -239,15 +239,15 @@ function TableNode({ table, schema, level }: TableNodeProps) {
       <TreeNode level={level}>
         <button
           onClick={() => toggleTableExpanded(schema, table.name)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <Table2 className="w-4 h-4 text-accent-500 shrink-0" />
+          <Table2 className="w-3.5 h-3.5 text-accent-500 shrink-0" />
           <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             {table.name}
           </span>
@@ -259,7 +259,7 @@ function TableNode({ table, schema, level }: TableNodeProps) {
             role="button"
             tabIndex={-1}
             onClick={handlePreview}
-            className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-green-300 transition-opacity shrink-0"
+            className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-green-300 transition-opacity shrink-0"
             title="Preview first 100 rows"
           >
             <Play className="w-3 h-3" />
@@ -268,7 +268,7 @@ function TableNode({ table, schema, level }: TableNodeProps) {
             role="button"
             tabIndex={-1}
             onClick={handleGenerateSelect}
-            className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-accent-300 transition-opacity shrink-0"
+            className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-accent-300 transition-opacity shrink-0"
             title="Generate SELECT"
           >
             <FileCode className="w-3 h-3" />
@@ -277,7 +277,7 @@ function TableNode({ table, schema, level }: TableNodeProps) {
       </TreeNode>
       
       {isExpanded && tableColumns && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {hasIndexes && (
             <IndexFolderNode
               tableOrViewName={table.name}
@@ -342,15 +342,15 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
       <TreeNode level={level}>
         <button
           onClick={() => toggleViewExpanded(schema, view.name)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <Eye className="w-4 h-4 text-violet-400 shrink-0" />
+          <Eye className="w-3.5 h-3.5 text-base-300 shrink-0" />
           <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             {view.name}
           </span>
@@ -362,7 +362,7 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
             role="button"
             tabIndex={-1}
             onClick={handlePreview}
-            className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-green-300 transition-opacity shrink-0"
+            className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-green-300 transition-opacity shrink-0"
             title="Preview first 100 rows"
           >
             <Play className="w-3 h-3" />
@@ -371,7 +371,7 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
             role="button"
             tabIndex={-1}
             onClick={handleGenerateSelect}
-            className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-accent-300 transition-opacity shrink-0"
+            className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-accent-300 transition-opacity shrink-0"
             title="Generate SELECT"
           >
             <FileCode className="w-3 h-3" />
@@ -380,7 +380,7 @@ function ViewNode({ view, schema, level }: ViewNodeProps) {
       </TreeNode>
       
       {isExpanded && viewColumns && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {hasIndexes && (
             <IndexFolderNode
               tableOrViewName={view.name}
@@ -418,15 +418,15 @@ function FunctionNode({ func, schema, level }: FunctionNodeProps) {
       <button
         onClick={() => selectSchemaObject("function", func.name, schema, func.specific_name)}
         className={cn(
-          "w-full flex items-center gap-2 py-1 px-2 text-sm rounded transition-colors cursor-pointer",
+          "w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] rounded-sm transition-colors-fast cursor-pointer",
           isSelected
             ? "bg-accent-500/20 text-accent-300"
-            : "hover:bg-base-800/30"
+            : "hover:bg-base-850"
         )}
       >
         <Braces className={cn(
-          "w-4 h-4 shrink-0",
-          isSelected ? "text-accent-400" : "text-teal-400"
+          "w-3.5 h-3.5 shrink-0",
+          isSelected ? "text-accent-400" : "text-base-300"
         )} />
         <span className={cn(
           "truncate text-left",
@@ -435,7 +435,7 @@ function FunctionNode({ func, schema, level }: FunctionNodeProps) {
           {func.name}
         </span>
         {func.return_type && (
-          <span className="ml-auto text-xs text-base-300 font-mono shrink-0">
+          <span className="ml-auto text-[11px] text-base-300 font-mono shrink-0">
             {func.return_type}
           </span>
         )}
@@ -460,15 +460,15 @@ function FunctionsFolderNode({ schemaName, functions, level }: FunctionsFolderNo
       <TreeNode level={level}>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <FunctionSquare className="w-4 h-4 text-teal-500 shrink-0" />
+          <FunctionSquare className="w-3.5 h-3.5 text-base-300 shrink-0" />
           <span className="text-base-300 group-hover:text-base-100 truncate text-left">
             Functions
           </span>
@@ -476,7 +476,7 @@ function FunctionsFolderNode({ schemaName, functions, level }: FunctionsFolderNo
       </TreeNode>
       
       {isExpanded && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {functions.map((func) => (
             <FunctionNode
               key={`func-${func.specific_name}`}
@@ -507,13 +507,13 @@ function TypeNode({ customType, schema, level }: TypeNodeProps) {
   const getTypeColor = () => {
     switch (customType.type_kind) {
       case "enum":
-        return isSelected ? "text-accent-400" : "text-purple-400";
+        return isSelected ? "text-accent-400" : "text-base-300";
       case "composite":
-        return isSelected ? "text-accent-400" : "text-orange-400";
+        return isSelected ? "text-accent-400" : "text-base-300";
       case "domain":
-        return isSelected ? "text-accent-400" : "text-blue-400";
+        return isSelected ? "text-accent-400" : "text-base-300";
       case "set":
-        return isSelected ? "text-accent-400" : "text-pink-400";
+        return isSelected ? "text-accent-400" : "text-base-300";
       default:
         return isSelected ? "text-accent-400" : "text-base-300";
     }
@@ -524,20 +524,20 @@ function TypeNode({ customType, schema, level }: TypeNodeProps) {
       <button
         onClick={() => selectSchemaObject("custom_type", customType.name, schema)}
         className={cn(
-          "w-full flex items-center gap-2 py-1 px-2 text-sm rounded transition-colors cursor-pointer",
+          "w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] rounded-sm transition-colors-fast cursor-pointer",
           isSelected
             ? "bg-accent-500/20 text-accent-300"
-            : "hover:bg-base-800/30"
+            : "hover:bg-base-850"
         )}
       >
-        <Tag className={cn("w-4 h-4 shrink-0", getTypeColor())} />
+        <Tag className={cn("w-3.5 h-3.5 shrink-0", getTypeColor())} />
         <span className={cn(
           "truncate text-left",
           isSelected ? "text-accent-300" : "text-base-200"
         )}>
           {customType.name}
         </span>
-        <span className="ml-auto text-xs text-base-300 font-mono shrink-0">
+        <span className="ml-auto text-[11px] text-base-300 font-mono shrink-0">
           {customType.type_kind}
         </span>
       </button>
@@ -561,15 +561,15 @@ function TypesFolderNode({ schemaName, types, level }: TypesFolderNodeProps) {
       <TreeNode level={level}>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <Shapes className="w-4 h-4 text-purple-500 shrink-0" />
+          <Shapes className="w-3.5 h-3.5 text-base-300 shrink-0" />
           <span className="text-base-300 group-hover:text-base-100 truncate text-left">
             Types
           </span>
@@ -577,7 +577,7 @@ function TypesFolderNode({ schemaName, types, level }: TypesFolderNodeProps) {
       </TreeNode>
       
       {isExpanded && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {types.map((t) => (
             <TypeNode
               key={`type-${t.name}`}
@@ -646,7 +646,7 @@ function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
     return (
       <TreeNode level={level}>
         <div className="flex items-center gap-2 py-0.5 px-2">
-          <FileCode className="w-4 h-4 shrink-0 text-sky-400" />
+          <FileCode className="w-3.5 h-3.5 shrink-0 text-base-300" />
           <input
             ref={inputRef}
             type="text"
@@ -654,7 +654,7 @@ function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
             onChange={(e) => setEditName(e.target.value)}
             onBlur={handleSaveEdit}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-base-800 border border-accent-500 rounded px-1.5 py-0.5 text-sm text-base-100 outline-none"
+            className="flex-1 bg-base-800 border border-accent-500 rounded-sm px-1.5 py-0.5 text-[12px] text-base-100 outline-none"
           />
         </div>
       </TreeNode>
@@ -667,15 +667,15 @@ function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
         onClick={() => openScript(connectionId, script.id)}
         onDoubleClick={handleStartEdit}
         className={cn(
-          "w-full flex items-center gap-2 py-1 px-2 text-sm rounded transition-colors cursor-pointer group",
+          "w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] rounded-sm transition-colors-fast cursor-pointer group",
           isActive
             ? "bg-accent-500/20 text-accent-300"
-            : "hover:bg-base-800/30 text-base-300"
+            : "hover:bg-base-850 text-base-300"
         )}
       >
         <FileCode className={cn(
-          "w-4 h-4 shrink-0",
-          isActive ? "text-accent-400" : "text-sky-400"
+          "w-3.5 h-3.5 shrink-0",
+          isActive ? "text-accent-400" : "text-base-300"
         )} />
         <span className="truncate text-left flex-1">
           {script.name}
@@ -684,7 +684,7 @@ function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
           role="button"
           tabIndex={-1}
           onClick={handleStartEdit}
-          className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-base-100 transition-opacity"
+          className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-base-100 transition-opacity"
           title="Rename"
         >
           <Pencil className="w-3 h-3" />
@@ -693,7 +693,7 @@ function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
           role="button"
           tabIndex={-1}
           onClick={handleDelete}
-          className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-red-300 transition-opacity"
+          className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-red-300 transition-opacity"
           title="Delete"
         >
           <Trash2 className="w-3 h-3" />
@@ -729,15 +729,15 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
       <TreeNode level={level}>
         <button
           onClick={toggleScriptsFolderExpanded}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isScriptsFolderExpanded && "rotate-90"
             )}
           />
-          <FolderIcon className="w-4 h-4 text-sky-500 shrink-0" />
+          <FolderIcon className="w-3.5 h-3.5 text-base-300 shrink-0" />
           <span className="text-base-200 group-hover:text-base-50 truncate text-left flex-1">
             SQL Sheets
           </span>
@@ -745,7 +745,7 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
             role="button"
             tabIndex={-1}
             onClick={handleNewScript}
-            className="p-0.5 rounded opacity-60 group-hover:opacity-100 hover:bg-base-600/50 text-base-300 hover:text-base-100 transition-opacity ml-1"
+            className="p-0.5 rounded-sm opacity-90 group-hover:opacity-100 hover:bg-base-700 text-base-300 hover:text-base-100 transition-opacity ml-1"
             title="New SQL sheet"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -754,7 +754,7 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
       </TreeNode>
       
       {isScriptsFolderExpanded && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {scripts.length > 0 ? (
             scripts.map((script) => (
               <ScriptNode
@@ -768,7 +768,7 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
             <TreeNode level={level + 1}>
               <button
                 onClick={handleNewScript}
-                className="py-1 px-2 text-sm text-base-300 hover:text-accent-300 cursor-pointer"
+                className="py-1 px-1.5 text-[12px] text-base-300 hover:text-accent-300 cursor-pointer transition-colors-fast"
               >
                 + New SQL sheet
               </button>
@@ -815,15 +815,15 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
       <TreeNode level={level}>
         <button
           onClick={() => toggleSchemaExpanded(schemaName)}
-          className="w-full flex items-center gap-1.5 py-1 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isExpanded && "rotate-90"
             )}
           />
-          <FolderIcon className="w-4 h-4 text-amber-500 shrink-0" />
+          <FolderIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="text-base-200 group-hover:text-base-50 truncate text-left">
             {schemaName}
           </span>
@@ -834,7 +834,7 @@ function SchemaNode({ schemaName, level }: SchemaNodeProps) {
       </TreeNode>
       
       {isExpanded && (
-        <div className="border-l border-base-800 ml-4">
+        <div className="border-l border-base-750 ml-3">
           {isLoading ? (
             <TreeNode level={level + 1}>
               <div className="py-2 px-2 text-sm text-base-300 flex items-center gap-2">
@@ -919,7 +919,7 @@ export function SchemaTree() {
   }
 
   return (
-    <div className="h-full overflow-auto py-1 sidebar-scroll">
+    <div className="h-full overflow-auto py-1 sidebar-scroll bg-base-900/70">
       {/* SQL sheets folder - shown at top level */}
       <ScriptsFolderNode connectionId={activeConnectionId} level={0} />
 
@@ -927,15 +927,15 @@ export function SchemaTree() {
       <TreeNode level={0}>
         <button
           onClick={toggleDbExpanded}
-          className="w-full flex items-center gap-1.5 py-1.5 px-2 text-sm hover:bg-base-800/50 rounded transition-colors cursor-pointer group"
+          className="w-full flex items-center gap-1.5 py-1.5 px-1.5 text-[12px] hover:bg-base-850 rounded-sm transition-colors-fast cursor-pointer group"
         >
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 text-base-300 transition-transform duration-150 shrink-0",
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
               isDbExpanded && "rotate-90"
             )}
           />
-          <Database className="w-4 h-4 text-emerald-500 shrink-0" />
+          <Database className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
           <span className="font-medium text-base-100 group-hover:text-base-50 truncate text-left">
             {activeConnection.database}
           </span>
@@ -946,7 +946,7 @@ export function SchemaTree() {
       </TreeNode>
 
       {isDbExpanded && (
-        <div className="border-l border-base-800 ml-3">
+        <div className="border-l border-base-750 ml-2.5">
           {isLoadingSchema && schemas.length === 0 ? (
             <TreeNode level={1}>
               <div className="py-2 px-2 text-sm text-base-300 flex items-center gap-2">

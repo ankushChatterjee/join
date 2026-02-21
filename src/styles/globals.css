@@ -1,37 +1,37 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-sans: 'Sora', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Warm charcoal base palette - darker, cleaner, and more professional */
-  --color-base-950: #060504;
-  --color-base-900: #0d0b09;
-  --color-base-850: #14110f;
-  --color-base-800: #1b1714;
-  --color-base-750: #221d19;
-  --color-base-700: #2b251f;
-  --color-base-600: #413a31;
-  --color-base-500: #685f51;
-  --color-base-400: #897c6b;
-  --color-base-300: #b5aa97;
-  --color-base-200: #d2c9b8;
-  --color-base-100: #e8e1d6;
-  --color-base-50: #f8f4ec;
+  /* Neutral deep-black palette (no blue cast) */
+  --color-base-950: #050507;
+  --color-base-900: #090909;
+  --color-base-850: #101010;
+  --color-base-800: #171717;
+  --color-base-750: #1e1e1e;
+  --color-base-700: #2a2a2a;
+  --color-base-600: #3d3d3d;
+  --color-base-500: #565656;
+  --color-base-400: #808080;
+  --color-base-300: #a8a8a8;
+  --color-base-200: #c7c7c7;
+  --color-base-100: #e2e2e2;
+  --color-base-50: #f5f5f5;
 
-  /* Subtle warm accent - muted gold */
-  --color-accent-500: #d4ad7a;
-  --color-accent-400: #e8d4b5;
-  --color-accent-600: #b5915f;
-  --color-accent-glow: rgba(212, 173, 122, 0.15);
+  /* Warm tactical accent */
+  --color-accent-600: #cc5f14;
+  --color-accent-500: #e97a2a;
+  --color-accent-400: #f3a060;
+  --color-accent-glow: rgba(233, 122, 42, 0.14);
 
-  /* Status colors */
-  --color-success: #34d399;
-  --color-warning: #fbbf24;
-  --color-error: #f87171;
-  --color-info: #60a5fa;
+  /* Status colors - muted saturation */
+  --color-success: #51c38d;
+  --color-warning: #d7a24b;
+  --color-error: #d46f6f;
+  --color-info: #6ea2d8;
 
   /* Semantic tokens */
   --color-background: var(--color-base-950);
@@ -47,13 +47,19 @@
   --color-icon-default: var(--color-base-200);
   --color-icon-muted: var(--color-base-300);
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
 }
 
 * {
-  border-color: var(--color-border);
+  border-color: var(--color-border-subtle);
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
@@ -63,12 +69,54 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+  letter-spacing: 0.01em;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Utility surfaces for consistent chrome */
+.surface-flat {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.surface-muted {
+  background-color: var(--color-surface-raised);
+}
+
+.divider-strong {
+  border-color: var(--color-border);
+}
+
+.divider-soft {
+  border-color: var(--color-border-subtle);
+}
+
+/* Subtle global tactical texture */
+.app-texture {
+  position: relative;
+}
+
+  .app-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 0.4px, transparent 0.4px);
+  background-size: 5px 5px;
+  opacity: 0.035;
+  z-index: 0;
+}
+
+.app-texture > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -77,7 +125,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-base-600);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -95,7 +143,7 @@ body {
 }
 
 .scrollbar-thin::-webkit-scrollbar {
-  height: 3px;
+  height: 2px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
@@ -116,18 +164,11 @@ body {
 }
 
 /* Panel scrollbars - thin, translucent, and layout-stable */
-.sidebar-scroll,
-.connections-scroll,
-.panel-scroll {
-  /* Removed standard properties to force WebKit styling */
-}
-
-/* Ensure these are distinct enough to apply */
 .sidebar-scroll::-webkit-scrollbar,
 .connections-scroll::-webkit-scrollbar,
 .panel-scroll::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 .sidebar-scroll::-webkit-scrollbar-track,
@@ -139,23 +180,21 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb,
 .connections-scroll::-webkit-scrollbar-thumb,
 .panel-scroll::-webkit-scrollbar-thumb {
-  background: rgba(191, 180, 162, 0.2);
+  background: rgba(168, 178, 191, 0.25);
   border-radius: 9999px;
-  transition: background 0.2s ease;
+  transition: background 0.12s ease;
 }
 
 .sidebar-scroll::-webkit-scrollbar-thumb:hover,
 .connections-scroll::-webkit-scrollbar-thumb:hover,
 .panel-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(191, 180, 162, 0.4);
+  background: rgba(168, 178, 191, 0.45);
 }
 
 /* Editor tabs scrollbar - ultra thin with no layout shift */
 .editor-tabs-scroll {
   scrollbar-width: none;
-  /* Firefox: completely hidden */
   -ms-overflow-style: none;
-  /* IE/Edge: completely hidden */
   scroll-behavior: smooth;
   overflow-y: hidden;
 }
@@ -173,7 +212,7 @@ body {
 .editor-tabs-scroll::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 1px;
-  transition: background 0.2s ease;
+  transition: background 0.12s ease;
 }
 
 .editor-tabs-scroll:hover::-webkit-scrollbar-thumb {
@@ -188,17 +227,17 @@ body {
 @keyframes dropdown-in {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-4px);
+    transform: translateY(-2px);
   }
 
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
 
 .animate-dropdown-in {
-  animation: dropdown-in 0.15s ease-out;
+  animation: dropdown-in 0.12s ease-out;
 }
 
 /* Selection */
@@ -209,13 +248,13 @@ body {
 
 /* Focus ring */
 :focus-visible {
-  outline: 2px solid var(--color-accent-500);
+  outline: 2px solid color-mix(in srgb, var(--color-accent-500) 88%, white 12%);
   outline-offset: 2px;
 }
 
 /* Transitions */
 .transition-colors-fast {
-  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 /* CodeMirror overrides */
@@ -239,221 +278,23 @@ body {
 }
 
 .cm-activeLine {
-  background-color: var(--color-surface-raised) !important;
+  background-color: rgba(40, 49, 64, 0.45) !important;
 }
 
 /* Panel resize handles (react-resizable-panels v4 uses data-separator) */
 [data-separator] {
   background: var(--color-border-subtle);
-  transition: background-color 0.15s ease;
+  transition: background-color 0.12s ease;
 }
 
 [data-separator]:hover,
 [data-separator][data-separator-active] {
-  background: var(--color-accent-500);
+  background: color-mix(in srgb, var(--color-accent-500) 75%, var(--color-border-subtle));
 }
 
 /* AI chat panel focus style */
 .ai-chat-panel button:focus-visible,
 .ai-chat-panel [role="button"]:focus-visible {
-  outline: 2px solid rgba(212, 173, 122, 0.65);
+  outline: 2px solid rgba(244, 135, 52, 0.6);
   outline-offset: 1px;
-}
-
-.ai-chat-panel textarea:focus,
-.ai-chat-panel textarea:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
-/* Subtle glow effect on buttons */
-.glow-on-hover:hover {
-  box-shadow: 0 0 20px var(--color-accent-glow);
-}
-
-/* Smooth transitions for interactive elements */
-button,
-a,
-[role="button"] {
-  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-  cursor: pointer;
-}
-
-/* Better focus states */
-button:focus-visible,
-a:focus-visible {
-  outline: 2px solid var(--color-accent-500);
-  outline-offset: 2px;
-}
-
-/* CodeMirror Autocomplete Popup */
-.cm-tooltip-autocomplete {
-  background: var(--color-base-850) !important;
-  border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-
-.cm-tooltip-autocomplete>ul {
-  font-family: var(--font-mono);
-}
-
-.cm-tooltip-autocomplete>ul>li {
-  padding: 4px 10px;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cm-tooltip-autocomplete>ul>li[aria-selected] {
-  background: rgba(201, 164, 117, 0.15) !important;
-  color: var(--color-text-primary);
-}
-
-/* Completion detail text (type info) */
-.cm-completionDetail {
-  color: var(--color-text-muted);
-  font-style: italic;
-  margin-left: auto;
-  padding-left: 12px;
-}
-
-/* Completion icons */
-.cm-completionIcon {
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.95;
-}
-
-/* Table icon */
-.cm-completionIcon-class::after {
-  content: "⊞";
-  color: var(--color-accent-500);
-}
-
-/* View icon */
-.cm-completionIcon-interface::after {
-  content: "◇";
-  color: #a3d9a5;
-}
-
-/* Function icon */
-.cm-completionIcon-function::after {
-  content: "ƒ";
-  color: #e0b8a0;
-}
-
-/* Keyword icon */
-.cm-completionIcon-keyword::after {
-  content: "⌘";
-  color: var(--color-text-muted);
-}
-
-/* Column/property icon */
-.cm-completionIcon-property::after {
-  content: "•";
-  color: var(--color-accent-400);
-}
-
-/* Completion match highlighting */
-.cm-completionMatchedText {
-  color: var(--color-accent-400);
-  font-weight: 500;
-}
-
-/* macOS Native Sidebar Styles */
-.sidebar-section-header {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-}
-
-/* Sidebar item selection - macOS style with subtle vibrancy */
-.sidebar-item {
-  border-radius: 6px;
-  transition: all 0.15s ease;
-}
-
-.sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.sidebar-item.active {
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
-}
-
-/* Connection status glow animation */
-@keyframes status-pulse {
-
-  0%,
-  100% {
-    box-shadow: 0 0 4px rgba(52, 211, 153, 0.4);
-  }
-
-  50% {
-    box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
-  }
-}
-
-.status-connected {
-  animation: status-pulse 2s ease-in-out infinite;
-}
-
-/* macOS-style pressed state */
-.sidebar-item:active {
-  transform: scale(0.98);
-  transition: transform 0.1s ease;
-}
-
-/* Smooth reveal for action buttons */
-.action-reveal {
-  opacity: 0.6;
-  transition: opacity 0.15s ease;
-}
-
-.group:hover .action-reveal {
-  opacity: 1;
-}
-
-/* Subtle inner shadow for depth on sidebar */
-.sidebar-depth {
-  box-shadow:
-    inset 1px 0 0 rgba(255, 255, 255, 0.02),
-    inset -1px 0 0 rgba(0, 0, 0, 0.1);
-}
-
-/* Custom Title Bar - macOS Native Style */
-.title-bar {
-  -webkit-app-region: drag;
-  app-region: drag;
-  /* Match sidebar background for seamless look */
-  background: var(--color-base-900);
-  /* Subtle bottom border only */
-  border-bottom: 1px solid var(--color-base-800);
-}
-
-/* Elements in title bar that should be clickable */
-.title-bar button,
-.title-bar [role="button"],
-.title-bar a,
-.title-bar input {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-/* Title text styling */
-.title-bar-title {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--color-base-300);
 }

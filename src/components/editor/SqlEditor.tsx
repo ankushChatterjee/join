@@ -17,73 +17,73 @@ import { DiffViewer } from "./DiffViewer";
 const customTheme = EditorView.theme(
   {
     "&": {
-      backgroundColor: "#14110f",
-      color: "#e8e4db",
+      backgroundColor: "#0a0c10",
+      color: "#dde3ea",
     },
     ".cm-content": {
-      caretColor: "#d4b896",
+      caretColor: "#f48734",
       fontFamily: "var(--font-mono)",
-      padding: "10px 0",
-      minHeight: "110px",
+      padding: "8px 0",
+      minHeight: "104px",
     },
     ".cm-cursor": {
       borderLeft: "none",
-      backgroundColor: "#d4b896",
+      backgroundColor: "#f48734",
       width: "0.6em",
       marginLeft: "0",
     },
     ".cm-selectionBackground": {
-      backgroundColor: "rgba(184, 149, 108, 0.15) !important",
+      backgroundColor: "rgba(244, 135, 52, 0.14) !important",
     },
     "&.cm-focused .cm-selectionBackground": {
-      backgroundColor: "rgba(184, 149, 108, 0.2) !important",
+      backgroundColor: "rgba(244, 135, 52, 0.2) !important",
     },
     ".cm-gutters": {
-      backgroundColor: "#0f0d0b",
-      color: "#8f816f",
+      backgroundColor: "#0a0c10",
+      color: "#7f8da0",
       border: "none",
-      borderRight: "1px solid #2b251f",
-      paddingRight: "6px",
+      borderRight: "1px solid #1d2430",
+      paddingRight: "4px",
     },
     ".cm-lineNumbers .cm-gutterElement": {
-      paddingLeft: "10px",
+      paddingLeft: "8px",
       minWidth: "32px",
     },
     ".cm-activeLineGutter": {
-      backgroundColor: "#1b1714",
-      color: "#a09382",
+      backgroundColor: "#10141b",
+      color: "#a8b2bf",
     },
     ".cm-activeLine": {
-      backgroundColor: "#1b1714",
+      backgroundColor: "rgba(40, 49, 64, 0.4)",
     },
     ".cm-matchingBracket": {
-      backgroundColor: "rgba(184, 149, 108, 0.2)",
-      color: "#d4b896 !important",
-      outline: "1px solid #b8956c",
+      backgroundColor: "rgba(244, 135, 52, 0.2)",
+      color: "#ffab71 !important",
+      outline: "1px solid #d76b1e",
     },
     ".cm-foldPlaceholder": {
-      backgroundColor: "#221d19",
+      backgroundColor: "#10141b",
       border: "none",
-      color: "#8f816f",
+      color: "#7f8da0",
     },
   },
   { dark: true }
 );
 
 const sqlHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: "#f0ebe0", fontWeight: "600" },
-  { tag: tags.string, color: "#a3d9a5" },
-  { tag: tags.number, color: "#e8a870" },
-  { tag: tags.comment, color: "#9a8f7d", fontStyle: "italic" },
-  { tag: tags.operator, color: "#d4c8b0" },
-  { tag: tags.punctuation, color: "#c4b8a5" },
-  { tag: tags.typeName, color: "#d4b896" },
-  { tag: tags.standard(tags.name), color: "#e0b8a0" },
-  { tag: tags.function(tags.name), color: "#e0b8a0" },
-  { tag: tags.variableName, color: "#d8cbb8" },
-  { tag: tags.propertyName, color: "#d8cbb8" },
-  { tag: tags.definition(tags.name), color: "#d8cbb8" },
-  { tag: tags.special(tags.variableName), color: "#d4b896" },
+  { tag: tags.keyword, color: "#f4f6f8", fontWeight: "600" },
+  { tag: tags.string, color: "#8dc8a5" },
+  { tag: tags.number, color: "#f0a365" },
+  { tag: tags.comment, color: "#7f8da0", fontStyle: "italic" },
+  { tag: tags.operator, color: "#c5ccd5" },
+  { tag: tags.punctuation, color: "#a8b2bf" },
+  { tag: tags.typeName, color: "#ffab71" },
+  { tag: tags.standard(tags.name), color: "#d9c2ae" },
+  { tag: tags.function(tags.name), color: "#d9c2ae" },
+  { tag: tags.variableName, color: "#cfd5dd" },
+  { tag: tags.propertyName, color: "#cfd5dd" },
+  { tag: tags.definition(tags.name), color: "#cfd5dd" },
+  { tag: tags.special(tags.variableName), color: "#ffab71" },
 ]);
 
 function formatRunInfo(cell: SqlSheetCell): string {
@@ -165,16 +165,16 @@ function SqlCell({
     <div
       onMouseDown={onSelect}
       className={cn(
-        "rounded-md border transition-colors overflow-hidden",
-        isSelected ? "border-accent-500/70 bg-base-900/80 shadow-[0_0_0_1px_rgba(217,184,140,0.15)]" : "border-base-700 bg-base-900/40"
+        "rounded-sm border transition-colors-fast overflow-hidden",
+        isSelected ? "border-base-600 bg-base-900" : "border-base-750 bg-base-900/85"
       )}
       data-script-id={scriptId}
       data-cell-id={cell.id}
     >
       <div
         className={cn(
-          "flex items-center gap-2 px-2 py-1.5 border-b",
-          isSelected ? "border-base-700 bg-base-850/90" : "border-base-800 bg-base-900/60"
+          "flex items-center gap-1.5 px-2 py-1 border-b",
+          isSelected ? "border-base-700 bg-base-850/80" : "border-base-800 bg-base-900"
         )}
       >
         <button
@@ -183,49 +183,49 @@ function SqlCell({
             onToggleCollapse();
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="w-5 h-5 flex items-center justify-center rounded text-base-200 hover:bg-base-700/70 transition-colors"
+          className="w-[22px] h-[22px] flex items-center justify-center rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
           title={isCollapsed ? "Expand cell" : "Collapse cell"}
         >
-          {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
 
         <div
           className={cn(
-            "min-w-[24px] h-5 px-1.5 rounded-md text-[11px] font-semibold font-mono flex items-center justify-center",
-            isSelected ? "bg-accent-500/30 text-accent-100 border border-accent-400/40" : "bg-base-700/80 text-base-100 border border-base-600"
+            "min-w-[20px] h-[20px] px-1 rounded-sm text-[11px] font-semibold font-mono flex items-center justify-center border",
+            isSelected ? "bg-base-800 text-base-100 border-base-600" : "bg-base-900 text-base-300 border-base-700"
           )}
         >
           {index + 1}
         </div>
 
-        <span className="text-[12px] text-base-200 truncate">{formatRunInfo(cell)}</span>
+        <span className="text-[11px] text-base-200 truncate tracking-[0.02em]">{formatRunInfo(cell)}</span>
 
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={onRun}
             disabled={isRunning}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-accent-500/30 text-accent-100 hover:bg-accent-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-[22px] h-[22px] flex items-center justify-center rounded-sm border border-accent-500/50 text-accent-300 hover:bg-accent-500/14 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast"
             title="Run cell (⌘+Enter)"
           >
             {isRunning ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
-              <Play className="w-3.5 h-3.5" fill="currentColor" />
+              <Play className="w-3 h-3" fill="currentColor" />
             )}
           </button>
           <button
             onClick={onRemove}
             disabled={!canRemove}
-            className="w-6 h-6 flex items-center justify-center rounded text-base-200 hover:text-red-300 hover:bg-red-500/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-[22px] h-[22px] flex items-center justify-center rounded-sm text-base-300 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors-fast"
             title={canRemove ? "Remove cell" : "Cannot remove the only cell"}
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
           </button>
         </div>
       </div>
 
       {cell.proposed_sql ? (
-        <div className="p-2 bg-base-950/30">
+        <div className="p-1.5 bg-base-900 border-t border-base-800">
           <DiffViewer
             oldValue={cell.sql}
             newValue={cell.proposed_sql}
@@ -234,7 +234,7 @@ function SqlCell({
           />
         </div>
       ) : isCollapsed ? (
-        <div className="px-3 py-2 text-xs text-base-200 font-mono bg-base-900/40">{preview}</div>
+        <div className="px-2.5 py-1.5 text-[12px] text-base-200 font-mono bg-base-900 border-t border-base-800">{preview}</div>
       ) : (
         <CodeMirror
           value={cell.sql}
@@ -273,7 +273,7 @@ function SqlCell({
             completionKeymap: true,
             lintKeymap: true,
           }}
-          className="text-sm"
+          className="text-[14px] border-t border-base-800"
         />
       )}
     </div>
@@ -347,7 +347,7 @@ export function SqlEditor() {
   }
 
   return (
-    <div className="h-full w-full overflow-auto p-1.5 space-y-2 panel-scroll scrollbar-stable">
+    <div className="h-full w-full overflow-auto p-1 space-y-1.5 panel-scroll scrollbar-stable">
       {activeScript.cells.map((cell, index) => {
         const isSelected = activeScript.selectedCellId === cell.id;
         const isRunning =
@@ -380,10 +380,10 @@ export function SqlEditor() {
 
       <button
         onClick={handleAddCell}
-        className="group mx-auto flex w-fit h-9 px-4 rounded-full border border-base-600/80 bg-base-800/95 hover:bg-base-750 text-base-100 transition-colors items-center justify-center gap-2"
+        className="group mx-auto flex w-fit h-7 px-2.5 rounded-sm border border-base-700 bg-base-900 hover:bg-base-850 text-base-200 transition-colors-fast items-center justify-center gap-1.5"
       >
-        <Plus className="w-4 h-4 text-accent-300 group-hover:text-accent-200" />
-        <span className="text-sm font-medium tracking-wide">Add Cell</span>
+        <Plus className="w-3 h-3 text-accent-300 group-hover:text-accent-200" />
+        <span className="text-[12px] font-medium tracking-[0.02em]">Add cell</span>
       </button>
     </div>
   );

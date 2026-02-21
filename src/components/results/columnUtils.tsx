@@ -114,20 +114,20 @@ function CellPopover({
       )}
       style={{ top: position.top, left: position.left }}
     >
-      <div className="bg-base-850 border border-base-700 rounded-lg shadow-xl shadow-black/40 overflow-hidden max-w-[500px] min-w-[200px]">
+      <div className="bg-base-900 border border-base-700 rounded-sm shadow-lg shadow-black/25 overflow-hidden max-w-[500px] min-w-[200px]">
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-base-700/50 bg-base-800/50">
+        <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-base-700 bg-base-850">
           <div className="flex items-center gap-2">
-            <span className="px-1.5 py-0.5 rounded bg-base-700 text-[10px] font-mono text-base-300 uppercase">
+            <span className="px-1.5 py-0.5 rounded-sm bg-base-700 text-[11px] font-mono text-base-200 uppercase">
               {sqlType}
             </span>
             {isPrimaryKey && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-[10px] font-semibold text-amber-400">
+              <span className="px-1.5 py-0.5 rounded-sm bg-amber-500/20 text-[11px] font-semibold text-amber-400">
                 PK
               </span>
             )}
             {isIndexed && !isPrimaryKey && (
-              <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-[10px] font-semibold text-blue-400">
+              <span className="px-1.5 py-0.5 rounded-sm bg-base-700/60 text-[11px] font-semibold text-base-200">
                 IDX
               </span>
             )}
@@ -140,7 +140,7 @@ function CellPopover({
           <div className="flex items-center gap-1">
             <button
               onClick={handleCopy}
-              className="p-1 rounded hover:bg-base-700/50 text-base-300 hover:text-base-100 transition-colors"
+              className="p-1 rounded-sm hover:bg-base-700 text-base-300 hover:text-base-100 transition-colors-fast"
               title="Copy to clipboard"
             >
               {copied ? (
@@ -151,7 +151,7 @@ function CellPopover({
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-base-700/50 text-base-300 hover:text-base-100 transition-colors"
+              className="p-1 rounded-sm hover:bg-base-700 text-base-300 hover:text-base-100 transition-colors-fast"
               title="Close"
             >
               <X className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ function CellPopover({
           {arrayItems ? (
             <div className="divide-y divide-base-700/50">
               {arrayItems.map((item, i) => (
-                <div key={i} className="px-3 py-2 flex gap-3">
+                <div key={i} className="px-2.5 py-1.5 flex gap-2.5">
                   <span className="text-base-300 text-xs font-mono shrink-0">[{i}]</span>
                   <span className="text-xs text-base-200 font-mono break-all">
                     {formatArrayItem(item)}
@@ -267,7 +267,7 @@ function CompositeTypeCellDisplay({ preview, typeName }: { preview: string; type
   return (
     <span className="inline-flex items-center gap-1.5">
       <Layers className="w-3 h-3 shrink-0 text-orange-400" />
-      <span className="text-orange-300 text-[10px] font-medium uppercase">{typeName}</span>
+      <span className="text-orange-300 text-[11px] font-medium uppercase">{typeName}</span>
       <span className="truncate text-base-300">{preview}</span>
     </span>
   );
@@ -278,7 +278,7 @@ function ArrayCellDisplay({ preview, count }: { preview: string; count: number }
   return (
     <span className="inline-flex items-center gap-1.5">
       <List className="w-3 h-3 shrink-0 text-base-300" />
-      <span className="text-base-300 text-[10px] font-medium">[{count}]</span>
+      <span className="text-base-200 text-[11px] font-medium">[{count}]</span>
       <span className="truncate">{preview}</span>
     </span>
   );
@@ -384,7 +384,7 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
               displayValue={
                 <span
                   className={cn(
-                    "px-1.5 py-0.5 rounded text-xs font-medium",
+                    "px-1.5 py-0.5 rounded-sm text-[11px] font-medium",
                     value
                       ? "bg-success/20 text-success"
                       : "bg-base-700 text-base-300"

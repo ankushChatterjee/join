@@ -102,26 +102,26 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
     let hunkIdx = 0;
 
     return (
-        <div className="flex flex-col border border-accent-500/30 rounded-md overflow-hidden bg-base-900/40">
+        <div className="flex flex-col border border-base-700 rounded-sm overflow-hidden bg-base-900/70">
             {/* Header */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-base-850/80 border-b border-base-700/50">
-                <div className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
-                <span className="text-[11px] text-base-300 font-medium uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-base-850 border-b border-base-700">
+                <div className="w-1.5 h-1.5 rounded-full bg-accent-500" />
+                <span className="text-[11px] text-base-200 font-semibold uppercase tracking-[0.08em]">
                     Proposed Changes
                 </span>
-                <span className="ml-auto text-[11px] text-base-400">
+                <span className="ml-auto text-[11px] text-base-300">
                     {pending.length} change{pending.length !== 1 ? 's' : ''} pending
                 </span>
             </div>
 
             {/* Diff content */}
-            <div className="flex flex-col font-mono text-[12.5px] leading-relaxed overflow-auto max-h-[380px]">
+            <div className="flex flex-col font-mono text-[12px] leading-relaxed overflow-auto max-h-[360px]">
                 {rawDiff.map((part, i) => {
                     if (!part.added && !part.removed) {
                         // Context line — unchanged, always visible
                         const lines = part.value.split('\n').filter((_, idx, arr) => idx < arr.length - 1 || arr[idx] !== '');
                         return (
-                            <div key={i} className="px-3 py-0.5 text-base-400 border-l-2 border-transparent whitespace-pre">
+                            <div key={i} className="px-2.5 py-0.5 text-base-400 border-l-2 border-transparent whitespace-pre">
                                 {lines.map((line, li) => (
                                     <div key={li} className="flex gap-3">
                                         <span className="w-3 select-none opacity-30 text-center"> </span>
@@ -148,38 +148,38 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
                                 key={i}
                                 className={cn(
                                     "border-l-2 transition-all",
-                                    isPending ? "border-accent-500/60 bg-base-800/30" :
+                                    isPending ? "border-accent-500/60 bg-base-850/70" :
                                         isAccepted ? "border-success/60 bg-success/5" :
-                                            "border-base-600 bg-base-900/30 opacity-60"
+                                            "border-base-600 bg-base-900 opacity-70"
                                 )}
                             >
                                 {/* Removed lines */}
                                 {part.value.split('\n').filter((_, li, arr) => li < arr.length - 1 || arr[li] !== '').map((line, li) => (
-                                    <div key={li} className="flex gap-3 px-3 py-0.5 whitespace-pre text-error/70">
+                                    <div key={li} className="flex gap-3 px-2.5 py-0.5 whitespace-pre text-error/75">
                                         <span className="w-3 select-none text-center font-bold opacity-60">−</span>
                                         <span className="opacity-70">{line}</span>
                                     </div>
                                 ))}
                                 {/* Added lines */}
                                 {addedPart && addedPart.value.split('\n').filter((_, li, arr) => li < arr.length - 1 || arr[li] !== '').map((line, li) => (
-                                    <div key={li} className="flex gap-3 px-3 py-0.5 whitespace-pre text-success/80">
+                                    <div key={li} className="flex gap-3 px-2.5 py-0.5 whitespace-pre text-success/80">
                                         <span className="w-3 select-none text-center font-bold opacity-70">+</span>
                                         <span>{line}</span>
                                     </div>
                                 ))}
                                 {/* Per-hunk controls */}
                                 {isPending && (
-                                    <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-base-700/40 bg-base-850/60">
+                                    <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-t border-base-700/70 bg-base-850">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); rejectHunk(currentHunkIdx); }}
-                                            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-base-300 hover:bg-base-700 hover:text-base-50 transition-colors"
+                                            className="flex items-center gap-1 px-2 py-1 rounded-sm text-[11px] font-medium text-base-200 hover:bg-base-700 hover:text-base-50 transition-colors-fast"
                                         >
                                             <X className="w-3 h-3" />
                                             Deny
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); acceptHunk(currentHunkIdx); }}
-                                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 transition-all active:scale-95"
+                                            className="flex items-center gap-1 px-2 py-1 rounded-sm text-[11px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 transition-colors-fast"
                                         >
                                             <Check className="w-3 h-3" />
                                             Accept
@@ -187,13 +187,13 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
                                     </div>
                                 )}
                                 {(isAccepted || isRejected) && (
-                                    <div className="flex items-center justify-end gap-1.5 px-3 py-1 border-t border-base-700/30">
-                                        <span className={cn("text-[10px] font-semibold uppercase tracking-wider", isAccepted ? "text-success/70" : "text-base-400")}>
+                                    <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-t border-base-700/40">
+                                        <span className={cn("text-[11px] font-semibold uppercase tracking-wider", isAccepted ? "text-success/80" : "text-base-300")}>
                                             {isAccepted ? "Accepted" : "Denied"}
                                         </span>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setHunks(prev => prev.map(h => h.id === currentHunkIdx ? { ...h, accepted: null } : h)); }}
-                                            className="text-[10px] text-base-400 hover:text-base-200 underline transition-colors"
+                                            className="text-[11px] text-base-300 hover:text-base-100 underline transition-colors"
                                         >
                                             undo
                                         </button>
@@ -221,28 +221,28 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
                                 key={i}
                                 className={cn(
                                     "border-l-2 transition-all",
-                                    isPending ? "border-accent-500/60 bg-base-800/30" :
+                                    isPending ? "border-accent-500/60 bg-base-850/70" :
                                         isAccepted ? "border-success/60 bg-success/5" :
-                                            "border-base-600 opacity-40"
+                                            "border-base-600 opacity-45"
                                 )}
                             >
                                 {part.value.split('\n').filter((_, li, arr) => li < arr.length - 1 || arr[li] !== '').map((line, li) => (
-                                    <div key={li} className="flex gap-3 px-3 py-0.5 whitespace-pre text-success/80">
+                                    <div key={li} className="flex gap-3 px-2.5 py-0.5 whitespace-pre text-success/80">
                                         <span className="w-3 select-none text-center font-bold opacity-70">+</span>
                                         <span>{line}</span>
                                     </div>
                                 ))}
                                 {isPending && (
-                                    <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-base-700/40 bg-base-850/60">
+                                    <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-t border-base-700/70 bg-base-850">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); rejectHunk(currentHunkIdx); }}
-                                            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-base-300 hover:bg-base-700 hover:text-base-50 transition-colors"
+                                            className="flex items-center gap-1 px-2 py-1 rounded-sm text-[11px] font-medium text-base-200 hover:bg-base-700 hover:text-base-50 transition-colors-fast"
                                         >
                                             <X className="w-3 h-3" /> Deny
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); acceptHunk(currentHunkIdx); }}
-                                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 transition-all active:scale-95"
+                                            className="flex items-center gap-1 px-2 py-1 rounded-sm text-[11px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 transition-colors-fast"
                                         >
                                             <Check className="w-3 h-3" /> Accept
                                         </button>
@@ -257,30 +257,30 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
             </div>
 
             {/* Footer — global accept/reject all or finalize */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-base-850/90 border-t border-base-700/50">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-base-850 border-t border-base-700">
                 {!allResolved ? (
                     <>
                         <button
                             onClick={(e) => { e.stopPropagation(); setHunks(prev => prev.map(h => ({ ...h, accepted: false }))); }}
-                            className="text-[11px] text-base-400 hover:text-base-200 transition-colors"
+                            className="text-[11px] text-base-300 hover:text-base-100 transition-colors-fast"
                         >
                             Deny all
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); setHunks(prev => prev.map(h => ({ ...h, accepted: true }))); }}
-                            className="text-[11px] text-base-400 hover:text-base-200 transition-colors"
+                            className="text-[11px] text-base-300 hover:text-base-100 transition-colors-fast"
                         >
                             Accept all
                         </button>
-                        <span className="ml-auto text-[11px] text-base-500 italic">Review each change above</span>
+                        <span className="ml-auto text-[11px] text-base-400 italic">Review each change above</span>
                     </>
                 ) : (
                     <>
-                        <span className="text-[11px] text-base-300">All changes reviewed</span>
+                        <span className="text-[11px] text-base-200">All changes reviewed</span>
                         <div className="ml-auto flex gap-2">
                             <button
                                 onClick={(e) => { e.stopPropagation(); onReject(); }}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-base-200 hover:bg-base-700 hover:text-base-50 transition-colors"
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-sm text-[11px] font-medium text-base-200 hover:bg-base-700 hover:text-base-50 transition-colors-fast"
                             >
                                 <X className="w-3.5 h-3.5" />
                                 Discard all
@@ -293,7 +293,7 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
                                     // currently replaces with the full proposed. We just call the parent accept.
                                     onAccept();
                                 }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 shadow-sm transition-all active:scale-95"
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-semibold bg-accent-500/20 text-accent-100 hover:bg-accent-500/30 border border-accent-500/40 transition-colors-fast"
                             >
                                 <Check className="w-3.5 h-3.5" />
                                 Apply

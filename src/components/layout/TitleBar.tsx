@@ -107,30 +107,30 @@ function QueryHistoryDropdown() {
         ref={buttonRef}
         onClick={handleToggle}
         className={cn(
-          "w-6 h-6 flex items-center justify-center rounded transition-all duration-150 cursor-pointer shrink-0 relative",
+          "w-[22px] h-[22px] flex items-center justify-center rounded-sm transition-colors-fast cursor-pointer shrink-0 relative",
           isOpen
-            ? "bg-base-700/60 text-accent-400"
-            : "text-base-300 hover:text-base-100 hover:bg-base-700/50"
+            ? "bg-base-800 text-accent-400"
+            : "text-base-300 hover:text-base-100 hover:bg-base-800"
         )}
         title="Query history"
       >
-        <Clock className="w-3.5 h-3.5" />
+        <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
       </button>
 
       {isOpen && createPortal(
         <div 
           ref={dropdownRef}
-          className="fixed w-[400px] max-h-[400px] bg-base-850 border border-base-700 rounded-lg shadow-xl shadow-black/40 overflow-hidden z-[100]"
+          className="fixed w-[390px] max-h-[400px] bg-base-900 border border-base-700 rounded-md shadow-lg shadow-black/25 overflow-hidden z-[100]"
           style={{ top: dropdownPosition.top, right: dropdownPosition.right }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-base-700/50 bg-base-800/50">
-            <span className="text-sm font-medium text-base-200">Query History</span>
+          <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-base-750 bg-base-850">
+            <span className="text-xs font-semibold text-base-200 tracking-[0.03em]">Query history</span>
             <div className="flex items-center gap-1">
               {queryHistory.length > 0 && (
                 <button
                   onClick={handleClear}
-                  className="p-1 rounded hover:bg-base-700/60 text-base-300 hover:text-base-100 transition-colors"
+                  className="p-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast"
                   title="Clear history"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -138,7 +138,7 @@ function QueryHistoryDropdown() {
               )}
               <button
                 onClick={handleClose}
-                className="p-1 rounded hover:bg-base-700/60 text-base-300 hover:text-base-100 transition-colors"
+                className="p-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast"
                 title="Close"
               >
                 <X className="w-3.5 h-3.5" />
@@ -149,7 +149,7 @@ function QueryHistoryDropdown() {
           {/* History list */}
           <div className="overflow-auto panel-scroll max-h-[340px]">
             {queryHistory.length === 0 ? (
-              <div className="px-3 py-8 text-center text-base-300 text-sm">
+              <div className="px-3 py-7 text-center text-base-300 text-xs">
                 No queries executed yet
               </div>
             ) : (
@@ -157,21 +157,21 @@ function QueryHistoryDropdown() {
                 <button
                   key={entry.id}
                   onClick={() => handleSelectQuery(entry)}
-                  className="w-full px-3 py-2 text-left hover:bg-base-800/50 transition-colors border-b border-base-800/50 last:border-b-0"
+                  className="w-full px-2.5 py-1.5 text-left hover:bg-base-850 transition-colors-fast border-b border-base-800/80 last:border-b-0"
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-1.5">
                     {/* Status indicator */}
                     <div className="shrink-0 mt-0.5">
                       {entry.error ? (
-                        <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                        <AlertCircle className="w-3 h-3 text-red-400" />
                       ) : (
-                        <Check className="w-3.5 h-3.5 text-green-400" />
+                        <Check className="w-3 h-3 text-green-400" />
                       )}
                     </div>
                     
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono text-base-200 truncate">
+                      <p className="text-[11px] font-mono text-base-200 truncate">
                         {truncateSql(entry.sql)}
                       </p>
                       <div className="flex items-center gap-2 mt-1 text-[11px] text-base-300">
@@ -216,14 +216,14 @@ function AiChatToggle() {
     <button
       onClick={togglePanel}
       className={cn(
-        "w-6 h-6 flex items-center justify-center rounded transition-all duration-150 cursor-pointer shrink-0",
+        "w-[22px] h-[22px] flex items-center justify-center rounded-sm transition-colors-fast cursor-pointer shrink-0",
           isPanelOpen
             ? "bg-accent-500/20 text-accent-400"
-            : "text-base-300 hover:text-base-100 hover:bg-base-700/50"
+            : "text-base-300 hover:text-base-100 hover:bg-base-800"
       )}
       title="AI Chat (⌘+L)"
     >
-      <Sparkles className="w-3.5 h-3.5" />
+      <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
     </button>
   );
 }
@@ -231,15 +231,15 @@ function AiChatToggle() {
 export function TitleBar() {
   return (
     <header 
-      className="title-bar h-8 flex items-center justify-between px-2 bg-base-900 border-b border-base-800/80 select-none shrink-0 relative"
+      className="title-bar h-[30px] flex items-center justify-between px-2 bg-base-900/95 border-b border-base-750 select-none shrink-0 relative"
       data-tauri-drag-region
     >
       {/* Left side - traffic lights space on macOS */}
-      <div className="min-w-[72px]" />
+      <div className="min-w-[68px]" />
 
       {/* Center - App title (pointer-events-none so it doesn't block dragging) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-xs font-semibold text-base-200 tracking-wide">
+        <span className="text-[11px] font-semibold text-base-100 tracking-[0.1em] uppercase">
           Join
         </span>
       </div>

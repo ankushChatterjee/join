@@ -12,7 +12,7 @@ import { useRef } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ROW_HEIGHT = 32;
+const ROW_HEIGHT = 34;
 
 interface DataTableProps<TData> {
   data: TData[];
@@ -62,11 +62,11 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                 const sortDirection = header.column.getIsSorted();
                 
                 return (
-                  <th
-                    key={header.id}
-                    className={cn(
-                      "h-8 px-3 text-left font-medium text-base-200 bg-base-850 border-b border-border-subtle whitespace-nowrap",
-                      canSort && "cursor-pointer select-none hover:bg-base-800 transition-colors"
+                    <th
+                      key={header.id}
+                      className={cn(
+                      "h-8 px-2.5 text-left font-semibold text-[12px] text-base-100 bg-base-900 border-b border-base-700 whitespace-nowrap tracking-[0.02em]",
+                      canSort && "cursor-pointer select-none hover:bg-base-850 transition-colors-fast"
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
@@ -80,11 +80,11 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                       {canSort && (
                         <span className="ml-1 text-base-300">
                           {sortDirection === "asc" ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-accent-400" />
+                            <ChevronUp className="w-3 h-3 text-accent-400" />
                           ) : sortDirection === "desc" ? (
-                            <ChevronDown className="w-3.5 h-3.5 text-accent-400" />
+                            <ChevronDown className="w-3 h-3 text-accent-400" />
                           ) : (
-                            <ChevronsUpDown className="w-3.5 h-3.5 opacity-80" />
+                            <ChevronsUpDown className="w-3 h-3 opacity-70" />
                           )}
                         </span>
                       )}
@@ -111,15 +111,15 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                 key={row.id}
                 data-index={virtualRow.index}
                 className={cn(
-                  "border-b border-base-800/50 hover:bg-base-800/30",
-                  virtualRow.index % 2 === 0 ? "bg-surface" : "bg-surface/50"
+                  "border-b border-base-800/70 hover:bg-base-850/90",
+                  virtualRow.index % 2 === 0 ? "bg-base-900/65" : "bg-base-900/45"
                 )}
                 style={{ height: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className="h-8 px-3 text-base-100 whitespace-nowrap font-mono text-xs"
+                    className="h-8 px-2.5 text-base-100 whitespace-nowrap font-mono text-[12px]"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>

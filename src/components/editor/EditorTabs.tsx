@@ -54,8 +54,8 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
     return (
       <div
         className={cn(
-          "flex items-center gap-2 h-7 px-2 rounded shrink-0",
-          isActive ? "bg-base-750" : "bg-base-800/50"
+          "flex items-center gap-1.5 h-6 px-1.5 rounded-sm shrink-0 border",
+          isActive ? "bg-base-850 border-base-700" : "bg-base-900 border-base-800"
         )}
       >
         <input
@@ -66,7 +66,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           onBlur={handleSaveEdit}
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
-          className="w-24 bg-base-700 border border-accent-500 rounded px-1.5 py-0.5 text-[13px] text-base-100 outline-none"
+          className="w-24 bg-base-800 border border-accent-500 rounded-sm px-1.5 py-0.5 text-[12px] text-base-100 outline-none"
         />
       </div>
     );
@@ -79,10 +79,10 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
       onDoubleClick={handleDoubleClick}
       onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeScript(script.id))}
       className={cn(
-        "group flex items-center gap-2 h-7 px-3 rounded text-[13px] font-medium transition-colors duration-100 shrink-0",
+        "group flex items-center gap-1.5 h-6 px-2 rounded-sm text-[12px] font-medium transition-colors-fast shrink-0 border",
         isActive
-          ? "bg-base-750 text-base-100"
-          : "text-base-300 hover:text-base-100 hover:bg-base-800/60"
+          ? "bg-base-850 border-base-700 text-base-100"
+          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850"
       )}
     >
       {/* Disconnected indicator */}
@@ -94,7 +94,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
       )}
 
       {/* Name */}
-      <span className="truncate max-w-[100px]">{script.name}</span>
+      <span className="truncate max-w-[96px]">{script.name}</span>
 
       {/* Close */}
       <span
@@ -104,7 +104,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           e.stopPropagation();
           closeScript(script.id);
         }}
-        className="p-0.5 -mr-1 rounded hover:bg-base-600/60 text-base-300 hover:text-base-100"
+        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -172,13 +172,13 @@ export function EditorTabs() {
     <div className="flex items-center h-full min-w-0 flex-1 relative">
       {/* Left fade */}
       {canScrollLeft && (
-        <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-surface to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-base-900 to-transparent z-10 pointer-events-none" />
       )}
 
       {/* SQL sheets */}
       <div
         ref={scrollContainerRef}
-        className="flex items-center gap-0.5 overflow-x-auto editor-tabs-scroll h-full"
+        className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full"
       >
         {openScripts.map((script) => (
           <ScriptTab
@@ -192,17 +192,17 @@ export function EditorTabs() {
 
       {/* Right fade */}
       {canScrollRight && (
-        <div className="absolute right-8 top-0 bottom-0 w-6 bg-gradient-to-l from-surface to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-7 top-0 bottom-0 w-4 bg-gradient-to-l from-base-900 to-transparent z-10 pointer-events-none" />
       )}
 
       {/* New SQL sheet - only show when there's an active connection */}
       {activeConnectionId && (
         <button
           onClick={handleNewScript}
-          className="ml-1 p-1.5 rounded text-base-300 hover:text-base-100 hover:bg-base-800/60 transition-colors shrink-0"
+          className="ml-0.5 p-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast shrink-0"
           title="New SQL sheet"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-3.5 h-3.5" strokeWidth={1.8} />
         </button>
       )}
     </div>
