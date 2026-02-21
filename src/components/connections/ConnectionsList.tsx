@@ -40,14 +40,14 @@ function ConnectionRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 mx-1 px-1.5 py-1 rounded-sm transition-colors-fast border border-transparent",
-        isActive ? "bg-base-850 border-base-700/80" : "hover:bg-base-850/70"
+        "flex items-center gap-1.5 mx-1 px-1.5 py-1 rounded-none transition-colors-fast border",
+        isActive ? "bg-base-850 border-accent-500/22" : "border-base-800 hover:bg-base-850/70"
       )}
     >
       {/* Name and host with status dot */}
       <button
         onClick={() => conn.is_connected && onSelect(conn)}
-        className="flex-1 min-w-0 text-left cursor-pointer"
+        className="flex-1 min-w-0 text-left cursor-pointer font-mono"
       >
         <div className="flex items-center gap-2">
           {isConnecting ? (
@@ -62,14 +62,14 @@ function ConnectionRow({
           )}
           <span
             className={cn(
-              "text-[13px] truncate",
+              "text-[13px] font-semibold truncate",
               isActive ? "text-base-100" : "text-base-200"
             )}
           >
             {conn.name}
           </span>
         </div>
-        <div className="text-[12px] text-base-300 truncate ml-3.5">
+        <div className="text-[12px] text-base-200 truncate ml-3.5 mt-0.5">
           {conn.host}:{conn.port}
         </div>
       </button>
@@ -80,7 +80,7 @@ function ConnectionRow({
           onClick={() => onConnect(conn)}
           disabled={isConnecting}
           className={cn(
-            "p-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast",
+            "p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast",
             isConnecting && "opacity-50 cursor-not-allowed"
           )}
           title={isConnecting ? "Connecting..." : conn.is_connected ? "Disconnect" : "Connect"}
@@ -96,7 +96,7 @@ function ConnectionRow({
         {conn.is_connected && (
           <button
             onClick={() => onRefresh(conn.id)}
-            className="p-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast"
+            className="p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
             title="Refresh"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -104,14 +104,14 @@ function ConnectionRow({
         )}
         <button
           onClick={() => onEdit(conn)}
-          className="p-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast"
+          className="p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
           title="Edit"
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={() => onDelete(conn)}
-          className="p-1 rounded-sm text-base-300 hover:text-red-300 hover:bg-base-800 cursor-pointer transition-colors-fast"
+          className="p-1 rounded-none border border-transparent text-base-300 hover:text-red-300 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
           title="Delete"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -203,11 +203,11 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
   };
 
   return (
-    <div className="border-b border-base-750">
+    <div className="border-b border-base-750 bg-base-900/85">
       {/* Header - clickable to expand/collapse */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-2.5 py-1.5 flex items-center justify-between hover:bg-base-850 transition-colors-fast cursor-pointer"
+        className="w-full px-2.5 py-1.5 flex items-center justify-between hover:bg-base-850 transition-colors-fast cursor-pointer font-mono"
       >
         <div className="flex items-center gap-1.5">
           {onCollapseSidebar && (
@@ -230,12 +230,12 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
               isExpanded && "rotate-90"
             )}
           />
-          <span className="text-[11px] font-semibold text-base-200 uppercase tracking-[0.08em]">
+          <span className="text-[12px] font-semibold text-base-100 uppercase tracking-[0.08em]">
             Connections
           </span>
           {connections.length > 0 && (
-            <span className="text-[11px] text-base-300 ml-0.5">
-              ({connectedCount > 0 ? `${connectedCount} connected` : connections.length})
+            <span className="text-[12px] text-base-200 ml-0.5">
+              [{connectedCount > 0 ? `${connectedCount} ONLINE` : connections.length}]
             </span>
           )}
         </div>
@@ -244,7 +244,7 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
             e.stopPropagation();
             openConnectionDialog();
           }}
-          className="p-1 -mr-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+          className="p-1 -mr-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 transition-colors-fast"
           role="button"
           aria-label="Add connection"
         >
@@ -276,20 +276,20 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
               <Loader2 className="w-4 h-4 animate-spin text-base-300" />
             </div>
           ) : connections.length === 0 ? (
-            <div className="px-3 py-3 text-center">
-              <p className="text-[12px] text-base-200 mb-2">No connections</p>
+            <div className="px-3 py-3 text-center font-mono">
+              <p className="text-[12px] text-base-200 mb-2">NO CONNECTIONS</p>
               <button
                 onClick={() => openConnectionDialog()}
                 className="text-[12px] text-accent-500 hover:text-accent-400 cursor-pointer transition-colors-fast"
               >
-                + Add one
+                + ADD ONE
               </button>
             </div>
           ) : (
             <>
               {/* Search input - only shown when 5+ connections */}
               {showSearch && (
-                <div className="mx-1 mb-1">
+                <div className="mx-1 mb-1 font-mono">
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-base-300" />
                     <input
@@ -297,12 +297,12 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search connections..."
-                      className="w-full pl-7 pr-7 py-1.5 text-[12px] bg-base-850 border border-base-700 rounded-sm text-base-100 placeholder:text-base-400 focus:outline-none focus:border-accent-500/60 transition-colors-fast"
+                      className="w-full pl-7 pr-7 py-1.5 text-[12px] bg-base-850 border border-base-700 rounded-none text-base-100 placeholder:text-base-400 focus:outline-none focus:border-accent-500/60 transition-colors-fast"
                     />
                     {searchQuery && (
                       <button
                         onClick={() => setSearchQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-sm text-base-300 hover:text-base-100 cursor-pointer transition-colors-fast"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-none text-base-300 hover:text-base-100 cursor-pointer transition-colors-fast"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -314,7 +314,7 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
               {/* Connection list */}
               {filteredConnections.length === 0 ? (
                 <div className="px-3 py-3 text-center">
-                  <p className="text-[12px] text-base-200">No matches found</p>
+                  <p className="text-[12px] text-base-200 font-mono">NO MATCHES FOUND</p>
                 </div>
               ) : (
                 filteredConnections.map((conn) => (

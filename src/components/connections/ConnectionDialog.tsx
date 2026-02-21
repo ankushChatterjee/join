@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/appStore";
 import type { DatabaseType, NewConnectionRequest } from "@/stores/types";
 
-const DB_TYPES: { value: DatabaseType; label: string; icon: string }[] = [
-  { value: "postgresql", label: "PostgreSQL", icon: "🐘" },
-  { value: "mysql", label: "MySQL", icon: "🐬" },
-  { value: "sqlite", label: "SQLite", icon: "📦" },
+const DB_TYPES: { value: DatabaseType; label: string; disabled?: boolean }[] = [
+  { value: "postgresql", label: "PostgreSQL" },
+  { value: "mysql", label: "MySQL (disabled)", disabled: true },
+  { value: "sqlite", label: "SQLite (disabled)", disabled: true },
 ];
 
 const DEFAULT_PORTS: Record<DatabaseType, number> = {
@@ -45,7 +45,7 @@ export function ConnectionDialog() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Ref to track if test was cancelled (since we can't abort the backend call)
   const testCancelledRef = useRef(false);
 
@@ -153,7 +153,7 @@ export function ConnectionDialog() {
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/65 backdrop-blur-sm"
         onClick={closeConnectionDialog}
       />
 
@@ -164,19 +164,19 @@ export function ConnectionDialog() {
           <div className="flex items-center gap-1.5">
             <Database className="w-4 h-4 text-accent-500" />
             <h2 className="text-base font-semibold text-base-100">
-              {isEditing ? "Edit Connection" : "New Connection"}
+              {isEditing ? "Edit Connection" : "Add Connection"}
             </h2>
           </div>
           <button
             onClick={closeConnectionDialog}
-            className="p-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast cursor-pointer"
+            className="p-1 rounded-sm border border-transparent hover:border-base-700 hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-3.5">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           {/* Connection Name */}
           <div>
             <label className="block text-[13px] font-medium text-base-100 mb-1">
@@ -186,36 +186,32 @@ export function ConnectionDialog() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Database"
+              placeholder="Primary DB"
               required
               autoCapitalize="off"
-              className="w-full h-9 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+              className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
             />
           </div>
 
-          {/* Database Type */}
+          {/* Connection Type (UI-only dropdown) */}
           <div>
             <label className="block text-[13px] font-medium text-base-100 mb-1">
-              Database Type
+              Connection Type
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <select
+              value={dbType}
+              onChange={(e) => setDbType(e.target.value as DatabaseType)}
+              className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 focus:border-accent-500 focus:outline-none transition-colors-fast cursor-pointer"
+            >
               {DB_TYPES.map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setDbType(type.value)}
-                  className={cn(
-                    "h-9 px-2 flex items-center justify-center gap-1.5 rounded-sm border text-[13px] font-medium transition-colors-fast cursor-pointer",
-                    dbType === type.value
-                      ? "bg-accent-500/12 border-accent-500/70 text-accent-400"
-                      : "bg-base-850 border-base-700 text-base-200 hover:border-base-600"
-                  )}
-                >
-                  <span>{type.icon}</span>
-                  <span>{type.label}</span>
-                </button>
+                <option key={type.value} value={type.value} disabled={type.disabled}>
+                  {type.label}
+                </option>
               ))}
-            </div>
+            </select>
+            <p className="mt-1 text-[11px] text-base-300">
+              MySQL and SQLite coming soon.
+            </p>
           </div>
 
           {/* Host & Port (not for SQLite) */}
@@ -234,7 +230,7 @@ export function ConnectionDialog() {
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full h-9 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+                  className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
                 />
               </div>
               <div>
@@ -246,7 +242,7 @@ export function ConnectionDialog() {
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
                   required
-                  className="w-full h-9 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+                  className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
                 />
               </div>
             </div>
@@ -266,7 +262,7 @@ export function ConnectionDialog() {
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              className="w-full h-9 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+              className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
             />
           </div>
 
@@ -274,7 +270,7 @@ export function ConnectionDialog() {
           {!isSqlite && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-base-200 mb-1">
+                <label className="block text-[13px] font-medium text-base-100 mb-1">
                   Username
                 </label>
                 <input
@@ -285,11 +281,11 @@ export function ConnectionDialog() {
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full h-8 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[13px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+                  className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-base-200 mb-1">
+                <label className="block text-[13px] font-medium text-base-100 mb-1">
                   Password
                 </label>
                 <input
@@ -297,7 +293,7 @@ export function ConnectionDialog() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full h-8 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[13px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
+                  className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 placeholder-base-400 focus:border-accent-500 focus:outline-none transition-colors-fast"
                 />
               </div>
             </div>
@@ -306,13 +302,13 @@ export function ConnectionDialog() {
           {/* SSL Mode (not for SQLite) */}
           {!isSqlite && (
             <div>
-              <label className="block text-xs font-medium text-base-200 mb-1">
+              <label className="block text-[13px] font-medium text-base-100 mb-1">
                 SSL Mode
               </label>
               <select
                 value={sslMode}
                 onChange={(e) => setSslMode(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-sm bg-base-850 border border-base-700 text-[13px] text-base-100 focus:border-accent-500 focus:outline-none transition-colors-fast cursor-pointer"
+                className="w-full h-9 px-2.5 rounded-sm bg-base-900 border border-base-700 text-[14px] text-base-100 focus:border-accent-500 focus:outline-none transition-colors-fast cursor-pointer"
               >
                 {SSL_MODES.map((mode) => (
                   <option key={mode.value} value={mode.value}>
@@ -325,14 +321,14 @@ export function ConnectionDialog() {
 
           {/* Error message */}
           {error && (
-            <div className="p-2.5 rounded-sm bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+            <div className="p-2.5 rounded-sm bg-red-500/10 border border-red-500/30 text-red-300 text-[12px]">
               {error}
             </div>
           )}
 
           {/* Test result */}
           {testResult === "success" && (
-            <div className="p-2.5 rounded-sm bg-green-500/10 border border-green-500/30 text-green-300 text-xs flex items-center gap-1.5">
+            <div className="p-2.5 rounded-sm bg-green-500/10 border border-green-500/30 text-green-300 text-[12px] flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Connection successful!
             </div>
@@ -345,10 +341,10 @@ export function ConnectionDialog() {
               onClick={isTesting ? handleCancelTest : handleTest}
               disabled={!isTesting && !database}
               className={cn(
-                "h-8 px-3 flex items-center gap-1.5 rounded-sm border transition-colors-fast cursor-pointer text-xs disabled:opacity-50 disabled:cursor-not-allowed",
+                "h-8 px-3 flex items-center gap-1.5 rounded-sm border transition-colors-fast cursor-pointer text-[12px] disabled:opacity-50 disabled:cursor-not-allowed",
                 isTesting
                   ? "bg-red-500/10 border-red-500/50 text-red-400 hover:bg-red-500/20 hover:border-red-500"
-                  : "bg-base-850 border-base-700 text-base-200 hover:text-base-100 hover:border-base-600"
+                  : "bg-base-900 border-base-700 text-base-200 hover:text-base-100 hover:border-base-600"
               )}
             >
               {isTesting ? (
@@ -371,14 +367,14 @@ export function ConnectionDialog() {
             <button
               type="button"
               onClick={closeConnectionDialog}
-              className="h-8 px-3 rounded-sm bg-base-850 border border-base-700 text-base-200 hover:text-base-100 hover:border-base-600 transition-colors-fast text-xs cursor-pointer"
+              className="h-8 px-3 rounded-sm bg-base-900 border border-base-700 text-base-200 hover:text-base-100 hover:border-base-600 transition-colors-fast text-[12px] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading || !name || !database}
-              className="h-8 px-3 flex items-center gap-1.5 rounded-sm bg-accent-500 text-base-950 font-semibold hover:bg-accent-400 transition-colors-fast text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-8 px-3 flex items-center gap-1.5 rounded-sm bg-base-850 border border-accent-500/40 text-accent-300 font-semibold hover:bg-accent-500/10 transition-colors-fast text-[12px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {isEditing ? "Save" : "Add"}

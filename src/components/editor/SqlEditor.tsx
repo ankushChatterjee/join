@@ -194,7 +194,7 @@ function SqlCell({
       onMouseDown={onSelect}
       className={cn(
         "rounded-none border transition-colors-fast overflow-hidden",
-        isSelected ? "border-accent-500/45 bg-base-900" : "border-base-750 bg-base-900"
+        isSelected ? "border-accent-500/28 bg-base-900" : "border-base-750 bg-base-900"
       )}
       data-script-id={scriptId}
       data-cell-id={cell.id}
@@ -242,7 +242,7 @@ function SqlCell({
           <button
             onClick={onRun}
             disabled={isRunning}
-            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-accent-500/55 text-accent-300 hover:bg-accent-500/12 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
+            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-accent-500/35 text-accent-300 hover:bg-accent-500/8 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
             title="Run cell (⌘+Enter)"
           >
             {isRunning ? (

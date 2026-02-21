@@ -111,7 +111,7 @@ export function MainLayout() {
             <Panel id="sidebar" defaultSize="18%" minSize="14%" maxSize="30%">
               <Sidebar onCollapse={() => setIsLeftSidebarOpen(false)} />
             </Panel>
-            <Separator className="w-px bg-base-750 hover:bg-accent-500/80 transition-colors-fast data-[separator-active]:bg-accent-500/80" />
+            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
           </>
         ) : (
           <div className="w-7 border-r border-base-750 bg-base-900/95 flex items-start justify-center pt-1.5 shrink-0">
@@ -143,7 +143,7 @@ export function MainLayout() {
                 </div>
               </Panel>
 
-              <Separator className="h-px bg-base-750 hover:bg-accent-500/80 transition-colors-fast data-[separator-active]:bg-accent-500/80" />
+              <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
 
               {/* Results Panel */}
               <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
@@ -156,7 +156,7 @@ export function MainLayout() {
         {/* AI Chat Panel */}
         {isPanelOpen && (
           <>
-            <Separator className="w-px bg-base-750 hover:bg-accent-500/80 transition-colors-fast data-[separator-active]:bg-accent-500/80" />
+            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
             <Panel id="ai-chat" defaultSize="30%" minSize="20%" maxSize="55%">
               <AiChatPanel />
             </Panel>
