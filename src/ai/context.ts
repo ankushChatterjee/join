@@ -49,11 +49,30 @@ export function buildMessageContext(): string {
     }
   }
 
-  const activeScript = state.openScripts.find(
-    (s) => s.id === state.activeScriptId
-  );
+  const activeResultTab =
+    state.activeEditorTab?.kind === "result"
+      ? state.openResultTabs.find((t) => t.id === state.activeEditorTab?.id)
+      : null;
+  const activeScript = state.openScripts.find((s) => s.id === state.activeScriptId);
 
-  if (activeScript) {
+  if (activeResultTab) {
+    parts.push(`**Editor Mode**: Result Tab`);
+    parts.push(`**Result Tab**: ${activeResultTab.name} (ID: ${activeResultTab.id})`);
+    if (activeResultTab.savedResultId) {
+      parts.push(`**Saved Result ID**: ${activeResultTab.savedResultId}`);
+    }
+    if (activeResultTab.previewSource) {
+      parts.push(`**Preview Source**: ${activeResultTab.previewSource}`);
+    }
+    parts.push(`**Result Query Cell**:\n\`\`\`sql\n${activeResultTab.sqlCell.sql}\n\`\`\``);
+    if (activeResultTab.queryResults) {
+      parts.push(
+        `**Result Stats**: ${activeResultTab.queryResults.row_count} rows, ${activeResultTab.queryResults.execution_time_ms}ms`
+      );
+    }
+    hasContext = true;
+  } else if (activeScript) {
+    parts.push(`**Editor Mode**: SQL Sheet`);
     const selectedCell = activeScript.cells.find(
       (cell) => cell.id === activeScript.selectedCellId
     );

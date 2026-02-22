@@ -1,12 +1,11 @@
-import { useState, useMemo } from "react";
-import { Clock, Rows3, AlertCircle, Download, X, Tag, Braces, Loader2, Table2 } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, Download, X, Tag, Braces, Loader2, Save, Expand, ChevronsDown } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
-import { DataTable } from "./DataTable";
-import { createColumnsFromData } from "./columnUtils";
 import type { TypeDetailInfo, FunctionDetailInfo } from "@/stores/types";
 import { useShallow } from "zustand/react/shallow";
+import { ResultsView } from "./ResultsView";
 
 // Type details view component
 function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClose: () => void }) {
@@ -317,6 +316,9 @@ export function ResultsPanel() {
     isLoadingSchemaObjectDetails,
     clearSchemaObjectSelection,
     previewSource,
+    popOutResultsToTab,
+    saveCurrentResults,
+    toggleResultsPanelMinimized,
   } = useAppStore(
     useShallow((state) => ({
       queryResults: state.queryResults,
@@ -330,6 +332,9 @@ export function ResultsPanel() {
       isLoadingSchemaObjectDetails: state.isLoadingSchemaObjectDetails,
       clearSchemaObjectSelection: state.clearSchemaObjectSelection,
       previewSource: state.previewSource,
+      popOutResultsToTab: state.popOutResultsToTab,
+      saveCurrentResults: state.saveCurrentResults,
+      toggleResultsPanelMinimized: state.toggleResultsPanelMinimized,
     }))
   );
   
@@ -363,23 +368,6 @@ export function ResultsPanel() {
       setIsExporting(false);
     }
   };
-
-  // Convert query results to table format (memoized for performance)
-  const tableData = useMemo(() => {
-    if (!queryResults) return [];
-    return queryResults.rows.map((row) => {
-      const obj: Record<string, unknown> = {};
-      queryResults.columns.forEach((col, i) => {
-        obj[col.name] = row[i];
-      });
-      return obj;
-    });
-  }, [queryResults]);
-
-  const columns = useMemo(
-    () => createColumnsFromData(tableData, queryResults?.columns, dbType),
-    [tableData, queryResults?.columns, dbType]
-  );
 
   // Show loading state for schema object details
   if (selectedSchemaObject && isLoadingSchemaObjectDetails) {
@@ -464,39 +452,30 @@ export function ResultsPanel() {
 
   // Show results or empty state
   return (
-    <div className="h-full flex flex-col bg-surface">
-      {/* Header bar */}
-      <div className="h-8 flex items-center gap-1 px-2.5 border-b border-base-750 shrink-0">
-        {queryResults ? (
-          <>
-            {/* Preview source / table name */}
-            {previewSource && (
-              <div className="flex items-center gap-1 text-[11px] text-base-200 mr-2.5">
-                <Table2 className="w-3 h-3 text-accent-500" />
-                <span className="font-medium">{previewSource}</span>
-              </div>
-            )}
-            
-            {/* Stats */}
-            <div className="flex items-center gap-3 text-[11px] text-base-300">
-              <div className="flex items-center gap-1">
-                <Rows3 className="w-3 h-3" />
-                <span>
-                  <span className="text-base-200">{queryResults.row_count}</span> rows
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                <span>
-                  <span className="text-base-200">{queryResults.execution_time_ms}</span>ms
-                </span>
-              </div>
-            </div>
-
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Export button */}
+    <ResultsView
+      queryResults={queryResults}
+      previewSource={previewSource}
+      dbType={dbType}
+      rightActions={
+        <div className="flex items-center gap-1">
+          {queryResults ? (
+            <>
+            <button
+              onClick={popOutResultsToTab}
+              className="flex items-center gap-1 px-2 py-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast text-[11px]"
+              title="Open result in a new editor tab"
+            >
+              <Expand className="w-3 h-3" />
+              <span>New Tab</span>
+            </button>
+            <button
+              onClick={saveCurrentResults}
+              className="flex items-center gap-1 px-2 py-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast text-[11px]"
+              title="Save result"
+            >
+              <Save className="w-3 h-3" />
+              <span>Save</span>
+            </button>
             <button
               onClick={handleExport}
               disabled={isExporting}
@@ -506,22 +485,18 @@ export function ResultsPanel() {
               <Download className="w-3 h-3" />
               <span>Export</span>
             </button>
-          </>
-        ) : (
-          <div className="text-[11px] text-base-300 uppercase tracking-[0.08em]">Results</div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {queryResults ? (
-          <DataTable data={tableData} columns={columns} />
-        ) : (
-          <div className="h-full flex items-center justify-center text-base-300 text-sm">
-            Run a query to see results
-          </div>
-        )}
-      </div>
-    </div>
+            </>
+          ) : null}
+          <button
+            onClick={toggleResultsPanelMinimized}
+            className="flex items-center gap-1 px-2 py-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast text-[11px]"
+            title="Minimize results panel"
+          >
+            <ChevronsDown className="w-3 h-3" />
+            <span>Minimize</span>
+          </button>
+        </div>
+      }
+    />
   );
 }

@@ -10,12 +10,14 @@ export function EditorToolbar() {
     openScripts,
     activeScriptId,
     addScriptCell,
+    activeEditorTab,
   } = useAppStore(
     useShallow((state) => ({
       connections: state.connections,
       openScripts: state.openScripts,
       activeScriptId: state.activeScriptId,
       addScriptCell: state.addScriptCell,
+      activeEditorTab: state.activeEditorTab,
     }))
   );
 
@@ -34,13 +36,14 @@ export function EditorToolbar() {
   };
 
   const connectionId = getEffectiveConnectionId();
+  const isResultTab = activeEditorTab?.kind === "result";
 
   return (
     <div className="h-[34px] px-2.5 flex items-center gap-1.5 border-b border-base-750 bg-base-900/95 shrink-0">
       {/* Add cell button */}
       <button
         onClick={handleAddCell}
-        disabled={!activeScriptId}
+        disabled={!activeScriptId || isResultTab}
         className="w-6 h-6 flex items-center justify-center rounded-sm text-base-200 hover:text-base-50 hover:bg-base-800 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         title="Add cell"
       >
@@ -50,7 +53,7 @@ export function EditorToolbar() {
       {/* Format button */}
       <button
         onClick={handleFormat}
-        disabled={!connectionId}
+        disabled={!connectionId || isResultTab}
         className="w-6 h-6 flex items-center justify-center rounded-sm text-base-200 hover:text-base-50 hover:bg-base-800 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         title="Format SQL (Shift+Alt+F)"
       >
@@ -68,7 +71,6 @@ export function EditorToolbar() {
         <kbd className="px-1 py-0.5 rounded-sm bg-base-850 border border-base-700 font-mono text-[11px] text-base-100">
           ⌘↵
         </kbd>
-        <span className="text-base-300">run cell</span>
       </div>
     </div>
   );

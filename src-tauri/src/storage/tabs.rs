@@ -8,10 +8,22 @@ use super::ConfigError;
 pub struct EditorTab {
     pub id: String,
     pub name: String,
+    #[serde(default = "default_tab_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub script_id: Option<String>,
+    #[serde(default)]
+    pub saved_result_id: Option<String>,
     pub content: String,
     pub connection_id: String,
     pub is_dirty: bool,
+    #[serde(default)]
+    pub is_query_collapsed: bool,
     pub created_at: i64,
+}
+
+fn default_tab_kind() -> String {
+    "script".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

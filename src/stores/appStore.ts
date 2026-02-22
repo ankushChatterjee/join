@@ -18,6 +18,8 @@ import type {
   SqlSheetCell,
   SqlSheetDocument,
   QueryHistoryEntry,
+  SavedResultMetadata,
+  ResultTabData,
 } from "./types";
 
 export interface Toast {
@@ -35,6 +37,9 @@ interface OpenScript {
   selectedCellId: string | null;
   isDirty: boolean;
 }
+
+type ActiveEditorTab = { kind: "script" | "result"; id: string } | null;
+type SavedResultRecord = SavedResultMetadata & { query_result: QueryResult };
 
 interface AppState {
   // Connections
@@ -68,6 +73,8 @@ interface AppState {
   // SQL sheets (stored as JSON files per connection)
   scriptsByConnection: Record<string, ScriptMetadata[]>; // connectionId -> scripts
   isScriptsFolderExpanded: boolean;
+  savedResultsByConnection: Record<string, SavedResultMetadata[]>;
+  isSavedResultsFolderExpanded: boolean;
 
   // Tree UI State
   expandedSchemas: Set<string>;
@@ -82,6 +89,7 @@ interface AppState {
   executingCell: { scriptId: string; cellId: string } | null;
   queryError: string | null;
   previewSource: string | null; // "schema.table" when previewing a table/view
+  querySql: string | null; // SQL that produced current queryResults
 
   // Query History
   queryHistory: QueryHistoryEntry[];
@@ -90,10 +98,13 @@ interface AppState {
   isConnectionDialogOpen: boolean;
   editingConnection: ConnectionInfo | null;
   toasts: Toast[];
+  isResultsPanelMinimized: boolean;
 
   // Open Scripts (tabs in editor)
   openScripts: OpenScript[];
   activeScriptId: string | null;
+  openResultTabs: ResultTabData[];
+  activeEditorTab: ActiveEditorTab;
 
   // Actions - Connections
   loadConnections: () => Promise<void>;
@@ -124,6 +135,7 @@ interface AppState {
 
   // Actions - Scripts
   loadScripts: (connectionId: string) => Promise<void>;
+  loadSavedResults: (connectionId: string) => Promise<void>;
   createScript: (connectionId: string) => Promise<string | null>;
   openScript: (connectionId: string, scriptId: string) => Promise<void>;
   closeScript: (scriptId: string) => void;
@@ -145,6 +157,20 @@ interface AppState {
   renameScript: (scriptId: string, name: string) => Promise<void>;
   deleteScript: (connectionId: string, scriptId: string) => Promise<void>;
   toggleScriptsFolderExpanded: () => void;
+  toggleSavedResultsFolderExpanded: () => void;
+  popOutResultsToTab: () => void;
+  saveCurrentResults: () => Promise<void>;
+  openSavedResult: (connectionId: string, savedResultId: string) => Promise<void>;
+  refreshResultTab: (tabId: string) => Promise<void>;
+  updateResultTabSql: (tabId: string, sql: string) => void;
+  updateResultTabProposal: (tabId: string, proposedSql: string | null) => void;
+  acceptResultTabProposal: (tabId: string) => void;
+  rejectResultTabProposal: (tabId: string) => void;
+  toggleResultQueryExpanded: (tabId: string) => void;
+  setActiveResultTab: (tabId: string) => void;
+  closeResultTab: (tabId: string) => void;
+  deleteSavedResult: (connectionId: string, savedResultId: string) => Promise<void>;
+  renameSavedResult: (connectionId: string, savedResultId: string, name: string) => Promise<void>;
 
   // Actions - Tabs Persistence
   loadOpenTabs: () => Promise<void>;
@@ -169,6 +195,7 @@ interface AppState {
   closeConnectionDialog: () => void;
   showToast: (type: Toast["type"], message: string) => void;
   dismissToast: (id: string) => void;
+  toggleResultsPanelMinimized: () => void;
 }
 
 const SHEET_FORMAT_VERSION = 1;
@@ -232,6 +259,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Scripts state
   scriptsByConnection: {},
   isScriptsFolderExpanded: true,
+  savedResultsByConnection: {},
+  isSavedResultsFolderExpanded: true,
 
   // Tree UI State
   expandedSchemas: new Set(),
@@ -245,6 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   executingCell: null,
   queryError: null,
   previewSource: null,
+  querySql: null,
 
   // Query History
   queryHistory: [],
@@ -252,10 +282,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   isConnectionDialogOpen: false,
   editingConnection: null,
   toasts: [],
+  isResultsPanelMinimized: false,
 
   // Open scripts (editor tabs)
   openScripts: [],
   activeScriptId: null,
+  openResultTabs: [],
+  activeEditorTab: null,
 
   // Connection actions
   loadConnections: async () => {
@@ -299,8 +332,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       scriptsByConnection: Object.fromEntries(
         Object.entries(state.scriptsByConnection).filter(([key]) => key !== id)
       ),
+      savedResultsByConnection: Object.fromEntries(
+        Object.entries(state.savedResultsByConnection).filter(([key]) => key !== id)
+      ),
       // Close any open scripts for this connection
       openScripts: state.openScripts.filter((s) => s.connectionId !== id),
+      openResultTabs: state.openResultTabs.filter((t) => t.connectionId !== id),
     }));
     // Save tabs state since we closed tabs for this connection
     get().saveOpenTabs();
@@ -312,7 +349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   connect: async (id: string) => {
     // Clear any previous errors and results when attempting to connect
-    set({ queryError: null, queryResults: null });
+    set({ queryError: null, queryResults: null, querySql: null });
 
     try {
       await invoke("connect", { connectionId: id });
@@ -345,6 +382,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await Promise.all([
       get().loadSchemas(),
       get().loadScripts(id),
+      get().loadSavedResults(id),
     ]);
 
     // Eager load tables/views for all schemas (for autocomplete)
@@ -427,6 +465,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (id) {
       get().loadSchemas();
       get().loadScripts(id);
+      get().loadSavedResults(id);
     }
   },
 
@@ -644,6 +683,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await Promise.all([
       get().loadSchemas(),
       get().loadScripts(connectionId),
+      get().loadSavedResults(connectionId),
     ]);
 
     // Eager load tables/views for all schemas (for autocomplete)
@@ -686,6 +726,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       isLoadingSchemaObjectDetails: true,
       // Clear any query results when selecting a schema object
       queryResults: null,
+      querySql: null,
       queryError: null,
     });
 
@@ -747,6 +788,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  loadSavedResults: async (connectionId: string) => {
+    try {
+      const savedResults = await invoke<SavedResultMetadata[]>("list_saved_results", { connectionId });
+      set((state) => ({
+        savedResultsByConnection: {
+          ...state.savedResultsByConnection,
+          [connectionId]: savedResults,
+        },
+      }));
+    } catch (error) {
+      console.error("Failed to load saved results:", error);
+    }
+  },
+
   createScript: async (connectionId: string) => {
     const { connections, scriptsByConnection } = get();
     const connection = connections.find((c) => c.id === connectionId);
@@ -787,6 +842,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({
         openScripts: [...state.openScripts, openScript],
         activeScriptId: script.id,
+        activeEditorTab: { kind: "script", id: script.id },
       }));
 
       // Save tabs state
@@ -806,7 +862,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Check if already open
     const existing = openScripts.find((s) => s.id === scriptId);
     if (existing) {
-      set({ activeScriptId: scriptId });
+      set({ activeScriptId: scriptId, activeEditorTab: { kind: "script", id: scriptId } });
       get().saveOpenTabs();
       return;
     }
@@ -828,6 +884,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({
         openScripts: [...state.openScripts, openScript],
         activeScriptId: scriptId,
+        activeEditorTab: { kind: "script", id: scriptId },
       }));
 
       // Save tabs state
@@ -839,7 +896,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeScript: (scriptId: string) => {
-    const { openScripts, activeScriptId } = get();
+    const { openScripts, activeScriptId, activeEditorTab } = get();
     const scriptIndex = openScripts.findIndex((s) => s.id === scriptId);
     const newOpenScripts = openScripts.filter((s) => s.id !== scriptId);
 
@@ -857,6 +914,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       openScripts: newOpenScripts,
       activeScriptId: newActiveId,
+      activeEditorTab:
+        activeEditorTab?.kind === "script" && activeEditorTab.id === scriptId
+          ? (newActiveId ? { kind: "script", id: newActiveId } : null)
+          : activeEditorTab,
     });
 
     // Save tabs state
@@ -864,7 +925,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveScript: (scriptId: string) => {
-    set({ activeScriptId: scriptId });
+    set({ activeScriptId: scriptId, activeEditorTab: { kind: "script", id: scriptId } });
     get().saveOpenTabs();
   },
 
@@ -1177,6 +1238,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         openScripts: state.openScripts.filter((s) => s.id !== scriptId),
         activeScriptId: state.activeScriptId === scriptId ? null : state.activeScriptId,
+        activeEditorTab:
+          state.activeEditorTab?.kind === "script" && state.activeEditorTab.id === scriptId
+            ? null
+            : state.activeEditorTab,
       }));
 
       // Save tabs state
@@ -1193,6 +1258,324 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({ isScriptsFolderExpanded: !state.isScriptsFolderExpanded }));
   },
 
+  toggleSavedResultsFolderExpanded: () => {
+    set((state) => ({ isSavedResultsFolderExpanded: !state.isSavedResultsFolderExpanded }));
+  },
+
+  setActiveResultTab: (tabId: string) => {
+    set({ activeEditorTab: { kind: "result", id: tabId } });
+    get().saveOpenTabs();
+  },
+
+  closeResultTab: (tabId: string) => {
+    const { openResultTabs, activeEditorTab, openScripts, activeScriptId } = get();
+    const nextResultTabs = openResultTabs.filter((t) => t.id !== tabId);
+
+    let nextActiveEditorTab = activeEditorTab;
+    if (activeEditorTab?.kind === "result" && activeEditorTab.id === tabId) {
+      if (nextResultTabs.length > 0) {
+        nextActiveEditorTab = { kind: "result", id: nextResultTabs[nextResultTabs.length - 1].id };
+      } else if (activeScriptId) {
+        nextActiveEditorTab = { kind: "script", id: activeScriptId };
+      } else if (openScripts.length > 0) {
+        nextActiveEditorTab = { kind: "script", id: openScripts[openScripts.length - 1].id };
+      } else {
+        nextActiveEditorTab = null;
+      }
+    }
+
+    set({
+      openResultTabs: nextResultTabs,
+      activeEditorTab: nextActiveEditorTab,
+    });
+    get().saveOpenTabs();
+  },
+
+  popOutResultsToTab: () => {
+    const { queryResults, querySql, previewSource, activeConnectionId, openResultTabs } = get();
+    if (!queryResults || !activeConnectionId) return;
+    const sql = (querySql ?? "").trim();
+    if (!sql) {
+      get().showToast("error", "No query SQL available for this result");
+      return;
+    }
+
+    const maxResultIndex = openResultTabs.reduce((max, tab) => {
+      const match = /^Result (\d+)$/.exec(tab.name);
+      if (!match) return max;
+      return Math.max(max, Number(match[1]));
+    }, 0);
+    const nextIndex = maxResultIndex + 1;
+    const tabId = `result-${crypto.randomUUID()}`;
+    const tab: ResultTabData = {
+      id: tabId,
+      name: `Result ${nextIndex}`,
+      connectionId: activeConnectionId,
+      sqlCell: { id: `${tabId}-cell`, sql, proposed_sql: null },
+      queryResults,
+      previewSource: previewSource ?? null,
+      resultSource: "live",
+      savedResultId: null,
+      isQueryCollapsed: true,
+      isStale: false,
+      isDirty: true,
+      createdAt: Date.now(),
+    };
+
+    set((state) => ({
+      openResultTabs: [...state.openResultTabs, tab],
+      activeEditorTab: { kind: "result", id: tabId },
+    }));
+    get().saveOpenTabs();
+  },
+
+  updateResultTabSql: (tabId: string, sql: string) => {
+    set((state) => ({
+      openResultTabs: state.openResultTabs.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              sqlCell: { ...tab.sqlCell, sql, proposed_sql: null },
+              isDirty: true,
+            }
+          : tab
+      ),
+    }));
+  },
+
+  updateResultTabProposal: (tabId: string, proposedSql: string | null) => {
+    set((state) => ({
+      openResultTabs: state.openResultTabs.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              sqlCell: { ...tab.sqlCell, proposed_sql: proposedSql },
+            }
+          : tab
+      ),
+    }));
+  },
+
+  acceptResultTabProposal: (tabId: string) => {
+    const tab = get().openResultTabs.find((t) => t.id === tabId);
+    const proposed = tab?.sqlCell.proposed_sql;
+    if (!tab || proposed == null) return;
+    set((state) => ({
+      openResultTabs: state.openResultTabs.map((t) =>
+        t.id === tabId
+          ? {
+              ...t,
+              sqlCell: {
+                ...t.sqlCell,
+                sql: proposed,
+                proposed_sql: null,
+              },
+              isDirty: true,
+            }
+          : t
+      ),
+    }));
+  },
+
+  rejectResultTabProposal: (tabId: string) => {
+    get().updateResultTabProposal(tabId, null);
+  },
+
+  toggleResultQueryExpanded: (tabId: string) => {
+    set((state) => ({
+      openResultTabs: state.openResultTabs.map((tab) =>
+        tab.id === tabId ? { ...tab, isQueryCollapsed: !tab.isQueryCollapsed } : tab
+      ),
+    }));
+  },
+
+  saveCurrentResults: async () => {
+    const {
+      queryResults,
+      activeConnectionId,
+      previewSource,
+      openResultTabs,
+      activeEditorTab,
+      querySql,
+    } = get();
+    if (!activeConnectionId) return;
+
+    const activeResultTab =
+      activeEditorTab?.kind === "result"
+        ? openResultTabs.find((tab) => tab.id === activeEditorTab.id)
+        : null;
+    const sql = (activeResultTab?.sqlCell.sql ?? querySql ?? "").trim();
+    const resultsToSave = activeResultTab?.queryResults ?? queryResults;
+    if (!resultsToSave) {
+      get().showToast("error", "No result data available to save");
+      return;
+    }
+    if (!sql) {
+      get().showToast("error", "No SQL available to save");
+      return;
+    }
+
+    try {
+      const saved = await invoke<SavedResultRecord>("save_saved_result", {
+        connectionId: activeConnectionId,
+        request: {
+          id: activeResultTab?.savedResultId ?? null,
+          name: activeResultTab?.savedResultId ? activeResultTab.name : null,
+          sql,
+          preview_source: activeResultTab?.previewSource ?? previewSource ?? null,
+          query_result: resultsToSave,
+        },
+      });
+
+      set((state) => ({
+        savedResultsByConnection: {
+          ...state.savedResultsByConnection,
+          [activeConnectionId]: [
+            saved,
+            ...(state.savedResultsByConnection[activeConnectionId] || []).filter((r) => r.id !== saved.id),
+          ],
+        },
+        openResultTabs: state.openResultTabs.map((tab) =>
+          activeResultTab && tab.id === activeResultTab.id
+            ? {
+                ...tab,
+                name: saved.name,
+                savedResultId: saved.id,
+                resultSource: "saved",
+                queryResults: saved.query_result,
+                previewSource: saved.preview_source ?? null,
+                isDirty: false,
+              }
+            : tab
+        ),
+      }));
+
+      get().showToast("success", "Result saved");
+      get().saveOpenTabs();
+    } catch (error) {
+      console.error("Failed to save result:", error);
+      get().showToast("error", `Failed to save result: ${error}`);
+    }
+  },
+
+  openSavedResult: async (connectionId: string, savedResultId: string) => {
+    try {
+      const saved = await invoke<SavedResultRecord>("get_saved_result", {
+        connectionId,
+        savedResultId,
+      });
+
+      const tabId = `result-${saved.id}`;
+      const tab: ResultTabData = {
+        id: tabId,
+        name: saved.name,
+        connectionId,
+        sqlCell: { id: `${tabId}-cell`, sql: saved.sql, proposed_sql: null },
+        queryResults: saved.query_result,
+        previewSource: saved.preview_source,
+        resultSource: "saved",
+        savedResultId: saved.id,
+        isQueryCollapsed: true,
+        isStale: false,
+        isDirty: false,
+        createdAt: saved.created_at,
+      };
+
+      set((state) => ({
+        openResultTabs: state.openResultTabs.some((t) => t.id === tabId)
+          ? state.openResultTabs.map((t) => (t.id === tabId ? tab : t))
+          : [...state.openResultTabs, tab],
+        activeEditorTab: { kind: "result", id: tabId },
+      }));
+      get().saveOpenTabs();
+    } catch (error) {
+      console.error("Failed to open saved result:", error);
+      get().showToast("error", `Failed to open saved result: ${error}`);
+    }
+  },
+
+  refreshResultTab: async (tabId: string) => {
+    const tab = get().openResultTabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const sql = tab.sqlCell.sql.trim();
+    if (!sql) return;
+
+    set({ isExecuting: true, queryError: null });
+    try {
+      const queryResult = await invoke<QueryResult>("execute_query", {
+        connectionId: tab.connectionId,
+        sql,
+      });
+
+      set((state) => ({
+        openResultTabs: state.openResultTabs.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                queryResults: queryResult,
+                isStale: false,
+                isDirty: true,
+              }
+            : t
+        ),
+        queryResults: queryResult,
+        querySql: sql,
+        previewSource: tab.previewSource,
+        isExecuting: false,
+      }));
+    } catch (error) {
+      console.error("Failed to refresh result tab:", error);
+      set({ isExecuting: false, queryError: String(error), querySql: null });
+      get().showToast("error", `Failed to refresh result: ${error}`);
+    }
+  },
+
+  deleteSavedResult: async (connectionId: string, savedResultId: string) => {
+    try {
+      await invoke("delete_saved_result", { connectionId, savedResultId });
+      set((state) => ({
+        savedResultsByConnection: {
+          ...state.savedResultsByConnection,
+          [connectionId]: (state.savedResultsByConnection[connectionId] || []).filter((r) => r.id !== savedResultId),
+        },
+        openResultTabs: state.openResultTabs.filter((tab) => tab.savedResultId !== savedResultId),
+      }));
+    } catch (error) {
+      console.error("Failed to delete saved result:", error);
+      get().showToast("error", `Failed to delete saved result: ${error}`);
+    }
+  },
+
+  renameSavedResult: async (connectionId: string, savedResultId: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    try {
+      const updated = await invoke<SavedResultMetadata>("rename_saved_result", {
+        connectionId,
+        savedResultId,
+        newName: trimmedName,
+      });
+
+      set((state) => ({
+        savedResultsByConnection: {
+          ...state.savedResultsByConnection,
+          [connectionId]: (state.savedResultsByConnection[connectionId] || []).map((r) =>
+            r.id === savedResultId ? updated : r
+          ),
+        },
+        openResultTabs: state.openResultTabs.map((tab) =>
+          tab.savedResultId === savedResultId ? { ...tab, name: updated.name } : tab
+        ),
+      }));
+
+      get().saveOpenTabs();
+    } catch (error) {
+      console.error("Failed to rename saved result:", error);
+      get().showToast("error", `Failed to rename saved result: ${error}`);
+    }
+  },
+
   // Tabs persistence actions
   loadOpenTabs: async () => {
     try {
@@ -1200,51 +1583,120 @@ export const useAppStore = create<AppState>((set, get) => ({
         tabs: Array<{
           id: string;
           name: string;
+          kind?: "script" | "result";
+          script_id?: string | null;
+          saved_result_id?: string | null;
           content: string;
           connection_id: string;
           is_dirty: boolean;
+          is_query_collapsed?: boolean;
           created_at: number;
         }>;
         active_tab_id: string | null;
       }>("load_tabs");
 
       if (tabsState.tabs.length > 0) {
-        // Load fresh content from sheet files for each tab.
-        const openScripts: OpenScript[] = await Promise.all(
-          tabsState.tabs.map(async (tab) => {
-            try {
-              const script = await invoke<Script>("get_script", {
-                connectionId: tab.connection_id,
-                scriptId: tab.id,
-              });
-              const cells = normalizeCells(script.cells || []);
-              const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
-              return {
-                id: tab.id,
-                name: script.name ?? tab.name,
-                cells,
-                selectedCellId,
-                connectionId: tab.connection_id,
-                isDirty: false,
-              };
-            } catch {
-              // Script file may have been deleted — fall back to tabs.json content
-              const fallbackCell = createEmptyCell(tab.content);
-              return {
-                id: tab.id,
-                name: tab.name,
-                cells: [fallbackCell],
-                selectedCellId: fallbackCell.id,
-                connectionId: tab.connection_id,
-                isDirty: tab.is_dirty,
-              };
+        const openScripts: OpenScript[] = [];
+        const openResultTabs: ResultTabData[] = [];
+
+        for (const tab of tabsState.tabs) {
+          const kind = tab.kind ?? "script";
+          if (kind === "result") {
+            const savedResultId = tab.saved_result_id ?? null;
+            const tabId = tab.id;
+            if (savedResultId) {
+              try {
+                const saved = await invoke<SavedResultRecord>("get_saved_result", {
+                  connectionId: tab.connection_id,
+                  savedResultId,
+                });
+                openResultTabs.push({
+                  id: tabId,
+                  name: saved.name,
+                  connectionId: tab.connection_id,
+                  sqlCell: { id: `${tabId}-cell`, sql: tab.content || saved.sql, proposed_sql: null },
+                  queryResults: saved.query_result,
+                  previewSource: saved.preview_source,
+                  resultSource: "saved",
+                  savedResultId,
+                  isQueryCollapsed: tab.is_query_collapsed ?? true,
+                  isStale: false,
+                  isDirty: tab.is_dirty ?? false,
+                  createdAt: tab.created_at,
+                });
+                continue;
+              } catch {
+                // fallthrough
+              }
             }
-          })
-        );
+
+            openResultTabs.push({
+              id: tabId,
+              name: tab.name,
+              connectionId: tab.connection_id,
+              sqlCell: { id: `${tabId}-cell`, sql: tab.content || "", proposed_sql: null },
+              queryResults: null,
+              previewSource: null,
+              resultSource: savedResultId ? "saved" : "live",
+              savedResultId,
+              isQueryCollapsed: tab.is_query_collapsed ?? true,
+              isStale: true,
+              isDirty: tab.is_dirty ?? true,
+              createdAt: tab.created_at,
+            });
+            continue;
+          }
+
+          try {
+            const scriptId = tab.script_id || tab.id;
+            const script = await invoke<Script>("get_script", {
+              connectionId: tab.connection_id,
+              scriptId,
+            });
+            const cells = normalizeCells(script.cells || []);
+            const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
+            openScripts.push({
+              id: script.id,
+              name: script.name ?? tab.name,
+              cells,
+              selectedCellId,
+              connectionId: tab.connection_id,
+              isDirty: false,
+            });
+          } catch {
+            const fallbackCell = createEmptyCell(tab.content);
+            openScripts.push({
+              id: tab.id,
+              name: tab.name,
+              cells: [fallbackCell],
+              selectedCellId: fallbackCell.id,
+              connectionId: tab.connection_id,
+              isDirty: tab.is_dirty,
+            });
+          }
+        }
+
+        const activeTabId = tabsState.active_tab_id;
+        let activeEditorTab: ActiveEditorTab = null;
+        let activeScriptId: string | null = null;
+
+        if (activeTabId && openResultTabs.some((t) => t.id === activeTabId)) {
+          activeEditorTab = { kind: "result", id: activeTabId };
+        } else {
+          const script = activeTabId
+            ? openScripts.find((s) => s.id === activeTabId)
+            : openScripts[0];
+          if (script) {
+            activeScriptId = script.id;
+            activeEditorTab = { kind: "script", id: script.id };
+          }
+        }
 
         set({
           openScripts,
-          activeScriptId: tabsState.active_tab_id,
+          openResultTabs,
+          activeScriptId,
+          activeEditorTab,
         });
       }
     } catch (error) {
@@ -1253,21 +1705,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   saveOpenTabs: async () => {
-    const { openScripts, activeScriptId } = get();
+    const { openScripts, openResultTabs, activeEditorTab } = get();
 
     const tabsState = {
-      tabs: openScripts.map((script) => ({
-        id: script.id,
-        name: script.name,
-        content:
-          script.cells.find((cell) => cell.id === script.selectedCellId)?.sql ??
-          script.cells[0]?.sql ??
-          "",
-        connection_id: script.connectionId,
-        is_dirty: script.isDirty,
-        created_at: Date.now(),
-      })),
-      active_tab_id: activeScriptId,
+      tabs: [
+        ...openScripts.map((script) => ({
+          id: script.id,
+          script_id: script.id,
+          kind: "script",
+          saved_result_id: null,
+          name: script.name,
+          content:
+            script.cells.find((cell) => cell.id === script.selectedCellId)?.sql ??
+            script.cells[0]?.sql ??
+            "",
+          connection_id: script.connectionId,
+          is_dirty: script.isDirty,
+          is_query_collapsed: false,
+          created_at: Date.now(),
+        })),
+        ...openResultTabs.map((tab) => ({
+          id: tab.id,
+          script_id: null,
+          kind: "result",
+          saved_result_id: tab.savedResultId,
+          name: tab.name,
+          content: tab.sqlCell.sql,
+          connection_id: tab.connectionId,
+          is_dirty: tab.isDirty,
+          is_query_collapsed: tab.isQueryCollapsed,
+          created_at: tab.createdAt,
+        })),
+      ],
+      active_tab_id: activeEditorTab?.id ?? null,
     };
 
     try {
@@ -1412,6 +1882,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         queryResults: results,
         isExecuting: false,
         queryHistory: newHistory,
+        querySql: sql,
       });
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
@@ -1434,6 +1905,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         isExecuting: false,
         queryResults: null,
         queryHistory: newHistory,
+        querySql: null,
       });
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
@@ -1490,6 +1962,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         queryResults: results,
         isExecuting: false,
         queryHistory: newHistory,
+        querySql: sql,
       });
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
@@ -1511,6 +1984,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         isExecuting: false,
         queryResults: null,
         queryHistory: newHistory,
+        querySql: null,
       });
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
@@ -1518,7 +1992,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   clearResults: () => {
-    set({ queryResults: null, queryError: null });
+    set({ queryResults: null, queryError: null, querySql: null });
   },
 
   loadQueryHistory: async () => {
@@ -1569,5 +2043,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     }));
+  },
+
+  toggleResultsPanelMinimized: () => {
+    set((state) => ({ isResultsPanelMinimized: !state.isResultsPanelMinimized }));
   },
 }));

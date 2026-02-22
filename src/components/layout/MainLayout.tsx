@@ -4,12 +4,13 @@ import {
   Group,
   Separator,
 } from "react-resizable-panels";
-import { Database, Zap, FileCode2, Plus, PanelLeftOpen } from "lucide-react";
+import { Database, Zap, FileCode2, Plus, PanelLeftOpen, PanelBottomOpen } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import { SqlEditor } from "@/components/editor/SqlEditor";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { ResultsPanel } from "@/components/results/ResultsPanel";
+import { ResultTabEditor } from "@/components/results/ResultTabEditor";
 import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { useAppStore } from "@/stores/appStore";
 import { useAiStore } from "@/stores/aiStore";
@@ -90,10 +91,21 @@ function NoSheetsState() {
 }
 
 export function MainLayout() {
-  const { connectionsCount, openScriptsCount } = useAppStore(
+  const {
+    connectionsCount,
+    openScriptsCount,
+    openResultTabsCount,
+    activeEditorTab,
+    isResultsPanelMinimized,
+    toggleResultsPanelMinimized,
+  } = useAppStore(
     useShallow((state) => ({
       connectionsCount: state.connections.length,
       openScriptsCount: state.openScripts.length,
+      openResultTabsCount: state.openResultTabs.length,
+      activeEditorTab: state.activeEditorTab,
+      isResultsPanelMinimized: state.isResultsPanelMinimized,
+      toggleResultsPanelMinimized: state.toggleResultsPanelMinimized,
     }))
   );
   const isPanelOpen = useAiStore((state) => state.isPanelOpen);
@@ -105,7 +117,8 @@ export function MainLayout() {
 
   // Check if any connection exists (not necessarily connected)
   const hasAnyConnection = connectionsCount > 0;
-  const hasOpenScripts = openScriptsCount > 0;
+  const hasOpenTabs = openScriptsCount > 0 || openResultTabsCount > 0;
+  const isResultTabActive = activeEditorTab?.kind === "result";
 
   useEffect(() => {
     window.localStorage.setItem("join:left-sidebar-open", String(isLeftSidebarOpen));
@@ -137,30 +150,49 @@ export function MainLayout() {
           </div>
         )}
 
-        {/* Main Content Area */}
+      {/* Main Content Area */}
         <Panel id="main-content" defaultSize={isPanelOpen ? "52%" : "82%"} minSize="35%">
-          {!hasAnyConnection && !hasOpenScripts ? (
+          {!hasAnyConnection && !hasOpenTabs ? (
             <NoConnectionState />
-          ) : !hasOpenScripts ? (
+          ) : !hasOpenTabs ? (
             <NoSheetsState />
           ) : (
             <Group orientation="vertical" className="h-full">
               {/* Editor Area */}
-              <Panel id="editor" defaultSize="65%" minSize="30%">
+              <Panel
+                id="editor"
+                defaultSize={isResultTabActive || isResultsPanelMinimized ? "100%" : "65%"}
+                minSize="30%"
+              >
                 <div className="h-full flex flex-col bg-surface">
                   <EditorToolbar />
                   <div className="flex-1 overflow-hidden">
-                    <SqlEditor />
+                    {activeEditorTab?.kind === "result" ? <ResultTabEditor /> : <SqlEditor />}
                   </div>
                 </div>
               </Panel>
 
-              <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+              {isResultTabActive ? null : isResultsPanelMinimized ? (
+                <div className="h-7 border-t border-base-750 bg-base-900/95 flex items-center justify-end px-2.5">
+                  <button
+                    onClick={toggleResultsPanelMinimized}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+                    title="Show results panel"
+                  >
+                    <PanelBottomOpen className="w-3.5 h-3.5" />
+                    <span>Show Results</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
 
-              {/* Results Panel */}
-              <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
-                <ResultsPanel />
-              </Panel>
+                  {/* Results Panel */}
+                  <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
+                    <ResultsPanel />
+                  </Panel>
+                </>
+              )}
             </Group>
           )}
         </Panel>

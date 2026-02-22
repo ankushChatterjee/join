@@ -19,7 +19,11 @@ export const getEditorContext = tool({
     "Get the current SQL sheet editor state including selected cell details, cell content, selected text, and cursor position.",
   inputSchema: z.object({}),
   execute: async () => {
-    const { openScripts, activeScriptId } = useAppStore.getState();
+    const { openScripts, openResultTabs, activeScriptId, activeEditorTab } = useAppStore.getState();
+    const activeResultTab =
+      activeEditorTab?.kind === "result"
+        ? openResultTabs.find((t) => t.id === activeEditorTab.id)
+        : null;
     const activeScript = openScripts.find((s) => s.id === activeScriptId);
     const selectedCell = activeScript?.cells.find(
       (cell) => cell.id === activeScript.selectedCellId
@@ -33,8 +37,37 @@ export const getEditorContext = tool({
     const selectedText = getSelectedText();
     const cursorPos = getCursorPosition();
 
+    if (activeResultTab) {
+      return JSON.stringify(
+        {
+          editorMode: "result",
+          resultTabName: activeResultTab.name,
+          resultTabId: activeResultTab.id,
+          savedResultId: activeResultTab.savedResultId,
+          selectedCellId: activeResultTab.sqlCell.id,
+          selectedCellNumber: 1,
+          selectedCellContent: fullContent || activeResultTab.sqlCell.sql || "",
+          cellCount: 1,
+          cells: [
+            {
+              id: activeResultTab.sqlCell.id,
+              number: 1,
+              isSelected: true,
+              sql: activeResultTab.sqlCell.sql,
+            },
+          ],
+          selectedText: selectedText || null,
+          cursorPosition: cursorPos,
+          isDirty: false,
+        },
+        null,
+        2
+      );
+    }
+
     return JSON.stringify(
       {
+        editorMode: "script",
         sheetName: activeScript?.name || null,
         selectedCellId: activeScript?.selectedCellId || null,
         selectedCellNumber: selectedCellIndex,
@@ -68,7 +101,15 @@ export const insertSql = tool({
     sql: z.string().describe("The SQL text to insert at the cursor position"),
   }),
   execute: async ({ sql }) => {
-    const { openScripts, activeScriptId, updateScriptContent } = useAppStore.getState();
+    const { openScripts, openResultTabs, activeScriptId, activeEditorTab, updateScriptContent, updateResultTabSql } = useAppStore.getState();
+    const activeResultTab =
+      activeEditorTab?.kind === "result"
+        ? openResultTabs.find((t) => t.id === activeEditorTab.id)
+        : null;
+    if (activeResultTab) {
+      updateResultTabSql(activeResultTab.id, `${activeResultTab.sqlCell.sql}${sql}`);
+      return "Inserted SQL into the result tab query cell.";
+    }
     const activeScript = openScripts.find((s) => s.id === activeScriptId);
     if (!activeScript?.selectedCellId) {
       return "No cell is selected. Use add_cell to create/select a cell first.";
@@ -100,7 +141,13 @@ export const replaceEditorContentTool = tool({
     sql: z.string().describe("The SQL text to replace the editor content with"),
   }),
   execute: async ({ sql }) => {
-    const { activeScriptId, updateScriptCellProposal } = useAppStore.getState();
+    const { activeScriptId, activeEditorTab, openResultTabs, updateScriptCellProposal, updateResultTabProposal } = useAppStore.getState();
+    if (activeEditorTab?.kind === "result") {
+      const activeResultTab = openResultTabs.find((t) => t.id === activeEditorTab.id);
+      if (!activeResultTab) return "No active result tab found.";
+      updateResultTabProposal(activeResultTab.id, sql);
+      return "Proposed changes to the result tab query cell. Please review them in the diff viewer.";
+    }
     if (!activeScriptId) {
       return "No active SQL sheet found.";
     }
@@ -126,7 +173,10 @@ export const addCellTool = tool({
       .describe("Optional SQL content for the new cell"),
   }),
   execute: async ({ sql }) => {
-    const { openScripts, activeScriptId, addScriptCell } = useAppStore.getState();
+    const { openScripts, activeScriptId, addScriptCell, activeEditorTab } = useAppStore.getState();
+    if (activeEditorTab?.kind === "result") {
+      return "Result tabs only support a single query cell. Editing is allowed, but adding cells is not.";
+    }
     const activeScript = openScripts.find((s) => s.id === activeScriptId);
 
     if (!activeScript) {

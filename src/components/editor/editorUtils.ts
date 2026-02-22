@@ -19,11 +19,27 @@ export function getEditorView(): EditorView | null {
 }
 
 function getActiveScript() {
-  const { openScripts, activeScriptId } = useAppStore.getState();
+  const { openScripts, activeScriptId, activeEditorTab } = useAppStore.getState();
+  if (activeEditorTab?.kind === "result") {
+    return null;
+  }
   return openScripts.find((s) => s.id === activeScriptId) ?? null;
 }
 
+function getActiveResultTab() {
+  const { openResultTabs, activeEditorTab } = useAppStore.getState();
+  if (activeEditorTab?.kind !== "result") {
+    return null;
+  }
+  return openResultTabs.find((t) => t.id === activeEditorTab.id) ?? null;
+}
+
 function getSelectedCellSql(): string {
+  const resultTab = getActiveResultTab();
+  if (resultTab) {
+    return resultTab.sqlCell.sql ?? "";
+  }
+
   const activeScript = getActiveScript();
   if (!activeScript) return "";
 
@@ -48,6 +64,10 @@ export function getQueryToRun(): string {
 
 // Get the effective connection ID for the active script
 export function getEffectiveConnectionId(): string | null {
+  const activeResultTab = getActiveResultTab();
+  if (activeResultTab) {
+    return activeResultTab.connectionId;
+  }
   const activeScript = getActiveScript();
   return activeScript?.connectionId ?? null;
 }
@@ -89,8 +109,11 @@ export function formatEditorContent(dialect: DatabaseType): void {
 
     // Also update the selected cell in the store so the sheet is marked dirty
     const activeScript = getActiveScript();
+    const activeResultTab = getActiveResultTab();
     if (activeScript) {
       useAppStore.getState().updateScriptContent(activeScript.id, formatted);
+    } else if (activeResultTab) {
+      useAppStore.getState().updateResultTabSql(activeResultTab.id, formatted);
     }
   } catch (error) {
     console.error("Failed to format SQL:", error);
@@ -114,9 +137,12 @@ export function insertTextAtCursor(text: string): void {
 
   // Also update the selected cell in the store
   const activeScript = getActiveScript();
+  const activeResultTab = getActiveResultTab();
+  const newContent = view.state.doc.toString();
   if (activeScript) {
-    const newContent = view.state.doc.toString();
     useAppStore.getState().updateScriptContent(activeScript.id, newContent);
+  } else if (activeResultTab) {
+    useAppStore.getState().updateResultTabSql(activeResultTab.id, newContent);
   }
 }
 
@@ -157,8 +183,11 @@ export function replaceEditorContent(text: string): void {
 
   // Also update the selected cell in the store
   const activeScript = getActiveScript();
+  const activeResultTab = getActiveResultTab();
   if (activeScript) {
     useAppStore.getState().updateScriptContent(activeScript.id, text);
+  } else if (activeResultTab) {
+    useAppStore.getState().updateResultTabSql(activeResultTab.id, text);
   }
 }
 

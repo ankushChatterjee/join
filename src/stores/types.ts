@@ -120,11 +120,44 @@ export interface QueryResult {
   execution_time_ms: number;
 }
 
+export interface SavedResultMetadata {
+  id: string;
+  name: string;
+  connection_id: string;
+  sql: string;
+  preview_source: string | null;
+  row_count: number;
+  execution_time_ms: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface EditorTab {
   id: string;
   name: string;
   content: string;
   connectionId: string; // Required - every tab must have a connection
+  isDirty: boolean;
+  createdAt: number;
+}
+
+export interface ResultTabCell {
+  id: string;
+  sql: string;
+  proposed_sql?: string | null;
+}
+
+export interface ResultTabData {
+  id: string;
+  name: string;
+  connectionId: string;
+  sqlCell: ResultTabCell;
+  queryResults: QueryResult | null;
+  previewSource: string | null;
+  resultSource: "live" | "saved";
+  savedResultId: string | null;
+  isQueryCollapsed: boolean;
+  isStale: boolean;
   isDirty: boolean;
   createdAt: number;
 }

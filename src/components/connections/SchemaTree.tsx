@@ -23,11 +23,12 @@ import {
   Shapes,
   Tag,
   Play,
+  FileSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor, generateSelectStatement } from "@/components/editor/editorUtils";
-import type { ColumnInfo, TableInfo, ViewInfo, IndexInfo, FunctionInfo, CustomTypeInfo, ScriptMetadata } from "@/stores/types";
+import type { ColumnInfo, TableInfo, ViewInfo, IndexInfo, FunctionInfo, CustomTypeInfo, ScriptMetadata, SavedResultMetadata } from "@/stores/types";
 
 const typeIcons: Record<string, typeof Hash> = {
   uuid: Key,
@@ -599,8 +600,8 @@ interface ScriptNodeProps {
 }
 
 function ScriptNode({ script, connectionId, level }: ScriptNodeProps) {
-  const { openScript, deleteScript, renameScript, activeScriptId } = useAppStore();
-  const isActive = activeScriptId === script.id;
+  const { openScript, deleteScript, renameScript, activeEditorTab } = useAppStore();
+  const isActive = activeEditorTab?.kind === "script" && activeEditorTab.id === script.id;
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(script.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -780,6 +781,178 @@ function ScriptsFolderNode({ connectionId, level }: ScriptsFolderNodeProps) {
   );
 }
 
+interface SavedResultNodeProps {
+  result: SavedResultMetadata;
+  connectionId: string;
+  level: number;
+}
+
+function SavedResultNode({ result, connectionId, level }: SavedResultNodeProps) {
+  const { openSavedResult, deleteSavedResult, renameSavedResult, activeEditorTab } = useAppStore();
+  const tabId = `result-${result.id}`;
+  const isActive = activeEditorTab?.kind === "result" && activeEditorTab.id === tabId;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(result.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(`Delete saved result "${result.name}"?`)) {
+      await deleteSavedResult(connectionId, result.id);
+    }
+  };
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditName(result.name);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const trimmedName = editName.trim();
+    if (trimmedName && trimmedName !== result.name) {
+      await renameSavedResult(connectionId, result.id, trimmedName);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSaveEdit();
+    } else if (e.key === "Escape") {
+      setEditName(result.name);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <TreeNode level={level}>
+        <div className="flex items-center gap-2 py-0.5 px-2">
+          <FileSearch className="w-3.5 h-3.5 shrink-0 text-base-300" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleSaveEdit}
+            onKeyDown={handleKeyDown}
+            className="flex-1 bg-base-800 border border-accent-500 rounded-none px-1.5 py-0.5 text-[13px] text-base-100 outline-none"
+          />
+        </div>
+      </TreeNode>
+    );
+  }
+
+  return (
+    <TreeNode level={level}>
+      <button
+        onClick={() => openSavedResult(connectionId, result.id)}
+        onDoubleClick={handleStartEdit}
+        className={cn(
+          "w-full flex items-center gap-1.5 py-1 px-1.5 text-[13px] rounded-none transition-colors-fast cursor-pointer group",
+          isActive
+            ? "bg-accent-500/10 text-accent-300"
+            : "hover:bg-base-850 text-base-300"
+        )}
+      >
+        <FileSearch className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-accent-400" : "text-base-300")} />
+        <span className="truncate text-left flex-1">{result.name}</span>
+        <span className="text-[11px] text-base-300 shrink-0">{result.row_count} rows</span>
+        <span
+          role="button"
+          tabIndex={-1}
+          onClick={handleStartEdit}
+          className="p-0.5 rounded-none opacity-100 hover:bg-base-700 text-base-300 hover:text-base-100 transition-opacity"
+          title="Rename"
+        >
+          <Pencil className="w-3 h-3" />
+        </span>
+        <span
+          role="button"
+          tabIndex={-1}
+          onClick={handleDelete}
+          className="p-0.5 rounded-none opacity-100 hover:bg-base-700 text-base-300 hover:text-red-300 transition-opacity"
+          title="Delete"
+        >
+          <Trash2 className="w-3 h-3" />
+        </span>
+      </button>
+    </TreeNode>
+  );
+}
+
+interface SavedResultsFolderNodeProps {
+  connectionId: string;
+  level: number;
+}
+
+function SavedResultsFolderNode({ connectionId, level }: SavedResultsFolderNodeProps) {
+  const {
+    isSavedResultsFolderExpanded,
+    toggleSavedResultsFolderExpanded,
+    savedResultsByConnection,
+    loadSavedResults,
+  } = useAppStore();
+
+  const results = savedResultsByConnection[connectionId] || [];
+  const FolderIcon = isSavedResultsFolderExpanded ? FolderOpen : FolderClosed;
+
+  useEffect(() => {
+    loadSavedResults(connectionId);
+  }, [connectionId, loadSavedResults]);
+
+  return (
+    <div>
+      <TreeNode level={level}>
+        <button
+          onClick={toggleSavedResultsFolderExpanded}
+          className="w-full flex items-center gap-1.5 py-1 px-1.5 text-[13px] hover:bg-base-850 rounded-none transition-colors-fast cursor-pointer group"
+        >
+          <ChevronRight
+            className={cn(
+              "w-3 h-3 text-base-300 transition-transform duration-150 shrink-0",
+              isSavedResultsFolderExpanded && "rotate-90"
+            )}
+          />
+          <FolderIcon className="w-3.5 h-3.5 text-base-300 shrink-0" />
+          <span className="text-base-100 group-hover:text-base-50 truncate text-left flex-1">
+            Saved Results
+          </span>
+        </button>
+      </TreeNode>
+
+      {isSavedResultsFolderExpanded && (
+        <div className="border-l border-base-750 ml-3">
+          {results.length > 0 ? (
+            results.map((result) => (
+              <SavedResultNode
+                key={result.id}
+                result={result}
+                connectionId={connectionId}
+                level={level + 1}
+              />
+            ))
+          ) : (
+            <TreeNode level={level + 1}>
+              <div className="py-1 px-1.5 text-[13px] text-base-300">
+                No saved results
+              </div>
+            </TreeNode>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface SchemaNodeProps {
   schemaName: string;
   level: number;
@@ -922,6 +1095,7 @@ export function SchemaTree() {
     <div className="h-full overflow-auto py-1 sidebar-scroll bg-base-900/80 border-t border-base-800">
       {/* SQL sheets folder - shown at top level */}
       <ScriptsFolderNode connectionId={activeConnectionId} level={0} />
+      <SavedResultsFolderNode connectionId={activeConnectionId} level={0} />
 
       {/* Database root node */}
       <TreeNode level={0}>

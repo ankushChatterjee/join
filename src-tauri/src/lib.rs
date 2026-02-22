@@ -132,6 +132,7 @@ async fn delete_connection(connection_id: String) -> Result<(), String> {
     
     // Remove any scripts stored for this connection
     let _ = storage::scripts::delete_connection_scripts(&connection_id);
+    let _ = storage::saved_results::delete_connection_saved_results(&connection_id);
     
     // Remove from config
     storage::remove_connection(&connection_id).map_err(|e| e.to_string())?;
@@ -291,6 +292,65 @@ async fn get_function_details(
 async fn execute_query(connection_id: String, sql: String) -> Result<QueryResult, String> {
     db::execute_query(&connection_id, &sql)
         .await
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Tauri Commands - Saved Results
+// ============================================================================
+
+#[tauri::command]
+fn list_saved_results(connection_id: String) -> Result<Vec<storage::SavedResultMetadata>, String> {
+    storage::saved_results::list_saved_results(&connection_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_saved_result(
+    connection_id: String,
+    request: storage::SaveSavedResultRequest,
+) -> Result<storage::SavedResult, String> {
+    storage::saved_results::save_saved_result(&connection_id, &request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_saved_result(connection_id: String, saved_result_id: String) -> Result<storage::SavedResult, String> {
+    storage::saved_results::get_saved_result(&connection_id, &saved_result_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn refresh_saved_result(
+    connection_id: String,
+    saved_result_id: String,
+    sql: String,
+    name: Option<String>,
+    preview_source: Option<String>,
+) -> Result<storage::SavedResult, String> {
+    let result = db::execute_query(&connection_id, &sql)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let request = storage::SaveSavedResultRequest {
+        id: Some(saved_result_id),
+        name,
+        sql,
+        preview_source,
+        query_result: result,
+    };
+    storage::saved_results::save_saved_result(&connection_id, &request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_saved_result(connection_id: String, saved_result_id: String) -> Result<(), String> {
+    storage::saved_results::delete_saved_result(&connection_id, &saved_result_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn rename_saved_result(
+    connection_id: String,
+    saved_result_id: String,
+    new_name: String,
+) -> Result<storage::SavedResultMetadata, String> {
+    storage::saved_results::rename_saved_result(&connection_id, &saved_result_id, &new_name)
         .map_err(|e| e.to_string())
 }
 
@@ -482,6 +542,13 @@ pub fn run() {
             // Tabs (legacy)
             load_tabs,
             save_tabs,
+            // Saved Results
+            list_saved_results,
+            save_saved_result,
+            get_saved_result,
+            refresh_saved_result,
+            delete_saved_result,
+            rename_saved_result,
             // Scripts
             list_scripts,
             create_script,
