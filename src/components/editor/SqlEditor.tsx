@@ -12,6 +12,7 @@ import { setEditorView } from "./editorUtils";
 import { buildCompletionSchema } from "./completionSchema";
 import { cn } from "@/lib/utils";
 import { DiffViewer } from "./DiffViewer";
+import { useShallow } from "zustand/react/shallow";
 
 // Custom dark theme for CodeMirror - warm retro palette with high contrast
 const customTheme = EditorView.theme(
@@ -352,7 +353,22 @@ export function SqlEditor() {
     removeScriptCell,
     executeScriptCell,
     executingCell,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((state) => ({
+      connections: state.connections,
+      openScripts: state.openScripts,
+      activeScriptId: state.activeScriptId,
+      updateScriptContent: state.updateScriptContent,
+      tablesBySchema: state.tablesBySchema,
+      viewsBySchema: state.viewsBySchema,
+      columns: state.columns,
+      setSelectedScriptCell: state.setSelectedScriptCell,
+      addScriptCell: state.addScriptCell,
+      removeScriptCell: state.removeScriptCell,
+      executeScriptCell: state.executeScriptCell,
+      executingCell: state.executingCell,
+    }))
+  );
   const [collapsedCells, setCollapsedCells] = useState<Record<string, boolean>>({});
 
   const activeScript = useMemo(

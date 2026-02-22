@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { X, Plus } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/lib/utils";
+import { useShallow } from "zustand/react/shallow";
 
 interface ScriptTabProps {
   script: {
@@ -15,7 +16,13 @@ interface ScriptTabProps {
 }
 
 function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
-  const { setActiveScript, closeScript, renameScript } = useAppStore();
+  const { setActiveScript, closeScript, renameScript } = useAppStore(
+    useShallow((state) => ({
+      setActiveScript: state.setActiveScript,
+      closeScript: state.closeScript,
+      renameScript: state.renameScript,
+    }))
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(script.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -119,7 +126,15 @@ export function EditorTabs() {
     connections,
     createScript,
     activeConnectionId,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((state) => ({
+      openScripts: state.openScripts,
+      activeScriptId: state.activeScriptId,
+      connections: state.connections,
+      createScript: state.createScript,
+      activeConnectionId: state.activeConnectionId,
+    }))
+  );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { ChatMessageComponent } from "./ChatMessage";
 import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/providers";
+import { useShallow } from "zustand/react/shallow";
 
 const QUICK_PROMPTS = [
   "Summarize this schema and suggest naming improvements",
@@ -51,7 +52,12 @@ function formatSessionTimestamp(timestamp: number): string {
 // --- Model Selector ---
 
 function ModelSelector() {
-  const { selectedModelId, setSelectedModel } = useAiStore();
+  const { selectedModelId, setSelectedModel } = useAiStore(
+    useShallow((state) => ({
+      selectedModelId: state.selectedModelId,
+      setSelectedModel: state.setSelectedModel,
+    }))
+  );
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +139,15 @@ function ModelSelector() {
 
 function SessionList({ onClose }: { onClose: () => void }) {
   const { sessions, activeSessionId, createSession, deleteSession, setActiveSession } =
-    useAiStore();
+    useAiStore(
+      useShallow((state) => ({
+        sessions: state.sessions,
+        activeSessionId: state.activeSessionId,
+        createSession: state.createSession,
+        deleteSession: state.deleteSession,
+        setActiveSession: state.setActiveSession,
+      }))
+    );
 
   const handleNewChat = async () => {
     await createSession();
@@ -220,7 +234,13 @@ function SessionList({ onClose }: { onClose: () => void }) {
 // --- Token Usage Indicator ---
 
 function TokenUsageBar() {
-  const { tokenUsage, maxTokens, isCompacting } = useAiStore();
+  const { tokenUsage, maxTokens, isCompacting } = useAiStore(
+    useShallow((state) => ({
+      tokenUsage: state.tokenUsage,
+      maxTokens: state.maxTokens,
+      isCompacting: state.isCompacting,
+    }))
+  );
   const percentage = Math.min(100, Math.max(0, (tokenUsage / maxTokens) * 100));
 
   const totalSegments = 20; // Reduced segments for smaller size
@@ -271,7 +291,19 @@ function AiChatPanel() {
     stopStreaming,
     createSession,
     togglePanel,
-  } = useAiStore();
+  } = useAiStore(
+    useShallow((state) => ({
+      activeSession: state.activeSession,
+      isStreaming: state.isStreaming,
+      streamingText: state.streamingText,
+      streamingToolCalls: state.streamingToolCalls,
+      pendingApprovals: state.pendingApprovals,
+      sendMessage: state.sendMessage,
+      stopStreaming: state.stopStreaming,
+      createSession: state.createSession,
+      togglePanel: state.togglePanel,
+    }))
+  );
 
   const [inputText, setInputText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
@@ -279,6 +311,8 @@ function AiChatPanel() {
   const shouldStickToBottomRef = useRef(true);
   const scrollPositionRef = useRef<number>(0);
   const lastMessageSignatureRef = useRef<string>("");
+  const scrollRafRef = useRef<number | null>(null);
+  const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messages = activeSession?.messages || [];
 
@@ -304,10 +338,24 @@ function AiChatPanel() {
     }
   }, [isStreaming]);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+  const scheduleScrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    pendingScrollBehaviorRef.current = behavior;
+    if (scrollRafRef.current !== null) return;
+
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = messagesContainerRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: pendingScrollBehaviorRef.current });
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
   }, []);
 
   const handleMessagesScroll = useCallback(() => {
@@ -325,9 +373,9 @@ function AiChatPanel() {
     lastMessageSignatureRef.current = messageSignature;
 
     if (isStreaming || shouldStickToBottomRef.current) {
-      scrollToBottom(isStreaming ? "auto" : "smooth");
+      scheduleScrollToBottom(isStreaming ? "auto" : "smooth");
     }
-  }, [messageSignature, isStreaming, scrollToBottom]);
+  }, [messageSignature, isStreaming, scheduleScrollToBottom]);
 
   // Auto-resize textarea
   useEffect(() => {

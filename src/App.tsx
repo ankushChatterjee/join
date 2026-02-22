@@ -4,10 +4,22 @@ import { ConnectionDialog } from "@/components/connections/ConnectionDialog";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAppStore } from "@/stores/appStore";
 import { useAiStore } from "@/stores/aiStore";
+import { useShallow } from "zustand/react/shallow";
 
 function App() {
-  const { loadConnections, loadOpenTabs, loadQueryHistory } = useAppStore();
-  const { togglePanel, loadSessions } = useAiStore();
+  const { loadConnections, loadOpenTabs, loadQueryHistory } = useAppStore(
+    useShallow((state) => ({
+      loadConnections: state.loadConnections,
+      loadOpenTabs: state.loadOpenTabs,
+      loadQueryHistory: state.loadQueryHistory,
+    }))
+  );
+  const { togglePanel, loadSessions } = useAiStore(
+    useShallow((state) => ({
+      togglePanel: state.togglePanel,
+      loadSessions: state.loadSessions,
+    }))
+  );
 
   useEffect(() => {
     // Load connections, open tabs, and query history on app start

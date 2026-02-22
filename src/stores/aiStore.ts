@@ -18,6 +18,8 @@ import { compactConversation } from "@/ai/compaction";
 import { parseCellReferences } from "@/lib/cellLinkParser";
 import { useAppStore } from "@/stores/appStore";
 
+const STREAM_TEXT_FLUSH_MS = 40;
+
 interface ChatSessionMeta {
   id: string;
   title: string;
@@ -77,7 +79,36 @@ interface AiState {
   compactContext: () => Promise<void>;
 }
 
-export const useAiStore = create<AiState>((set, get) => ({
+export const useAiStore = create<AiState>((set, get) => {
+  let pendingStreamingText = "";
+  let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushPendingStreamingText = () => {
+    if (!pendingStreamingText) return;
+    const chunk = pendingStreamingText;
+    pendingStreamingText = "";
+    const state = get();
+    if (!state.isStreaming) return;
+    set({ streamingText: state.streamingText + chunk });
+  };
+
+  const scheduleStreamingFlush = () => {
+    if (streamFlushTimer) return;
+    streamFlushTimer = setTimeout(() => {
+      streamFlushTimer = null;
+      flushPendingStreamingText();
+    }, STREAM_TEXT_FLUSH_MS);
+  };
+
+  const resetStreamingBuffer = () => {
+    pendingStreamingText = "";
+    if (streamFlushTimer) {
+      clearTimeout(streamFlushTimer);
+      streamFlushTimer = null;
+    }
+  };
+
+  return ({
   // Initial state
   isPanelOpen: true,
   selectedModelId: "claude-sonnet-4-5-20250929",
@@ -262,6 +293,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       streamingText: "",
       streamingToolCalls: [],
     });
+    resetStreamingBuffer();
 
     // Update tokens immediately for the user message
     get().calculateTokenUsage();
@@ -286,9 +318,8 @@ export const useAiStore = create<AiState>((set, get) => ({
         fullText,         // Pass the full text (with context) to the model
         {
           onToken: (token: string) => {
-            set((state) => ({
-              streamingText: state.streamingText + token,
-            }));
+            pendingStreamingText += token;
+            scheduleStreamingFlush();
           },
           onToolCallStart: (toolCall) => {
             set((state) => ({
@@ -323,6 +354,7 @@ export const useAiStore = create<AiState>((set, get) => ({
             }));
           },
           onComplete: (assistantMessage: ChatMessage) => {
+            flushPendingStreamingText();
             const appState = useAppStore.getState();
             const activeScript = appState.openScripts.find((s) => s.id === appState.activeScriptId);
             const renderedContent =
@@ -368,8 +400,10 @@ export const useAiStore = create<AiState>((set, get) => ({
 
             // Recalculate once complete
             get().calculateTokenUsage();
+            resetStreamingBuffer();
           },
           onError: (error: Error) => {
+            flushPendingStreamingText();
             console.error("[AI Store] Agent onError callback:", error, typeof error);
 
             const errorMsg = error instanceof Error ? error.message : String(error);
@@ -401,6 +435,7 @@ export const useAiStore = create<AiState>((set, get) => ({
 
             get().saveActiveSession();
             get().calculateTokenUsage();
+            resetStreamingBuffer();
           },
         },
         abortController.signal
@@ -440,6 +475,7 @@ export const useAiStore = create<AiState>((set, get) => ({
 
         get().saveActiveSession();
         get().calculateTokenUsage();
+        resetStreamingBuffer();
       } else {
         // Reject any pending approvals on abort
         for (const a of get().pendingApprovals) {
@@ -452,6 +488,7 @@ export const useAiStore = create<AiState>((set, get) => ({
           abortController: null,
           pendingApprovals: [],
         });
+        resetStreamingBuffer();
       }
     }
   },
@@ -468,6 +505,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       abortController: null,
       pendingApprovals: [],
     });
+    resetStreamingBuffer();
   },
 
   approveToolCall: (toolCallId: string, approved: boolean) => {
@@ -568,4 +606,5 @@ export const useAiStore = create<AiState>((set, get) => ({
       set({ isCompacting: false });
     }
   }
-}));
+  });
+});

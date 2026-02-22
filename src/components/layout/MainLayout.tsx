@@ -13,6 +13,7 @@ import { ResultsPanel } from "@/components/results/ResultsPanel";
 import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { useAppStore } from "@/stores/appStore";
 import { useAiStore } from "@/stores/aiStore";
+import { useShallow } from "zustand/react/shallow";
 
 function NoConnectionState() {
   return (
@@ -41,7 +42,13 @@ function NoConnectionState() {
 }
 
 function NoSheetsState() {
-  const { activeConnectionId, connections, createScript } = useAppStore();
+  const { activeConnectionId, connections, createScript } = useAppStore(
+    useShallow((state) => ({
+      activeConnectionId: state.activeConnectionId,
+      connections: state.connections,
+      createScript: state.createScript,
+    }))
+  );
 
   // Find any connected database to use for new sheet
   const connectedDb = connections.find((c) => c.is_connected);
@@ -83,8 +90,13 @@ function NoSheetsState() {
 }
 
 export function MainLayout() {
-  const { connections, openScripts } = useAppStore();
-  const { isPanelOpen } = useAiStore();
+  const { connectionsCount, openScriptsCount } = useAppStore(
+    useShallow((state) => ({
+      connectionsCount: state.connections.length,
+      openScriptsCount: state.openScripts.length,
+    }))
+  );
+  const isPanelOpen = useAiStore((state) => state.isPanelOpen);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     const saved = window.localStorage.getItem("join:left-sidebar-open");
@@ -92,8 +104,8 @@ export function MainLayout() {
   });
 
   // Check if any connection exists (not necessarily connected)
-  const hasAnyConnection = connections.length > 0;
-  const hasOpenScripts = openScripts.length > 0;
+  const hasAnyConnection = connectionsCount > 0;
+  const hasOpenScripts = openScriptsCount > 0;
 
   useEffect(() => {
     window.localStorage.setItem("join:left-sidebar-open", String(isLeftSidebarOpen));

@@ -6,6 +6,7 @@ import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import { cn } from "@/lib/utils";
 import type { QueryHistoryEntry } from "@/stores/types";
+import { useShallow } from "zustand/react/shallow";
 
 // Format timestamp as relative time
 function formatRelativeTime(timestamp: number): string {
@@ -30,7 +31,12 @@ function truncateSql(sql: string, maxLength: number = 80): string {
 // Query History Dropdown Component for TitleBar
 function QueryHistoryDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const { queryHistory, clearQueryHistory } = useAppStore();
+  const { queryHistory, clearQueryHistory } = useAppStore(
+    useShallow((state) => ({
+      queryHistory: state.queryHistory,
+      clearQueryHistory: state.clearQueryHistory,
+    }))
+  );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
@@ -210,7 +216,12 @@ function QueryHistoryDropdown() {
 }
 
 function AiChatToggle() {
-  const { isPanelOpen, togglePanel } = useAiStore();
+  const { isPanelOpen, togglePanel } = useAiStore(
+    useShallow((state) => ({
+      isPanelOpen: state.isPanelOpen,
+      togglePanel: state.togglePanel,
+    }))
+  );
 
   return (
     <button

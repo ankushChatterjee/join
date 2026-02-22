@@ -6,6 +6,7 @@ import { useAppStore } from "@/stores/appStore";
 import { DataTable } from "./DataTable";
 import { createColumnsFromData } from "./columnUtils";
 import type { TypeDetailInfo, FunctionDetailInfo } from "@/stores/types";
+import { useShallow } from "zustand/react/shallow";
 
 // Type details view component
 function TypeDetailsView({ details, onClose }: { details: TypeDetailInfo; onClose: () => void }) {
@@ -316,7 +317,21 @@ export function ResultsPanel() {
     isLoadingSchemaObjectDetails,
     clearSchemaObjectSelection,
     previewSource,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((state) => ({
+      queryResults: state.queryResults,
+      queryError: state.queryError,
+      isExecuting: state.isExecuting,
+      showToast: state.showToast,
+      activeConnectionId: state.activeConnectionId,
+      connections: state.connections,
+      selectedSchemaObject: state.selectedSchemaObject,
+      schemaObjectDetails: state.schemaObjectDetails,
+      isLoadingSchemaObjectDetails: state.isLoadingSchemaObjectDetails,
+      clearSchemaObjectSelection: state.clearSchemaObjectSelection,
+      previewSource: state.previewSource,
+    }))
+  );
   
   // Get the active connection's database type
   const activeConnection = connections.find(c => c.id === activeConnectionId);

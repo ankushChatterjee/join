@@ -2,6 +2,7 @@ import { Plus, AlignLeft } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { getEffectiveConnectionId, formatEditorContent } from "./editorUtils";
 import { EditorTabs } from "./EditorTabs";
+import { useShallow } from "zustand/react/shallow";
 
 export function EditorToolbar() {
   const {
@@ -9,7 +10,14 @@ export function EditorToolbar() {
     openScripts,
     activeScriptId,
     addScriptCell,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((state) => ({
+      connections: state.connections,
+      openScripts: state.openScripts,
+      activeScriptId: state.activeScriptId,
+      addScriptCell: state.addScriptCell,
+    }))
+  );
 
   // Get the active script's connection to determine dialect
   const activeScript = openScripts.find((s) => s.id === activeScriptId);
