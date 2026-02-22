@@ -237,7 +237,7 @@ function SqlCell({
             isSelected ? "bg-base-800 text-base-100 border-base-600" : "bg-base-900 text-base-300 border-base-700"
           )}
         >
-          CELL {index + 1}
+          {index + 1}
         </div>
 
         <div className="flex items-center gap-1 min-w-0">
