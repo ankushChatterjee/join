@@ -2,7 +2,7 @@
 // AI Chat Panel - Main UI Component
 // ============================================================================
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
 import {
   Send,
   Square,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
+import { useAppStore } from "@/stores/appStore";
 import { ChatMessageComponent } from "./ChatMessage";
 import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/providers";
 
@@ -260,7 +261,7 @@ function TokenUsageBar() {
 
 // --- Main Panel ---
 
-export function AiChatPanel() {
+function AiChatPanel() {
   const {
     activeSession,
     isStreaming,
@@ -273,12 +274,38 @@ export function AiChatPanel() {
     togglePanel,
   } = useAiStore();
 
+  // Subscribe to activeScriptId to trigger re-render when scripts switch (for cell link navigation)
+  useAppStore((state) => state.activeScriptId);
+
   const [inputText, setInputText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
+  const scrollPositionRef = useRef<number>(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messages = activeSession?.messages || [];
+
+  // Save scroll position before re-render
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      scrollPositionRef.current = el.scrollTop;
+    };
+
+    el.addEventListener('scroll', handleScroll);
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restore scroll position after re-render (but not when streaming)
+  useEffect(() => {
+    if (isStreaming) return;
+    const el = messagesContainerRef.current;
+    if (el && scrollPositionRef.current > 0 && !shouldStickToBottomRef.current) {
+      el.scrollTop = scrollPositionRef.current;
+    }
+  }, [isStreaming]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = messagesContainerRef.current;
@@ -392,7 +419,7 @@ export function AiChatPanel() {
       <div
         ref={messagesContainerRef}
         onScroll={handleMessagesScroll}
-        className="sidebar-scroll flex-1 overflow-y-auto"
+        className="sidebar-scroll flex-1 scrollbar-stable"
       >
         {messages.length === 0 && !isStreaming ? (
           <div className="mx-auto flex h-full w-full max-w-[760px] flex-col items-center justify-center px-4 pb-12">
@@ -495,3 +522,6 @@ export function AiChatPanel() {
     </div>
   );
 }
+
+const MemoizedAiChatPanel = memo(AiChatPanel);
+export { MemoizedAiChatPanel as AiChatPanel };

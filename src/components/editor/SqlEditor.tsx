@@ -156,8 +156,16 @@ function SqlCell({
   useEffect(() => {
     if (isSelected && viewRef.current) {
       setEditorView(viewRef.current, cell.id);
+      viewRef.current.focus();
     }
   }, [isSelected, cell.id]);
+
+  // Un-collapse cell when it becomes selected (e.g., from cell link navigation)
+  useEffect(() => {
+    if (isSelected && isCollapsed) {
+      onToggleCollapse();
+    }
+  }, [isSelected, isCollapsed, onToggleCollapse]);
 
   const runQueryKeymap = useMemo(
     () =>
@@ -211,7 +219,11 @@ function SqlCell({
             e.stopPropagation();
             onToggleCollapse();
           }}
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          tabIndex={-1}
           className="w-[20px] h-[20px] flex items-center justify-center rounded-none text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
           title={isCollapsed ? "Expand cell" : "Collapse cell"}
         >
@@ -393,7 +405,7 @@ export function SqlEditor() {
   }
 
   return (
-    <div className="h-full w-full overflow-auto p-1 space-y-1.5 panel-scroll scrollbar-stable">
+    <div className="h-full w-full p-1 space-y-1.5 panel-scroll scrollbar-stable">
       {activeScript.cells.map((cell, index) => {
         const isSelected = activeScript.selectedCellId === cell.id;
         const isRunning =
@@ -410,7 +422,13 @@ export function SqlEditor() {
             canRemove={activeScript.cells.length > 1}
             isCollapsed={Boolean(collapsedCells[cell.id])}
             sqlExtension={sqlExtension}
-            onSelect={() => setSelectedScriptCell(activeScript.id, cell.id)}
+            onSelect={() => {
+              setSelectedScriptCell(activeScript.id, cell.id);
+              // Un-collapse the cell when selected
+              if (collapsedCells[cell.id]) {
+                toggleCellCollapse(cell.id);
+              }
+            }}
             onChange={(value) => {
               if (activeScript.selectedCellId !== cell.id) {
                 setSelectedScriptCell(activeScript.id, cell.id);
