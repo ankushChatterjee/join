@@ -191,6 +191,16 @@ body {
   background: rgba(180, 180, 180, 0.45);
 }
 
+/* Scrollbar-stable - prevents layout shift by always reserving scrollbar space */
+.scrollbar-stable {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.scrollbar-stable::-webkit-scrollbar {
+  width: 4px;
+}
+
 /* Editor tabs scrollbar - ultra thin with no layout shift */
 .editor-tabs-scroll {
   scrollbar-width: none;
