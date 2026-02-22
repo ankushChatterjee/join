@@ -14,7 +14,7 @@ import type { AgentContext } from "../agent";
 // through the experimental_context from the streamText call.
 export const executeReadonlySql = tool({
   description:
-    "Execute a read-only SQL query against the connected database. This requires user approval before execution. Use this sparingly and only when you need to verify data or check results. The query MUST be read-only (SELECT, EXPLAIN, SHOW, DESCRIBE). Do not use INSERT, UPDATE, DELETE, DROP, or any DDL statements.",
+    "Execute a read-only SQL query against the connected database. This requires user approval before execution. Use this to explore the data, get a deeper understanding of the schema, performance issues to give the user the best possible answer. The query MUST be read-only (SELECT, EXPLAIN, SHOW, DESCRIBE). Do not use INSERT, UPDATE, DELETE, DROP, or any DDL statements. Always keep in mind that this query should be lightweight, if you are trying out a risky/expensive query, warn the user to its effect. Make sure that the query does not result in TOO MANY rows, that can pollute the context",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to execute. Must be a read-only query."),
   }),

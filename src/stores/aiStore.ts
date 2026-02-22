@@ -15,8 +15,6 @@ import { runAgent } from "@/ai/agent";
 import { encodingForModel, TiktokenModel } from "js-tiktoken";
 import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 import { compactConversation } from "@/ai/compaction";
-import { parseCellReferences } from "@/lib/cellLinkParser";
-import { useAppStore } from "@/stores/appStore";
 
 const STREAM_TEXT_FLUSH_MS = 40;
 
@@ -355,22 +353,10 @@ export const useAiStore = create<AiState>((set, get) => {
           },
           onComplete: (assistantMessage: ChatMessage) => {
             flushPendingStreamingText();
-            const appState = useAppStore.getState();
-            const activeScript = appState.openScripts.find((s) => s.id === appState.activeScriptId);
-            const renderedContent =
-              assistantMessage.content && activeScript
-                ? parseCellReferences(
-                    assistantMessage.content,
-                    activeScript.cells,
-                    activeScript.id
-                  )
-                : undefined;
-
             // Include tool calls from streaming state
             const toolCalls = get().streamingToolCalls;
             const finalMessage: ChatMessage = {
               ...assistantMessage,
-              renderedContent,
               toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
             };
 

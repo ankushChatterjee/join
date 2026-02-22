@@ -308,6 +308,8 @@ function AiChatPanel() {
   const [inputText, setInputText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const scrollPositionRef = useRef<number>(0);
   const lastMessageSignatureRef = useRef<string>("");
@@ -344,9 +346,19 @@ function AiChatPanel() {
 
     scrollRafRef.current = requestAnimationFrame(() => {
       scrollRafRef.current = null;
+      const anchor = bottomAnchorRef.current;
+      if (anchor) {
+        anchor.scrollIntoView({
+          block: "end",
+          behavior: pendingScrollBehaviorRef.current,
+        });
+        return;
+      }
+
       const el = messagesContainerRef.current;
-      if (!el) return;
-      el.scrollTo({ top: el.scrollHeight, behavior: pendingScrollBehaviorRef.current });
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: pendingScrollBehaviorRef.current });
+      }
     });
   }, []);
 
@@ -376,6 +388,20 @@ function AiChatPanel() {
       scheduleScrollToBottom(isStreaming ? "auto" : "smooth");
     }
   }, [messageSignature, isStreaming, scheduleScrollToBottom]);
+
+  // Fallback for async layout growth (markdown/code/table rendering): follow content size changes while streaming.
+  useEffect(() => {
+    const contentEl = messagesContentRef.current;
+    if (!contentEl || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      if (isStreaming || shouldStickToBottomRef.current) {
+        scheduleScrollToBottom("auto");
+      }
+    });
+    observer.observe(contentEl);
+    return () => observer.disconnect();
+  }, [isStreaming, scheduleScrollToBottom]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -492,7 +518,7 @@ function AiChatPanel() {
             </div>
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-[760px] px-2.5 py-3">
+          <div ref={messagesContentRef} className="mx-auto w-full max-w-[760px] px-2.5 py-3">
             {messages.map((msg) => (
               <ChatMessageComponent key={msg.id} message={msg} />
             ))}
@@ -512,6 +538,7 @@ function AiChatPanel() {
                 pendingApprovals={pendingApprovals}
               />
             )}
+            <div ref={bottomAnchorRef} />
           </div>
         )}
       </div>

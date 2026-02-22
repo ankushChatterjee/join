@@ -17,48 +17,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
-import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval } from "@/ai/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CellPill } from "./CellPill";
-import { parseCellReferences, extractCellIndex } from "@/lib/cellLinkParser";
 
 // --- Markdown Renderer ---
 
 function MarkdownContent({
   content,
-  enableCellParsing = false,
 }: {
   content: string;
-  enableCellParsing?: boolean;
 }) {
-  // Pre-process content to convert cell references to links (fallback for AI-generated text)
-  const processedContent = useMemo(() => {
-    if (!enableCellParsing) {
-      return content;
-    }
-
-    const { openScripts, activeScriptId } = useAppStore.getState();
-    const activeScript = openScripts.find((s) => s.id === activeScriptId);
-    if (!activeScript) {
-      return content;
-    }
-
-    return parseCellReferences(content, activeScript.cells, activeScript.id);
-  }, [content, enableCellParsing]);
-
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      urlTransform={(url) => {
-        // Preserve cell:// protocol URLs
-        if (url.startsWith("cell://")) {
-          return url;
-        }
-        return url;
-      }}
       components={{
         // Code blocks
         code(props) {
@@ -134,19 +107,7 @@ function MarkdownContent({
         hr: () => <hr className="my-3 border-base-700/50" />,
         // Links
         a: ({ href, children }) => {
-          // Safety check: never allow cell:// URLs to be treated as external links
-          if (!href || href.startsWith("cell://")) {
-            if (href?.startsWith("cell://")) {
-              const linkData = href.replace("cell://", "");
-              const [linkScriptId, cellId] = linkData.split(":");
-
-              if (!linkScriptId || !cellId) {
-                return <span>{children}</span>;
-              }
-
-              const cellIndex = extractCellIndex(children);
-              return <CellPill cellIndex={cellIndex} cellId={cellId} scriptId={linkScriptId} />;
-            }
+          if (!href) {
             return <span>{children}</span>;
           }
 
@@ -195,7 +156,7 @@ function MarkdownContent({
         ),
       }}
     >
-      {processedContent}
+      {content}
     </ReactMarkdown>
   );
 }
@@ -395,12 +356,11 @@ const ChatMessageComponentInner = ({
   // Assistant message
   const content = isStreaming
     ? streamingText || ""
-    : message.renderedContent ?? message.content;
+    : message.content;
   const toolCalls = isStreaming
     ? streamingToolCalls || []
     : message.toolCalls || [];
   const isError = message.isError;
-  const shouldParseCellRefs = Boolean(isStreaming || !message.renderedContent);
 
   // Error message UI
   if (isError && content) {
@@ -438,10 +398,7 @@ const ChatMessageComponentInner = ({
 
         {/* Message content */}
         {content && (
-          <MarkdownContent
-            content={content}
-            enableCellParsing={shouldParseCellRefs}
-          />
+          <MarkdownContent content={content} />
         )}
 
         {/* Streaming indicator */}

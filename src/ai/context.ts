@@ -177,21 +177,6 @@ export function buildSystemPrompt(): string {
   // via buildMessageContext() and appended to each user message individually.
   // This ensures the context snapshot is tied to the message, not shared globally.
 
-  // --- Cell References ---
-  parts.push(`\n## Cell References`);
-  parts.push(
-    `- When referring to cells in your responses, ALWAYS use the markdown link format: [Cell N](cell://{scriptId}:{cellId}) where N is the 1-based cell index.`
-  );
-  parts.push(
-    `- Example: "I've updated [Cell 2](cell://script-abc:cell-xyz) with the JOIN query."`
-  );
-  parts.push(
-    `- The scriptId is shown as "ID: xxx" in the SQL Sheet context above. Use that exact ID when creating cell links.`
-  );
-  parts.push(
-    `- These links will render as clickable pills that navigate directly to the referenced cell.`
-  );
-
   // --- Instructions ---
   parts.push(`\n## Instructions`);
   parts.push(
