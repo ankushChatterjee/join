@@ -68,7 +68,7 @@ export function buildMessageContext(): string {
     if (selectedCell) {
       const cellIndex =
         activeScript.cells.findIndex((c) => c.id === selectedCell.id) + 1;
-      parts.push(`**Selected Cell**: Cell ${cellIndex}`);
+      parts.push(`**Selected Cell**: Cell ${cellIndex} (ID: ${selectedCell.id})`);
     } else {
       parts.push(`**Selected Cell**: None`);
     }
@@ -77,7 +77,7 @@ export function buildMessageContext(): string {
       const cellSummary = activeScript.cells
         .map((cell, index) => {
           const marker = cell.id === activeScript.selectedCellId ? " (selected)" : "";
-          return `- Cell ${index + 1}${marker}`;
+          return `- Cell ${index + 1} (ID: ${cell.id})${marker}`;
         })
         .join("\n");
       parts.push(`**Sheet Cells**:\n${cellSummary}`);

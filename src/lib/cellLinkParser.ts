@@ -69,11 +69,31 @@ export function parseCellReferences(
  * @returns The cell index number, or 0 if not found
  */
 export function extractCellIndex(children: React.ReactNode): number {
-  if (typeof children === "string") {
-    const match = children.match(/Cell\s+(\d+)/i);
-    if (match) {
-      return parseInt(match[1], 10);
+  const parseFromText = (text: string): number => {
+    const match = text.match(/Cell\s+(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  if (typeof children === "string" || typeof children === "number") {
+    return parseFromText(String(children));
+  }
+
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const parsed = extractCellIndex(child);
+      if (parsed > 0) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  if (children && typeof children === "object" && "props" in children) {
+    const node = children as { props?: { children?: React.ReactNode } };
+    if (node.props?.children !== undefined) {
+      return extractCellIndex(node.props.children);
     }
   }
+
   return 0;
 }

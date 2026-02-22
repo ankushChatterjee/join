@@ -19,45 +19,49 @@ export function CellPill({ cellIndex, cellId, scriptId }: CellPillProps) {
 
     const state = useAppStore.getState();
 
-    // First, try to find the script directly
-    let script = state.openScripts.find((s) => s.id === scriptId);
-    let targetScriptId = scriptId;
-    let targetCellId = cellId;
+    let targetScriptId: string | null = null;
+    let targetCellId: string | null = null;
 
-    // If script not found, search for the cell across all open scripts
-    if (!script) {
+    // Primary resolution: exact script + exact cell id from the link payload.
+    const linkedScript = state.openScripts.find((s) => s.id === scriptId);
+    if (linkedScript) {
+      const linkedCell = linkedScript.cells.find((c) => c.id === cellId);
+      if (linkedCell) {
+        targetScriptId = linkedScript.id;
+        targetCellId = linkedCell.id;
+      } else if (cellIndex > 0 && cellIndex <= linkedScript.cells.length) {
+        // Recovery path: link has a stale/incorrect cell id, but label "Cell N" is usable.
+        targetScriptId = linkedScript.id;
+        targetCellId = linkedScript.cells[cellIndex - 1].id;
+      }
+    }
+
+    // Secondary resolution: find an exact cell id in any open script.
+    if (!targetScriptId || !targetCellId) {
       for (const s of state.openScripts) {
-        if (s.cells.some((c) => c.id === cellId)) {
-          script = s;
+        const foundCell = s.cells.find((c) => c.id === cellId);
+        if (foundCell) {
           targetScriptId = s.id;
+          targetCellId = foundCell.id;
           break;
         }
       }
     }
 
-    // If still not found, search all open scripts for a cell with matching index
-    if (!script) {
-      let found = false;
+    // Final fallback: use the cell index in any open script.
+    if ((!targetScriptId || !targetCellId) && cellIndex > 0) {
       for (const s of state.openScripts) {
-        // Bounds check: cellIndex must be 1 or greater and not exceed cell count
-        if (cellIndex > 0 && cellIndex <= s.cells.length) {
+        if (cellIndex <= s.cells.length) {
           targetScriptId = s.id;
           targetCellId = s.cells[cellIndex - 1].id;
-          found = true;
           break;
         }
       }
-      if (!found) {
-        console.log("[CellPill] Cell index not found in any open script:", { cellIndex, cellId });
-        return;
-      }
-    } else {
-      // Verify the cell exists in the script
-      const cellExists = script.cells.some((c) => c.id === cellId);
-      if (!cellExists) {
-        console.log("[CellPill] Cell not found in script:", { cellId, scriptId: targetScriptId });
-        return;
-      }
+    }
+
+    if (!targetScriptId || !targetCellId) {
+      console.log("[CellPill] Failed to resolve linked cell:", { cellIndex, cellId, scriptId });
+      return;
     }
 
     // Switch to the script if it's not already active
