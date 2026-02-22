@@ -23,7 +23,7 @@ import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval }
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CellPill } from "./CellPill";
-import { parseCellReferences } from "@/lib/cellLinkParser";
+import { parseCellReferences, extractCellIndex } from "@/lib/cellLinkParser";
 import type { SqlSheetCell } from "@/stores/types";
 
 // --- Markdown Renderer ---
@@ -137,13 +137,7 @@ function MarkdownContent({
                 return <span>{children}</span>;
               }
 
-              let cellIndex = 0;
-              if (typeof children === "string") {
-                const match = children.match(/Cell\s+(\d+)/i);
-                if (match) {
-                  cellIndex = parseInt(match[1], 10);
-                }
-              }
+              const cellIndex = extractCellIndex(children);
               return <CellPill cellIndex={cellIndex} cellId={cellId} scriptId={linkScriptId} />;
             }
             return <span>{children}</span>;

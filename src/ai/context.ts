@@ -62,7 +62,7 @@ export function buildMessageContext(): string {
     const selectedText = getSelectedText();
     const cursorPos = getCursorPosition();
 
-    parts.push(`**SQL Sheet**: ${activeScript.name}`);
+    parts.push(`**SQL Sheet**: ${activeScript.name} (ID: ${activeScript.id})`);
     hasContext = true;
 
     if (selectedCell) {
@@ -186,7 +186,7 @@ export function buildSystemPrompt(): string {
     `- Example: "I've updated [Cell 2](cell://script-abc:cell-xyz) with the JOIN query."`
   );
   parts.push(
-    `- The scriptId and cellId are available in the context. Use the current script's ID when referring to cells in the active sheet.`
+    `- The scriptId is shown as "ID: xxx" in the SQL Sheet context above. Use that exact ID when creating cell links.`
   );
   parts.push(
     `- These links will render as clickable pills that navigate directly to the referenced cell.`

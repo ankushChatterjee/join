@@ -22,6 +22,7 @@ export function CellPill({ cellIndex, cellId, scriptId }: CellPillProps) {
     // First, try to find the script directly
     let script = state.openScripts.find((s) => s.id === scriptId);
     let targetScriptId = scriptId;
+    let targetCellId = cellId;
 
     // If script not found, search for the cell across all open scripts
     if (!script) {
@@ -34,16 +35,29 @@ export function CellPill({ cellIndex, cellId, scriptId }: CellPillProps) {
       }
     }
 
+    // If still not found, search all open scripts for a cell with matching index
     if (!script) {
-      console.log("[CellPill] Cell not found in any open script:", cellId);
-      return;
-    }
-
-    // Verify the cell exists in the script
-    const cellExists = script.cells.some((c) => c.id === cellId);
-    if (!cellExists) {
-      console.log("[CellPill] Cell not found in script:", { cellId, scriptId: targetScriptId });
-      return;
+      let found = false;
+      for (const s of state.openScripts) {
+        // Bounds check: cellIndex must be 1 or greater and not exceed cell count
+        if (cellIndex > 0 && cellIndex <= s.cells.length) {
+          targetScriptId = s.id;
+          targetCellId = s.cells[cellIndex - 1].id;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        console.log("[CellPill] Cell index not found in any open script:", { cellIndex, cellId });
+        return;
+      }
+    } else {
+      // Verify the cell exists in the script
+      const cellExists = script.cells.some((c) => c.id === cellId);
+      if (!cellExists) {
+        console.log("[CellPill] Cell not found in script:", { cellId, scriptId: targetScriptId });
+        return;
+      }
     }
 
     // Switch to the script if it's not already active
@@ -52,11 +66,11 @@ export function CellPill({ cellIndex, cellId, scriptId }: CellPillProps) {
     }
 
     // Select the cell
-    state.setSelectedScriptCell(targetScriptId, cellId);
+    state.setSelectedScriptCell(targetScriptId, targetCellId);
 
     // Scroll to the cell element (use setTimeout to ensure DOM is ready after script switch)
     setTimeout(() => {
-      const cellElement = document.getElementById(`cell-${cellId}`);
+      const cellElement = document.getElementById(`cell-${targetCellId}`);
       if (cellElement) {
         cellElement.scrollIntoView({ behavior: "smooth", block: "center" });
       }
