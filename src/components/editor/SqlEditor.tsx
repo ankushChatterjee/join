@@ -161,13 +161,6 @@ function SqlCell({
     }
   }, [isSelected, cell.id]);
 
-  // Un-collapse cell when it becomes selected (e.g., from cell link navigation)
-  useEffect(() => {
-    if (isSelected && isCollapsed) {
-      onToggleCollapse();
-    }
-  }, [isSelected, isCollapsed, onToggleCollapse]);
-
   const runQueryKeymap = useMemo(
     () =>
       Prec.highest(
@@ -440,10 +433,6 @@ export function SqlEditor() {
             sqlExtension={sqlExtension}
             onSelect={() => {
               setSelectedScriptCell(activeScript.id, cell.id);
-              // Un-collapse the cell when selected
-              if (collapsedCells[cell.id]) {
-                toggleCellCollapse(cell.id);
-              }
             }}
             onChange={(value) => {
               if (activeScript.selectedCellId !== cell.id) {
