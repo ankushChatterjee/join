@@ -24,6 +24,7 @@ export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
   content: string;
+  renderedContent?: string;
   toolCalls?: ToolCallDisplay[];
   timestamp: number;
   isError?: boolean;

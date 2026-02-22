@@ -24,23 +24,30 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CellPill } from "./CellPill";
 import { parseCellReferences, extractCellIndex } from "@/lib/cellLinkParser";
-import type { SqlSheetCell } from "@/stores/types";
 
 // --- Markdown Renderer ---
 
 function MarkdownContent({
   content,
-  cells,
-  scriptId,
+  enableCellParsing = false,
 }: {
   content: string;
-  cells: SqlSheetCell[];
-  scriptId: string;
+  enableCellParsing?: boolean;
 }) {
   // Pre-process content to convert cell references to links (fallback for AI-generated text)
   const processedContent = useMemo(() => {
-    return parseCellReferences(content, cells, scriptId);
-  }, [content, cells, scriptId]);
+    if (!enableCellParsing) {
+      return content;
+    }
+
+    const { openScripts, activeScriptId } = useAppStore.getState();
+    const activeScript = openScripts.find((s) => s.id === activeScriptId);
+    if (!activeScript) {
+      return content;
+    }
+
+    return parseCellReferences(content, activeScript.cells, activeScript.id);
+  }, [content, enableCellParsing]);
 
   return (
     <ReactMarkdown
@@ -373,12 +380,6 @@ const ChatMessageComponentInner = ({
   streamingToolCalls,
   pendingApprovals = [],
 }: ChatMessageProps) => {
-  // Get active script cells for cell reference parsing
-  const openScripts = useAppStore((state) => state.openScripts);
-  const activeScriptId = useAppStore((state) => state.activeScriptId);
-  const activeScript = openScripts.find((s) => s.id === activeScriptId);
-  const cells = activeScript?.cells || [];
-
   if (message.role === "user") {
     return (
       <div className="py-1.5">
@@ -392,11 +393,14 @@ const ChatMessageComponentInner = ({
   }
 
   // Assistant message
-  const content = isStreaming ? streamingText || "" : message.content;
+  const content = isStreaming
+    ? streamingText || ""
+    : message.renderedContent ?? message.content;
   const toolCalls = isStreaming
     ? streamingToolCalls || []
     : message.toolCalls || [];
   const isError = message.isError;
+  const shouldParseCellRefs = Boolean(isStreaming || !message.renderedContent);
 
   // Error message UI
   if (isError && content) {
@@ -433,7 +437,12 @@ const ChatMessageComponentInner = ({
         ))}
 
         {/* Message content */}
-        {content && <MarkdownContent content={content} cells={cells} scriptId={activeScriptId || ""} />}
+        {content && (
+          <MarkdownContent
+            content={content}
+            enableCellParsing={shouldParseCellRefs}
+          />
+        )}
 
         {/* Streaming indicator */}
         {isStreaming && !content && toolCalls.length === 0 && (

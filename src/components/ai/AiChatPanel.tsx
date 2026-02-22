@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
-import { useAppStore } from "@/stores/appStore";
 import { ChatMessageComponent } from "./ChatMessage";
 import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/providers";
 
@@ -274,14 +273,12 @@ function AiChatPanel() {
     togglePanel,
   } = useAiStore();
 
-  // Subscribe to activeScriptId to trigger re-render when scripts switch (for cell link navigation)
-  useAppStore((state) => state.activeScriptId);
-
   const [inputText, setInputText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const scrollPositionRef = useRef<number>(0);
+  const lastMessageSignatureRef = useRef<string>("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messages = activeSession?.messages || [];
 
@@ -320,12 +317,17 @@ function AiChatPanel() {
     shouldStickToBottomRef.current = distanceFromBottom < 96;
   }, []);
 
-  // Auto-scroll while streaming, but only if the user is near the latest message.
+  const messageSignature = `${messages.length}:${messages[messages.length - 1]?.id ?? ""}:${isStreaming ? 1 : 0}:${streamingText.length}:${streamingToolCalls.length}`;
+
+  // Auto-scroll only on chat events (new messages/stream updates), never on editor-only re-renders.
   useEffect(() => {
+    if (messageSignature === lastMessageSignatureRef.current) return;
+    lastMessageSignatureRef.current = messageSignature;
+
     if (isStreaming || shouldStickToBottomRef.current) {
       scrollToBottom(isStreaming ? "auto" : "smooth");
     }
-  }, [messages.length, isStreaming, streamingText, streamingToolCalls.length, scrollToBottom]);
+  }, [messageSignature, isStreaming, scrollToBottom]);
 
   // Auto-resize textarea
   useEffect(() => {
