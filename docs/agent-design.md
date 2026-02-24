@@ -7,6 +7,19 @@ An AI assistant embedded inside Join (a Tauri desktop SQL client) that can explo
 ## High-Level Architecture
 
 ```
+
+### 2026 Context Routing Update
+
+The agent now runs with an immutable `AgentExecutionContext` captured per prompt.
+
+- Connection resolution precedence:
+  1. active result tab connection
+  2. active script connection
+  3. chat session connection
+  4. global active connection
+- Tools resolve connection from execution context first (optional `connection_id` override supported).
+- Metadata is tracked per connection with a monotonically increasing version in `appStore.metadataByConnection`.
+- User messages now include metadata stamps (connection ID, metadata version, result tab/version, captured time) for durable replay and migration safety.
 ┌────────────────────────────────────────────────────────────────────┐
 │                         Tauri Desktop App                         │
 │  ┌──────────────────────────────────────────────────────────────┐  │

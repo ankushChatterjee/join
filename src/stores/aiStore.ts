@@ -15,6 +15,9 @@ import { runAgent } from "@/ai/agent";
 import { encodingForModel, TiktokenModel } from "js-tiktoken";
 import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 import { compactConversation } from "@/ai/compaction";
+import type { AgentExecutionContext } from "@/ai/executionContext";
+import { resolveAgentTarget } from "@/ai/contextResolver";
+import { useAppStore } from "@/stores/appStore";
 
 const STREAM_TEXT_FLUSH_MS = 40;
 
@@ -258,10 +261,45 @@ export const useAiStore = create<AiState>((set, get) => {
       await get().compactContext();
     }
 
+    const resolved = resolveAgentTarget(session.connectionId);
+    let metadataWarning = resolved.blockingReason;
+    let metadataIsFresh = !resolved.stale;
+
+    if (resolved.connectionId) {
+      const readiness = await useAppStore.getState().ensureMetadataReady(
+        resolved.connectionId,
+        1500
+      );
+      if (readiness.timedOut) {
+        metadataWarning = `Metadata refresh timed out for ${resolved.connectionId}. Agent will verify freshness via tools.`;
+        metadataIsFresh = false;
+      } else {
+        metadataIsFresh = true;
+      }
+    }
+
+    const executionContext: AgentExecutionContext = {
+      runId: crypto.randomUUID(),
+      sessionId: session.id,
+      targetConnectionId: resolved.connectionId,
+      targetConnectionDialect: resolved.dialect,
+      activeEditorKind: resolved.activeEditorKind,
+      activeScriptId: resolved.activeScriptId,
+      activeResultTabId: resolved.activeResultTabId,
+      savedResultId: resolved.savedResultId,
+      metadataVersion: resolved.connectionId
+        ? useAppStore.getState().getConnectionMetadataVersion(resolved.connectionId)
+        : null,
+      resultVersion: resolved.resultVersion,
+      capturedAt: Date.now(),
+      metadataIsFresh,
+      metadataWarning,
+    };
+
     // Capture the editor/cell context snapshot at the moment of sending.
     // This is appended to the user message so each message in history carries
     // its own frozen context rather than relying on the (always-current) system prompt.
-    const messageContext = buildMessageContext();
+    const messageContext = buildMessageContext(executionContext);
     const rawText = text.trim();
     const fullText = messageContext ? `${rawText}${messageContext}` : rawText;
 
@@ -271,6 +309,13 @@ export const useAiStore = create<AiState>((set, get) => {
       role: "user",
       content: rawText,
       timestamp: Date.now(),
+      metadata: {
+        connectionId: executionContext.targetConnectionId,
+        metadataVersion: executionContext.metadataVersion,
+        resultTabId: executionContext.activeResultTabId,
+        resultVersion: executionContext.resultVersion,
+        capturedAt: executionContext.capturedAt,
+      },
     };
 
     const updatedMessages = [...session.messages, userMessage];
@@ -278,6 +323,7 @@ export const useAiStore = create<AiState>((set, get) => {
       ...session,
       messages: updatedMessages,
       updatedAt: Date.now(),
+      connectionId: executionContext.targetConnectionId,
       // Auto-title from first user message
       title:
         session.messages.length === 0
@@ -300,7 +346,12 @@ export const useAiStore = create<AiState>((set, get) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === updatedSession.id
-          ? { ...s, title: updatedSession.title, updatedAt: updatedSession.updatedAt }
+          ? {
+            ...s,
+            title: updatedSession.title,
+            updatedAt: updatedSession.updatedAt,
+            connectionId: updatedSession.connectionId,
+          }
           : s
       ),
     }));
@@ -314,6 +365,7 @@ export const useAiStore = create<AiState>((set, get) => {
         selectedModelId,
         session.messages, // Pass raw ChatMessage[] — agent converts to ModelMessage[]
         fullText,         // Pass the full text (with context) to the model
+        executionContext,
         {
           onToken: (token: string) => {
             pendingStreamingText += token;
@@ -358,6 +410,13 @@ export const useAiStore = create<AiState>((set, get) => {
             const finalMessage: ChatMessage = {
               ...assistantMessage,
               toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+              metadata: {
+                connectionId: executionContext.targetConnectionId,
+                metadataVersion: executionContext.metadataVersion,
+                resultTabId: executionContext.activeResultTabId,
+                resultVersion: executionContext.resultVersion,
+                capturedAt: Date.now(),
+              },
             };
 
             set((state) => {

@@ -52,7 +52,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
   const virtualRows = virtualizer.getVirtualItems();
 
   return (
-    <div ref={tableContainerRef} className="h-full overflow-auto panel-scroll">
+    <div ref={tableContainerRef} className="h-full overflow-auto panel-scroll results-scroll">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10">
           {table.getHeaderGroups().map((headerGroup) => (

@@ -19,6 +19,10 @@ pub struct EditorTab {
     pub is_dirty: bool,
     #[serde(default)]
     pub is_query_collapsed: bool,
+    #[serde(default)]
+    pub last_executed_at: Option<i64>,
+    #[serde(default)]
+    pub last_executed_database: Option<String>,
     pub created_at: i64,
 }
 

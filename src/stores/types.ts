@@ -153,13 +153,29 @@ export interface ResultTabData {
   connectionId: string;
   sqlCell: ResultTabCell;
   queryResults: QueryResult | null;
+  lastExecutedAt: number | null;
+  lastExecutedDatabase: string | null;
   previewSource: string | null;
   resultSource: "live" | "saved";
   savedResultId: string | null;
   isQueryCollapsed: boolean;
   isStale: boolean;
   isDirty: boolean;
+  version: number;
   createdAt: number;
+}
+
+export interface ConnectionMetadataSnapshot {
+  schemas: SchemaInfo[];
+  tablesBySchema: Record<string, TableInfo[]>;
+  viewsBySchema: Record<string, ViewInfo[]>;
+  functionsBySchema: Record<string, FunctionInfo[]>;
+  typesBySchema: Record<string, CustomTypeInfo[]>;
+  columns: Record<string, ColumnInfo[]>;
+  indexes: Record<string, IndexInfo[]>;
+  version: number;
+  isLoading: boolean;
+  lastRefreshedAt: number | null;
 }
 
 export interface SqlSheetCell {

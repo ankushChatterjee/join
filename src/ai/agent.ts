@@ -8,6 +8,7 @@ import { chatMessagesToModelMessages } from "./types";
 import { getModel, getModelConfig } from "./providers";
 import { allTools } from "./tools";
 import { buildSystemPrompt } from "./context";
+import type { AgentExecutionContext } from "./executionContext";
 
 const MAX_TOOL_ITERATIONS = 15;
 
@@ -15,6 +16,7 @@ const MAX_TOOL_ITERATIONS = 15;
 
 export interface AgentContext {
   onRequestApproval?: (approval: PendingApproval) => void;
+  executionContext: AgentExecutionContext;
 }
 
 // --- Agent Callbacks ---
@@ -36,13 +38,14 @@ export async function runAgent(
   modelId: string,
   conversationHistory: ChatMessage[],
   userText: string,
+  executionContext: AgentExecutionContext,
   callbacks: AgentCallbacks,
   signal?: AbortSignal
 ): Promise<ChatMessage> {
   // Get the AI SDK model instance (lazily creates provider with API key)
   const model = await getModel(modelId);
   const modelConfig = getModelConfig(modelId);
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(executionContext);
 
   // Convert chat history to AI SDK ModelMessage format
   const messages = chatMessagesToModelMessages(conversationHistory);
@@ -61,6 +64,7 @@ export async function runAgent(
   // Context object passed to all tool execute() calls
   const agentContext: AgentContext = {
     onRequestApproval: callbacks.onRequestApproval,
+    executionContext,
   };
 
   // Track all tool calls for the final ChatMessage

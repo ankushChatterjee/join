@@ -20,6 +20,7 @@ import type {
   QueryHistoryEntry,
   SavedResultMetadata,
   ResultTabData,
+  ConnectionMetadataSnapshot,
 } from "./types";
 
 export interface Toast {
@@ -58,6 +59,7 @@ interface AppState {
   activeSchema: string | null;
   isLoadingSchema: boolean;
   loadingSchemas: Set<string>; // schemas currently loading tables/views/functions
+  metadataByConnection: Record<string, ConnectionMetadataSnapshot>;
 
   // Selected schema object (for showing details in results panel)
   selectedSchemaObject: {
@@ -125,6 +127,8 @@ interface AppState {
   loadTypesForSchema: (schema: string) => Promise<void>;
   setActiveSchema: (schema: string | null) => void;
   refreshConnectionMetadata: (connectionId: string) => Promise<void>;
+  ensureMetadataReady: (connectionId: string, timeoutMs?: number) => Promise<{ ready: boolean; timedOut: boolean }>;
+  getConnectionMetadataVersion: (connectionId: string) => number;
   selectSchemaObject: (
     type: "function" | "custom_type",
     name: string,
@@ -234,7 +238,54 @@ function toSheetDocument(openScript: OpenScript): SqlSheetDocument {
   };
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+function createEmptyMetadataSnapshot(): ConnectionMetadataSnapshot {
+  return {
+    schemas: [],
+    tablesBySchema: {},
+    viewsBySchema: {},
+    functionsBySchema: {},
+    typesBySchema: {},
+    columns: {},
+    indexes: {},
+    version: 0,
+    isLoading: false,
+    lastRefreshedAt: null,
+  };
+}
+
+export const useAppStore = create<AppState>((set, get) => {
+  const applyConnectionMetadataToLegacyState = (connectionId: string) => {
+    const snapshot = get().metadataByConnection[connectionId];
+    if (!snapshot) return;
+    set({
+      schemas: snapshot.schemas,
+      tablesBySchema: snapshot.tablesBySchema,
+      viewsBySchema: snapshot.viewsBySchema,
+      functionsBySchema: snapshot.functionsBySchema,
+      typesBySchema: snapshot.typesBySchema,
+      columns: snapshot.columns,
+      indexes: snapshot.indexes,
+      activeSchema: snapshot.schemas.length > 0 ? snapshot.schemas[0].name : null,
+    });
+  };
+
+  const bumpConnectionMetadataVersion = (connectionId: string) => {
+    set((state) => {
+      const existing = state.metadataByConnection[connectionId] ?? createEmptyMetadataSnapshot();
+      return {
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [connectionId]: {
+            ...existing,
+            version: existing.version + 1,
+            lastRefreshedAt: Date.now(),
+          },
+        },
+      };
+    });
+  };
+
+  return ({
   // Initial state
   connections: [],
   activeConnectionId: null,
@@ -289,6 +340,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeScriptId: null,
   openResultTabs: [],
   activeEditorTab: null,
+  metadataByConnection: {},
 
   // Connection actions
   loadConnections: async () => {
@@ -463,7 +515,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaObjectDetails: null,
     });
     if (id) {
-      get().loadSchemas();
+      const snapshot = get().metadataByConnection[id];
+      if (snapshot && snapshot.schemas.length > 0) {
+        applyConnectionMetadataToLegacyState(id);
+      } else {
+        get().loadSchemas();
+      }
       get().loadScripts(id);
       get().loadSavedResults(id);
     }
@@ -475,12 +532,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeConnectionId) return;
 
     set({ isLoadingSchema: true });
+    set((state) => {
+      const existing = state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
+      return {
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [activeConnectionId]: {
+            ...existing,
+            isLoading: true,
+          },
+        },
+      };
+    });
     try {
       const schemas = await invoke<SchemaInfo[]>("get_schemas", {
         connectionId: activeConnectionId,
       });
-      const activeSchema = schemas.length > 0 ? schemas[0].name : null;
-      set({ schemas, activeSchema, isLoadingSchema: false });
+      set((state) => {
+        const existing = state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
+        return {
+          isLoadingSchema: false,
+          metadataByConnection: {
+            ...state.metadataByConnection,
+            [activeConnectionId]: {
+              ...existing,
+              schemas,
+              version: existing.version + 1,
+              isLoading: false,
+              lastRefreshedAt: Date.now(),
+            },
+          },
+        };
+      });
+      applyConnectionMetadataToLegacyState(activeConnectionId);
 
       // Auto-expand and load first schema if only one exists
       if (schemas.length === 1) {
@@ -495,11 +579,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadTablesForSchema: async (schema: string) => {
-    const { activeConnectionId, tablesBySchema, loadingSchemas } = get();
+    const { activeConnectionId, loadingSchemas } = get();
     if (!activeConnectionId) return;
+    const snapshot = get().metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
 
     // Skip if already loaded or currently loading
-    if (tablesBySchema[schema] || loadingSchemas.has(schema)) return;
+    if (snapshot.tablesBySchema[schema] || loadingSchemas.has(schema)) return;
 
     set((state) => ({
       loadingSchemas: new Set([...state.loadingSchemas, schema]),
@@ -528,14 +613,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => {
         const newLoadingSchemas = new Set(state.loadingSchemas);
         newLoadingSchemas.delete(schema);
+        const existing = state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
         return {
-          tablesBySchema: { ...state.tablesBySchema, [schema]: tables },
-          viewsBySchema: { ...state.viewsBySchema, [schema]: views },
-          functionsBySchema: { ...state.functionsBySchema, [schema]: functions },
-          typesBySchema: { ...state.typesBySchema, [schema]: types },
           loadingSchemas: newLoadingSchemas,
+          metadataByConnection: {
+            ...state.metadataByConnection,
+            [activeConnectionId]: {
+              ...existing,
+              tablesBySchema: { ...existing.tablesBySchema, [schema]: tables },
+              viewsBySchema: { ...existing.viewsBySchema, [schema]: views },
+              functionsBySchema: { ...existing.functionsBySchema, [schema]: functions },
+              typesBySchema: { ...existing.typesBySchema, [schema]: types },
+              version: existing.version + 1,
+              lastRefreshedAt: Date.now(),
+            },
+          },
         };
       });
+      applyConnectionMetadataToLegacyState(activeConnectionId);
     } catch (error) {
       console.error("Failed to load tables:", error);
       set((state) => {
@@ -547,11 +642,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadViewsForSchema: async (schema: string) => {
-    const { activeConnectionId, viewsBySchema } = get();
+    const { activeConnectionId } = get();
     if (!activeConnectionId) return;
+    const snapshot = get().metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
 
     // Skip if already loaded
-    if (viewsBySchema[schema]) return;
+    if (snapshot.viewsBySchema[schema]) return;
 
     try {
       const views = await invoke<ViewInfo[]>("get_views", {
@@ -559,20 +655,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         schema: schema,
       });
       set((state) => ({
-        viewsBySchema: { ...state.viewsBySchema, [schema]: views },
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [activeConnectionId]: {
+            ...(state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot()),
+            viewsBySchema: {
+              ...(state.metadataByConnection[activeConnectionId]?.viewsBySchema ?? {}),
+              [schema]: views,
+            },
+            version: (state.metadataByConnection[activeConnectionId]?.version ?? 0) + 1,
+            lastRefreshedAt: Date.now(),
+          },
+        },
       }));
+      applyConnectionMetadataToLegacyState(activeConnectionId);
     } catch (error) {
       console.error("Failed to load views:", error);
     }
   },
 
   loadColumns: async (table: string, schema: string) => {
-    const { activeConnectionId, columns, indexes } = get();
+    const { activeConnectionId } = get();
     if (!activeConnectionId) return;
+    const snapshot = get().metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
 
     const key = `${schema}.${table}`;
     // Skip if already loaded
-    if (columns[key]) return;
+    if (snapshot.columns[key]) return;
 
     try {
       // Load columns and indexes in parallel
@@ -583,8 +692,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           schema,
         }),
         // Only load indexes if not already loaded
-        indexes[key]
-          ? Promise.resolve(indexes[key])
+        snapshot.indexes[key]
+          ? Promise.resolve(snapshot.indexes[key])
           : invoke<IndexInfo[]>("get_indexes", {
             connectionId: activeConnectionId,
             table,
@@ -592,21 +701,37 @@ export const useAppStore = create<AppState>((set, get) => ({
           }),
       ]);
       set((state) => ({
-        columns: { ...state.columns, [key]: cols },
-        indexes: { ...state.indexes, [key]: idxs },
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [activeConnectionId]: {
+            ...(state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot()),
+            columns: {
+              ...(state.metadataByConnection[activeConnectionId]?.columns ?? {}),
+              [key]: cols,
+            },
+            indexes: {
+              ...(state.metadataByConnection[activeConnectionId]?.indexes ?? {}),
+              [key]: idxs,
+            },
+            version: (state.metadataByConnection[activeConnectionId]?.version ?? 0) + 1,
+            lastRefreshedAt: Date.now(),
+          },
+        },
       }));
+      applyConnectionMetadataToLegacyState(activeConnectionId);
     } catch (error) {
       console.error("Failed to load columns:", error);
     }
   },
 
   loadIndexes: async (table: string, schema: string) => {
-    const { activeConnectionId, indexes } = get();
+    const { activeConnectionId } = get();
     if (!activeConnectionId) return;
+    const snapshot = get().metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
 
     const key = `${schema}.${table}`;
     // Skip if already loaded
-    if (indexes[key]) return;
+    if (snapshot.indexes[key]) return;
 
     try {
       const idxs = await invoke<IndexInfo[]>("get_indexes", {
@@ -615,19 +740,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         schema,
       });
       set((state) => ({
-        indexes: { ...state.indexes, [key]: idxs },
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [activeConnectionId]: {
+            ...(state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot()),
+            indexes: {
+              ...(state.metadataByConnection[activeConnectionId]?.indexes ?? {}),
+              [key]: idxs,
+            },
+            version: (state.metadataByConnection[activeConnectionId]?.version ?? 0) + 1,
+            lastRefreshedAt: Date.now(),
+          },
+        },
       }));
+      applyConnectionMetadataToLegacyState(activeConnectionId);
     } catch (error) {
       console.error("Failed to load indexes:", error);
     }
   },
 
   loadTypesForSchema: async (schema: string) => {
-    const { activeConnectionId, typesBySchema } = get();
+    const { activeConnectionId } = get();
     if (!activeConnectionId) return;
+    const snapshot = get().metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot();
 
     // Skip if already loaded
-    if (typesBySchema[schema]) return;
+    if (snapshot.typesBySchema[schema]) return;
 
     try {
       const types = await invoke<CustomTypeInfo[]>("get_custom_types", {
@@ -635,8 +773,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         schema: schema,
       });
       set((state) => ({
-        typesBySchema: { ...state.typesBySchema, [schema]: types },
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [activeConnectionId]: {
+            ...(state.metadataByConnection[activeConnectionId] ?? createEmptyMetadataSnapshot()),
+            typesBySchema: {
+              ...(state.metadataByConnection[activeConnectionId]?.typesBySchema ?? {}),
+              [schema]: types,
+            },
+            version: (state.metadataByConnection[activeConnectionId]?.version ?? 0) + 1,
+            lastRefreshedAt: Date.now(),
+          },
+        },
       }));
+      applyConnectionMetadataToLegacyState(activeConnectionId);
     } catch (error) {
       console.error("Failed to load types:", error);
     }
@@ -644,6 +794,108 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveSchema: (schema: string | null) => {
     set({ activeSchema: schema });
+  },
+
+  getConnectionMetadataVersion: (connectionId: string) => {
+    return get().metadataByConnection[connectionId]?.version ?? 0;
+  },
+
+  ensureMetadataReady: async (connectionId: string, timeoutMs = 1500) => {
+    const existing = get().metadataByConnection[connectionId];
+    if (existing && existing.schemas.length > 0 && !existing.isLoading) {
+      return { ready: true, timedOut: false };
+    }
+
+    const fetchPromise = (async () => {
+      set((state) => ({
+        metadataByConnection: {
+          ...state.metadataByConnection,
+          [connectionId]: {
+            ...(state.metadataByConnection[connectionId] ?? createEmptyMetadataSnapshot()),
+            isLoading: true,
+          },
+        },
+      }));
+
+      const schemas = await invoke<SchemaInfo[]>("get_schemas", { connectionId });
+      const tablesBySchema: Record<string, TableInfo[]> = {};
+      const viewsBySchema: Record<string, ViewInfo[]> = {};
+      const functionsBySchema: Record<string, FunctionInfo[]> = {};
+      const typesBySchema: Record<string, CustomTypeInfo[]> = {};
+      const columns: Record<string, ColumnInfo[]> = {};
+      const indexes: Record<string, IndexInfo[]> = {};
+
+      for (const schema of schemas) {
+        const [tables, views, functions, types] = await Promise.all([
+          invoke<TableInfo[]>("get_tables", { connectionId, schema: schema.name }),
+          invoke<ViewInfo[]>("get_views", { connectionId, schema: schema.name }),
+          invoke<FunctionInfo[]>("get_functions", { connectionId, schema: schema.name }),
+          invoke<CustomTypeInfo[]>("get_custom_types", { connectionId, schema: schema.name }),
+        ]);
+        tablesBySchema[schema.name] = tables;
+        viewsBySchema[schema.name] = views;
+        functionsBySchema[schema.name] = functions;
+        typesBySchema[schema.name] = types;
+      }
+
+      const objectsToLoad = [
+        ...Object.entries(tablesBySchema).flatMap(([schema, tables]) =>
+          tables.map((t) => ({ schema, name: t.name }))
+        ),
+        ...Object.entries(viewsBySchema).flatMap(([schema, views]) =>
+          views.map((v) => ({ schema, name: v.name }))
+        ),
+      ];
+
+      await Promise.all(
+        objectsToLoad.map(async ({ schema, name }) => {
+          const key = `${schema}.${name}`;
+          const [cols, idxs] = await Promise.all([
+            invoke<ColumnInfo[]>("get_columns", { connectionId, schema, table: name }),
+            invoke<IndexInfo[]>("get_indexes", { connectionId, schema, table: name }),
+          ]);
+          columns[key] = cols;
+          indexes[key] = idxs;
+        })
+      );
+
+      set((state) => {
+        const current = state.metadataByConnection[connectionId] ?? createEmptyMetadataSnapshot();
+        return {
+          metadataByConnection: {
+            ...state.metadataByConnection,
+            [connectionId]: {
+              ...current,
+              schemas,
+              tablesBySchema,
+              viewsBySchema,
+              functionsBySchema,
+              typesBySchema,
+              columns,
+              indexes,
+              version: current.version + 1,
+              isLoading: false,
+              lastRefreshedAt: Date.now(),
+            },
+          },
+        };
+      });
+
+      if (get().activeConnectionId === connectionId) {
+        applyConnectionMetadataToLegacyState(connectionId);
+      }
+      return true;
+    })();
+
+    const timeoutPromise = new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), timeoutMs);
+    });
+
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    if (result === "timeout") {
+      return { ready: false, timedOut: true };
+    }
+    return { ready: true, timedOut: false };
   },
 
   refreshConnectionMetadata: async (connectionId: string) => {
@@ -654,59 +906,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().showToast("error", "Connection is not active");
       return;
     }
+    set((state) => ({
+      metadataByConnection: {
+        ...state.metadataByConnection,
+        [connectionId]: {
+          ...(state.metadataByConnection[connectionId] ?? createEmptyMetadataSnapshot()),
+          schemas: [],
+          tablesBySchema: {},
+          viewsBySchema: {},
+          functionsBySchema: {},
+          typesBySchema: {},
+          columns: {},
+          indexes: {},
+          isLoading: false,
+        },
+      },
+    }));
+    bumpConnectionMetadataVersion(connectionId);
 
-    // Only refresh if this is the active connection
-    if (activeConnectionId !== connectionId) {
-      get().setActiveConnection(connectionId);
-      return;
+    if (activeConnectionId === connectionId) {
+      set({
+        schemas: [],
+        tablesBySchema: {},
+        viewsBySchema: {},
+        functionsBySchema: {},
+        typesBySchema: {},
+        columns: {},
+        indexes: {},
+        expandedSchemas: new Set(),
+        expandedTables: new Set(),
+        expandedViews: new Set(),
+        expandedIndexFolders: new Set(),
+        isDbExpanded: true,
+        selectedSchemaObject: null,
+        schemaObjectDetails: null,
+      });
     }
 
-    // Clear all cached metadata
-    set({
-      schemas: [],
-      tablesBySchema: {},
-      viewsBySchema: {},
-      functionsBySchema: {},
-      typesBySchema: {},
-      columns: {},
-      indexes: {},
-      expandedSchemas: new Set(),
-      expandedTables: new Set(),
-      expandedViews: new Set(),
-      expandedIndexFolders: new Set(),
-      isDbExpanded: true,
-      selectedSchemaObject: null,
-      schemaObjectDetails: null,
-    });
-
-    // Reload schemas and scripts
     await Promise.all([
-      get().loadSchemas(),
+      get().ensureMetadataReady(connectionId, 6000),
       get().loadScripts(connectionId),
       get().loadSavedResults(connectionId),
     ]);
 
-    // Eager load tables/views for all schemas (for autocomplete)
-    const { schemas } = get();
-    await Promise.all(
-      schemas.map((schema) => get().loadTablesForSchema(schema.name))
-    );
-
-    // Eager load columns for all tables/views (for autocomplete)
-    const { tablesBySchema, viewsBySchema } = get();
-    const columnLoadPromises: Promise<void>[] = [];
-    for (const [schemaName, tables] of Object.entries(tablesBySchema)) {
-      for (const table of tables) {
-        columnLoadPromises.push(get().loadColumns(table.name, schemaName));
-      }
+    if (activeConnectionId === connectionId) {
+      applyConnectionMetadataToLegacyState(connectionId);
     }
-    for (const [schemaName, views] of Object.entries(viewsBySchema)) {
-      for (const view of views) {
-        columnLoadPromises.push(get().loadColumns(view.name, schemaName));
-      }
-    }
-    // Load columns in parallel
-    await Promise.all(columnLoadPromises);
 
     get().showToast("success", "Metadata refreshed");
   },
@@ -1292,7 +1537,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   popOutResultsToTab: () => {
-    const { queryResults, querySql, previewSource, activeConnectionId, openResultTabs } = get();
+    const { queryResults, querySql, previewSource, activeConnectionId, openResultTabs, connections } = get();
     if (!queryResults || !activeConnectionId) return;
     const sql = (querySql ?? "").trim();
     if (!sql) {
@@ -1307,19 +1552,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }, 0);
     const nextIndex = maxResultIndex + 1;
     const tabId = `result-${crypto.randomUUID()}`;
+    const connection = connections.find((c) => c.id === activeConnectionId);
+    const now = Date.now();
     const tab: ResultTabData = {
       id: tabId,
       name: `Result ${nextIndex}`,
       connectionId: activeConnectionId,
       sqlCell: { id: `${tabId}-cell`, sql, proposed_sql: null },
       queryResults,
+      lastExecutedAt: now,
+      lastExecutedDatabase: connection?.database ?? null,
       previewSource: previewSource ?? null,
       resultSource: "live",
       savedResultId: null,
       isQueryCollapsed: true,
       isStale: false,
       isDirty: true,
-      createdAt: Date.now(),
+      version: 1,
+      createdAt: now,
     };
 
     set((state) => ({
@@ -1337,6 +1587,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               ...tab,
               sqlCell: { ...tab.sqlCell, sql, proposed_sql: null },
               isDirty: true,
+              version: tab.version + 1,
             }
           : tab
       ),
@@ -1371,6 +1622,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 proposed_sql: null,
               },
               isDirty: true,
+              version: t.version + 1,
             }
           : t
       ),
@@ -1464,6 +1716,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         connectionId,
         savedResultId,
       });
+      const connection = get().connections.find((c) => c.id === connectionId);
 
       const tabId = `result-${saved.id}`;
       const tab: ResultTabData = {
@@ -1472,12 +1725,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         connectionId,
         sqlCell: { id: `${tabId}-cell`, sql: saved.sql, proposed_sql: null },
         queryResults: saved.query_result,
+        lastExecutedAt: saved.updated_at,
+        lastExecutedDatabase: connection?.database ?? null,
         previewSource: saved.preview_source,
         resultSource: "saved",
         savedResultId: saved.id,
         isQueryCollapsed: true,
         isStale: false,
         isDirty: false,
+        version: 1,
         createdAt: saved.created_at,
       };
 
@@ -1495,10 +1751,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   refreshResultTab: async (tabId: string) => {
-    const tab = get().openResultTabs.find((t) => t.id === tabId);
+    const state = get();
+    const tab = state.openResultTabs.find((t) => t.id === tabId);
     if (!tab) return;
     const sql = tab.sqlCell.sql.trim();
     if (!sql) return;
+    const connection = state.connections.find((c) => c.id === tab.connectionId);
+    const now = Date.now();
 
     set({ isExecuting: true, queryError: null });
     try {
@@ -1513,8 +1772,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             ? {
                 ...t,
                 queryResults: queryResult,
+                lastExecutedAt: now,
+                lastExecutedDatabase: connection?.database ?? tab.lastExecutedDatabase ?? null,
                 isStale: false,
                 isDirty: true,
+                version: t.version + 1,
               }
             : t
         ),
@@ -1590,6 +1852,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           connection_id: string;
           is_dirty: boolean;
           is_query_collapsed?: boolean;
+          last_executed_at?: number | null;
+          last_executed_database?: string | null;
           created_at: number;
         }>;
         active_tab_id: string | null;
@@ -1616,12 +1880,18 @@ export const useAppStore = create<AppState>((set, get) => ({
                   connectionId: tab.connection_id,
                   sqlCell: { id: `${tabId}-cell`, sql: tab.content || saved.sql, proposed_sql: null },
                   queryResults: saved.query_result,
+                  lastExecutedAt: tab.last_executed_at ?? saved.updated_at,
+                  lastExecutedDatabase:
+                    tab.last_executed_database ??
+                    get().connections.find((c) => c.id === tab.connection_id)?.database ??
+                    null,
                   previewSource: saved.preview_source,
                   resultSource: "saved",
                   savedResultId,
                   isQueryCollapsed: tab.is_query_collapsed ?? true,
                   isStale: false,
                   isDirty: tab.is_dirty ?? false,
+                  version: 1,
                   createdAt: tab.created_at,
                 });
                 continue;
@@ -1636,12 +1906,15 @@ export const useAppStore = create<AppState>((set, get) => ({
               connectionId: tab.connection_id,
               sqlCell: { id: `${tabId}-cell`, sql: tab.content || "", proposed_sql: null },
               queryResults: null,
+              lastExecutedAt: tab.last_executed_at ?? null,
+              lastExecutedDatabase: tab.last_executed_database ?? null,
               previewSource: null,
               resultSource: savedResultId ? "saved" : "live",
               savedResultId,
               isQueryCollapsed: tab.is_query_collapsed ?? true,
               isStale: true,
               isDirty: tab.is_dirty ?? true,
+              version: 1,
               createdAt: tab.created_at,
             });
             continue;
@@ -1734,6 +2007,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           connection_id: tab.connectionId,
           is_dirty: tab.isDirty,
           is_query_collapsed: tab.isQueryCollapsed,
+          last_executed_at: tab.lastExecutedAt,
+          last_executed_database: tab.lastExecutedDatabase,
           created_at: tab.createdAt,
         })),
       ],
@@ -2048,4 +2323,5 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleResultsPanelMinimized: () => {
     set((state) => ({ isResultsPanelMinimized: !state.isResultsPanelMinimized }));
   },
-}));
+  });
+});

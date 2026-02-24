@@ -11,7 +11,7 @@ import {
   listFunctions,
   findJoinPath,
 } from "./schemaTools";
-import { executeReadonlySql, getQueryHistory, lintSqlSafety } from "./queryTools";
+import { executeReadonlySql, getQueryHistory, lintSqlSafety, readResults } from "./queryTools";
 import {
   getEditorContext,
   insertSql,
@@ -30,6 +30,7 @@ export const allTools = {
   find_join_path: findJoinPath,
   execute_readonly_sql: executeReadonlySql,
   get_query_history: getQueryHistory,
+  read_results: readResults,
   lint_sql_safety: lintSqlSafety,
   get_editor_context: getEditorContext,
   insert_sql: insertSql,

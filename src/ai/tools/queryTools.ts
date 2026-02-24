@@ -8,6 +8,43 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
 import type { AgentContext } from "../agent";
 
+function resolveConnection(
+  ctx: AgentContext | undefined,
+  requestedConnectionId?: string
+): { connectionId: string; crossConnection: boolean } {
+  const state = useAppStore.getState();
+  const defaultConnectionId = ctx?.executionContext.targetConnectionId ?? state.activeConnectionId;
+  const connectionId = requestedConnectionId ?? defaultConnectionId;
+  if (!connectionId) {
+    throw new Error("No resolved database connection");
+  }
+  return {
+    connectionId,
+    crossConnection: Boolean(
+      requestedConnectionId &&
+      ctx?.executionContext.targetConnectionId &&
+      requestedConnectionId !== ctx.executionContext.targetConnectionId
+    ),
+  };
+}
+
+function assertMetadataFresh(
+  ctx: AgentContext | undefined,
+  connectionId: string,
+  requestedConnectionId?: string
+) {
+  const execution = ctx?.executionContext;
+  if (!execution || requestedConnectionId || execution.targetConnectionId !== connectionId) return;
+  const expected = execution.metadataVersion;
+  if (expected == null) return;
+  const current = useAppStore.getState().getConnectionMetadataVersion(connectionId);
+  if (current > expected) {
+    throw new Error(
+      `Context snapshot is stale for connection ${connectionId}. Expected metadata v${expected}, current is v${current}. Please retry.`
+    );
+  }
+}
+
 // --- execute_readonly_sql ---
 // This tool requires user approval. The approval flow is handled by awaiting
 // a Promise inside execute() — the onRequestApproval callback is passed
@@ -17,9 +54,15 @@ export const executeReadonlySql = tool({
     "Execute a read-only SQL query against the connected database. This requires user approval before execution. Use this to explore the data, get a deeper understanding of the schema, performance issues to give the user the best possible answer. The query MUST be read-only (SELECT, EXPLAIN, SHOW, DESCRIBE). Do not use INSERT, UPDATE, DELETE, DROP, or any DDL statements. Always keep in mind that this query should be lightweight, if you are trying out a risky/expensive query, warn the user to its effect. Make sure that the query does not result in TOO MANY rows, that can pollute the context",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to execute. Must be a read-only query."),
+    connection_id: z
+      .string()
+      .optional()
+      .describe("Optional explicit connection ID. Defaults to run context connection."),
   }),
-  execute: async ({ sql }, { toolCallId, experimental_context, abortSignal }) => {
+  execute: async ({ sql, connection_id }, { toolCallId, experimental_context, abortSignal }) => {
     const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnection(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
 
     // Request user approval before executing
     if (ctx?.onRequestApproval) {
@@ -27,7 +70,7 @@ export const executeReadonlySql = tool({
         ctx.onRequestApproval!({
           toolCallId,
           toolName: "execute_readonly_sql",
-          sql,
+          sql: crossConnection ? `${sql}\n-- Cross-connection target: ${connectionId}` : sql,
           resolve,
         });
       });
@@ -41,14 +84,10 @@ export const executeReadonlySql = tool({
       }
     }
 
-    const { activeConnectionId, connections } = useAppStore.getState();
-    if (!activeConnectionId) {
-      throw new Error("No active database connection");
-    }
-
-    const connection = connections.find((c) => c.id === activeConnectionId);
+    const { connections } = useAppStore.getState();
+    const connection = connections.find((c) => c.id === connectionId);
     if (!connection?.is_connected) {
-      throw new Error("Database is not connected");
+      throw new Error(`Database is not connected for connection ${connectionId}`);
     }
 
     const result = await invoke<{
@@ -57,7 +96,7 @@ export const executeReadonlySql = tool({
       row_count: number;
       execution_time_ms: number;
     }>("execute_query", {
-      connectionId: activeConnectionId,
+      connectionId,
       sql,
     });
 
@@ -82,6 +121,9 @@ export const executeReadonlySql = tool({
     }
 
     output += `\nExecution time: ${result.execution_time_ms}ms`;
+    if (crossConnection) {
+      output += `\nConnection: ${connectionId} (cross-connection)`;
+    }
     return output;
   },
 });
@@ -110,6 +152,101 @@ export const getQueryHistory = tool({
     }));
 
     return JSON.stringify(entries, null, 2);
+  },
+});
+
+// --- read_results ---
+export const readResults = tool({
+  description:
+    "Read query result rows from an open result tab in batches. Use this to inspect already-executed results without re-running SQL.",
+  inputSchema: z.object({
+    tab_id: z
+      .string()
+      .optional()
+      .describe("Optional open result tab ID. Defaults to the currently active result tab."),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("0-based row offset for pagination. Default is 0."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe("Maximum rows to return in one batch (1-500). Default is 100."),
+  }),
+  execute: async ({ tab_id, offset = 0, limit = 100 }) => {
+    const state = useAppStore.getState();
+    const activeResultTabId = state.activeEditorTab?.kind === "result" ? state.activeEditorTab.id : null;
+    const tabId = tab_id ?? activeResultTabId;
+
+    if (!tabId) {
+      return "No result tab is active. Open a result tab or pass tab_id.";
+    }
+
+    const tab = state.openResultTabs.find((t) => t.id === tabId);
+    if (!tab) {
+      const openTabIds = state.openResultTabs.map((t) => t.id);
+      return `Result tab ${tabId} is not open. Open result tabs: ${openTabIds.join(", ") || "none"}.`;
+    }
+
+    if (!tab.queryResults) {
+      return JSON.stringify(
+        {
+          tab: {
+            id: tab.id,
+            name: tab.name,
+            connection_id: tab.connectionId,
+            sql: tab.sqlCell.sql,
+            last_executed_at: tab.lastExecutedAt ? new Date(tab.lastExecutedAt).toISOString() : null,
+            last_executed_database: tab.lastExecutedDatabase,
+          },
+          error: "No query results are loaded for this tab.",
+        },
+        null,
+        2
+      );
+    }
+
+    const connection = state.connections.find((c) => c.id === tab.connectionId);
+    const columns = tab.queryResults.columns.map((c) => c.name);
+    const totalRows = tab.queryResults.rows.length;
+    const batchRows = tab.queryResults.rows.slice(offset, offset + limit);
+    const rows = batchRows.map((row, rowIndex) => {
+      const rowObject: Record<string, unknown> = { _row_index: offset + rowIndex };
+      columns.forEach((column, columnIndex) => {
+        rowObject[column] = row[columnIndex];
+      });
+      return rowObject;
+    });
+
+    return JSON.stringify(
+      {
+        tab: {
+          id: tab.id,
+          name: tab.name,
+          connection_id: tab.connectionId,
+          connection_name: connection?.name ?? null,
+          database: tab.lastExecutedDatabase ?? connection?.database ?? null,
+          sql: tab.sqlCell.sql,
+          last_executed_at: tab.lastExecutedAt ? new Date(tab.lastExecutedAt).toISOString() : null,
+        },
+        batch: {
+          offset,
+          limit,
+          returned_rows: rows.length,
+          total_rows: totalRows,
+          has_more: offset + rows.length < totalRows,
+        },
+        columns,
+        rows,
+      },
+      null,
+      2
+    );
   },
 });
 

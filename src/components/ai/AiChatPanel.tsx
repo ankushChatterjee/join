@@ -21,12 +21,6 @@ import { ChatMessageComponent } from "./ChatMessage";
 import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/providers";
 import { useShallow } from "zustand/react/shallow";
 
-const QUICK_PROMPTS = [
-  "Summarize this schema and suggest naming improvements",
-  "Help me write a query with safe joins and clear filters",
-  "Review my SQL and suggest performance optimizations",
-];
-
 function formatSessionTimestamp(timestamp: number): string {
   const now = Date.now();
   const minutes = Math.floor((now - timestamp) / 60000);
@@ -435,11 +429,6 @@ function AiChatPanel() {
   const inputDisabled = isStreaming && pendingApprovals.length === 0;
   const canSend = inputText.trim().length > 0 && !isStreaming;
 
-  const handlePromptClick = (prompt: string) => {
-    setInputText(prompt);
-    inputRef.current?.focus();
-  };
-
   return (
     <div className="ai-chat-panel relative flex h-full flex-col border-l border-base-750 bg-base-900/95">
       {/* Header */}
@@ -498,24 +487,8 @@ function AiChatPanel() {
         className="sidebar-scroll flex-1 scrollbar-stable"
       >
         {messages.length === 0 && !isStreaming ? (
-          <div className="mx-auto flex h-full w-full max-w-[760px] flex-col items-center justify-center px-4 pb-12">
-            <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-sm border border-base-700 bg-base-850">
-              <Sparkles className="h-4 w-4 text-accent-400" />
-            </div>
-            <p className="max-w-[250px] text-center text-[12px] leading-relaxed text-base-300">
-              Ask about your database, write queries, or explore schema
-            </p>
-            <div className="mt-4 grid w-full max-w-[330px] gap-1.5">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => handlePromptClick(prompt)}
-                  className="rounded-sm border border-base-700 bg-base-850 px-2.5 py-1.5 text-left text-[11px] text-base-300 outline-none transition-colors-fast hover:border-base-600 hover:bg-base-800 hover:text-base-100"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+          <div className="mx-auto flex h-full w-full items-center justify-center px-4 pb-12">
+            <Sparkles className="h-4 w-4 text-accent-400" />
           </div>
         ) : (
           <div ref={messagesContentRef} className="mx-auto w-full max-w-[760px] px-2.5 py-3">

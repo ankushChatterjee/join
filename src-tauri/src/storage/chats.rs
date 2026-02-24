@@ -7,6 +7,22 @@ use super::ConfigError;
 /// A single chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatMessageMetadata {
+    #[serde(default)]
+    pub connection_id: Option<String>,
+    #[serde(default)]
+    pub metadata_version: Option<i64>,
+    #[serde(default)]
+    pub result_tab_id: Option<String>,
+    #[serde(default)]
+    pub result_version: Option<i64>,
+    #[serde(default)]
+    pub captured_at: Option<i64>,
+}
+
+/// A single chat message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatToolCall {
     pub id: String,
     pub name: String,
@@ -30,6 +46,9 @@ pub struct ChatMessage {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ChatMessageMetadata>,
 }
 
 /// A chat session with metadata and messages
@@ -96,7 +115,9 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
                         });
                     }
                 }
-                Err(_) => continue,
+                Err(_) => {
+                    continue;
+                }
             }
         }
     }
@@ -143,4 +164,3 @@ pub fn delete_chat_session(session_id: &str) -> Result<(), ConfigError> {
 
     Ok(())
 }
-

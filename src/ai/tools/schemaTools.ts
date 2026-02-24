@@ -6,6 +6,7 @@ import { tool } from "ai";
 import { z } from "zod/v4";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
+import type { AgentContext } from "../agent";
 import type {
   SchemaInfo,
   TableInfo,
@@ -16,12 +17,41 @@ import type {
   FunctionInfo,
 } from "@/stores/types";
 
-function getConnectionId(): string {
+function resolveConnectionId(
+  ctx?: AgentContext,
+  requestedConnectionId?: string
+): { connectionId: string; crossConnection: boolean } {
   const { activeConnectionId } = useAppStore.getState();
-  if (!activeConnectionId) {
-    throw new Error("No active database connection");
+  const defaultConnectionId = ctx?.executionContext.targetConnectionId ?? activeConnectionId;
+  const connectionId = requestedConnectionId ?? defaultConnectionId;
+  if (!connectionId) {
+    throw new Error("No resolved database connection");
   }
-  return activeConnectionId;
+  return {
+    connectionId,
+    crossConnection: Boolean(
+      requestedConnectionId &&
+      ctx?.executionContext.targetConnectionId &&
+      requestedConnectionId !== ctx.executionContext.targetConnectionId
+    ),
+  };
+}
+
+function assertMetadataFresh(
+  ctx: AgentContext | undefined,
+  connectionId: string,
+  requestedConnectionId?: string
+) {
+  const execution = ctx?.executionContext;
+  if (!execution || requestedConnectionId || execution.targetConnectionId !== connectionId) return;
+  const expected = execution.metadataVersion;
+  if (expected == null) return;
+  const current = useAppStore.getState().getConnectionMetadataVersion(connectionId);
+  if (current > expected) {
+    throw new Error(
+      `Context snapshot is stale for connection ${connectionId}. Expected metadata v${expected}, current is v${current}. Please retry.`
+    );
+  }
 }
 
 interface TableRef {
@@ -60,15 +90,19 @@ function tableKey(ref: TableRef): string {
 export const listSchemas = tool({
   description:
     "List all schemas in the currently connected database. Returns schema names.",
-  inputSchema: z.object({}),
-  execute: async () => {
-    const connectionId = getConnectionId();
+  inputSchema: z.object({
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
+  }),
+  execute: async ({ connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
     const schemas = await invoke<SchemaInfo[]>("get_schemas", { connectionId });
-    return JSON.stringify(
-      schemas.map((s) => s.name),
-      null,
-      2
-    );
+    return JSON.stringify({
+      connection_id: connectionId,
+      cross_connection: crossConnection,
+      schemas: schemas.map((s) => s.name),
+    }, null, 2);
   },
 });
 
@@ -90,9 +124,12 @@ export const findJoinPath = tool({
       .max(6)
       .optional()
       .describe("Maximum joins to traverse (default 4, max 6)"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ from_table, to_table, schema, max_hops }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ from_table, to_table, schema, max_hops, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
     const hopLimit = max_hops ?? 4;
 
     const schemas = schema
@@ -277,6 +314,8 @@ export const findJoinPath = tool({
 
     return JSON.stringify(
       {
+        connection_id: connectionId,
+        cross_connection: crossConnection,
         from: startKey,
         to: goalKey,
         found: true,
@@ -296,18 +335,21 @@ export const listTables = tool({
     "List all tables in a specific schema. Returns table names.",
   inputSchema: z.object({
     schema: z.string().describe("The schema name to list tables from"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ schema }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ schema, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
     const tables = await invoke<TableInfo[]>("get_tables", {
       connectionId,
       schema,
     });
-    return JSON.stringify(
-      tables.map((t) => t.name),
-      null,
-      2
-    );
+    return JSON.stringify({
+      connection_id: connectionId,
+      cross_connection: crossConnection,
+      tables: tables.map((t) => t.name),
+    }, null, 2);
   },
 });
 
@@ -318,9 +360,12 @@ export const describeTable = tool({
   inputSchema: z.object({
     schema: z.string().describe("The schema name"),
     table: z.string().describe("The table name"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ schema, table }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ schema, table, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
 
     const [columns, indexes, foreignKeys] = await Promise.all([
       invoke<ColumnInfo[]>("get_columns", {
@@ -342,6 +387,8 @@ export const describeTable = tool({
 
     return JSON.stringify(
       {
+        connection_id: connectionId,
+        cross_connection: crossConnection,
         table: `${schema}.${table}`,
         columns: columns.map((c) => ({
           name: c.name,
@@ -371,18 +418,21 @@ export const listViews = tool({
   description: "List all views in a specific schema.",
   inputSchema: z.object({
     schema: z.string().describe("The schema name to list views from"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ schema }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ schema, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
     const views = await invoke<ViewInfo[]>("get_views", {
       connectionId,
       schema,
     });
-    return JSON.stringify(
-      views.map((v) => v.name),
-      null,
-      2
-    );
+    return JSON.stringify({
+      connection_id: connectionId,
+      cross_connection: crossConnection,
+      views: views.map((v) => v.name),
+    }, null, 2);
   },
 });
 
@@ -393,9 +443,12 @@ export const describeView = tool({
   inputSchema: z.object({
     schema: z.string().describe("The schema name"),
     view: z.string().describe("The view name"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ schema, view }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ schema, view, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
 
     const columns = await invoke<ColumnInfo[]>("get_columns", {
       connectionId,
@@ -405,6 +458,8 @@ export const describeView = tool({
 
     return JSON.stringify(
       {
+        connection_id: connectionId,
+        cross_connection: crossConnection,
         view: `${schema}.${view}`,
         columns: columns.map((c) => ({
           name: c.name,
@@ -423,18 +478,25 @@ export const listFunctions = tool({
   description: "List all functions/stored procedures in a specific schema.",
   inputSchema: z.object({
     schema: z.string().describe("The schema name to list functions from"),
+    connection_id: z.string().optional().describe("Optional explicit connection ID"),
   }),
-  execute: async ({ schema }) => {
-    const connectionId = getConnectionId();
+  execute: async ({ schema, connection_id }, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const { connectionId, crossConnection } = resolveConnectionId(ctx, connection_id);
+    assertMetadataFresh(ctx, connectionId, connection_id);
     const functions = await invoke<FunctionInfo[]>("get_functions", {
       connectionId,
       schema,
     });
     return JSON.stringify(
-      functions.map((f) => ({
-        name: f.name,
-        returnType: f.return_type,
-      })),
+      {
+        connection_id: connectionId,
+        cross_connection: crossConnection,
+        functions: functions.map((f) => ({
+          name: f.name,
+          returnType: f.return_type,
+        })),
+      },
       null,
       2
     );

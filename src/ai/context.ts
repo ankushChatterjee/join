@@ -8,6 +8,7 @@ import {
   getFullEditorContent,
   getCursorPosition,
 } from "@/components/editor/editorUtils";
+import type { AgentExecutionContext } from "./executionContext";
 
 /**
  * Capture the current editor / cell state as a context block to be appended
@@ -16,10 +17,14 @@ import {
  *
  * Returns an empty string when there is nothing useful to include.
  */
-export function buildMessageContext(): string {
+export function buildMessageContext(executionContext?: AgentExecutionContext): string {
   const state = useAppStore.getState();
   const parts: string[] = [];
   let hasContext = false;
+  const contextConnectionId = executionContext?.targetConnectionId ?? state.activeConnectionId;
+  const contextConnection = contextConnectionId
+    ? state.connections.find((c) => c.id === contextConnectionId) ?? null
+    : null;
 
   const schemaFocusParts: string[] = [];
   if (state.activeSchema) {
@@ -56,8 +61,12 @@ export function buildMessageContext(): string {
   const activeScript = state.openScripts.find((s) => s.id === state.activeScriptId);
 
   if (activeResultTab) {
+    const resultTabConnection = state.connections.find((c) => c.id === activeResultTab.connectionId);
     parts.push(`**Editor Mode**: Result Tab`);
     parts.push(`**Result Tab**: ${activeResultTab.name} (ID: ${activeResultTab.id})`);
+    parts.push(
+      `**Result Tab Database**: ${resultTabConnection?.database ?? activeResultTab.lastExecutedDatabase ?? "unknown"} (Connection ID: ${activeResultTab.connectionId})`
+    );
     if (activeResultTab.savedResultId) {
       parts.push(`**Saved Result ID**: ${activeResultTab.savedResultId}`);
     }
@@ -65,6 +74,9 @@ export function buildMessageContext(): string {
       parts.push(`**Preview Source**: ${activeResultTab.previewSource}`);
     }
     parts.push(`**Result Query Cell**:\n\`\`\`sql\n${activeResultTab.sqlCell.sql}\n\`\`\``);
+    parts.push(
+      `**Result Last Executed At**: ${activeResultTab.lastExecutedAt ? new Date(activeResultTab.lastExecutedAt).toISOString() : "never"}`
+    );
     if (activeResultTab.queryResults) {
       parts.push(
         `**Result Stats**: ${activeResultTab.queryResults.row_count} rows, ${activeResultTab.queryResults.execution_time_ms}ms`
@@ -122,6 +134,23 @@ export function buildMessageContext(): string {
     hasContext = true;
   }
 
+  if (executionContext) {
+    const stamp = [
+      `- **Connection**: \`${executionContext.targetConnectionId ?? "none"}\``,
+      `- **Connection Dialect**: \`${executionContext.targetConnectionDialect ?? "unknown"}\``,
+      `- **Connection Database**: \`${contextConnection?.database ?? "unknown"}\``,
+      `- **Metadata Version**: \`${executionContext.metadataVersion ?? "unknown"}\``,
+      `- **Result Tab ID**: \`${executionContext.activeResultTabId ?? "none"}\``,
+      `- **Result Version**: \`${executionContext.resultVersion ?? "unknown"}\``,
+      `- **Captured At**: \`${new Date(executionContext.capturedAt).toISOString()}\``,
+    ];
+    if (executionContext.metadataWarning) {
+      stamp.push(`- **Metadata Warning**: ${executionContext.metadataWarning}`);
+    }
+    parts.push(`**Execution Context Stamp**:\n${stamp.join("\n")}`);
+    hasContext = true;
+  }
+
   if (!hasContext) return "";
   return `\n---\n**Context at time of message**\n${parts.join("\n")}`;
 }
@@ -130,71 +159,50 @@ export function buildMessageContext(): string {
  * Build the system prompt with full context about the current state.
  * This includes connection info, schema summary, editor state, etc.
  */
-export function buildSystemPrompt(): string {
-  const state = useAppStore.getState();
-
+export function buildSystemPrompt(executionContext?: AgentExecutionContext): string {
   const parts: string[] = [];
+  const state = useAppStore.getState();
+  const activeResultTab =
+    state.activeEditorTab?.kind === "result"
+      ? state.openResultTabs.find((t) => t.id === state.activeEditorTab?.id) ?? null
+      : null;
+  const activeResultConnection = activeResultTab
+    ? state.connections.find((c) => c.id === activeResultTab.connectionId) ?? null
+    : null;
 
   // --- Role ---
   parts.push(
     `You are a SQL expert assistant for "Join", a database client application. Your goal is to help users write efficient, correct SQL queries, help users analyse and understand queries and explore their database schema.`
   );
 
-  // --- Connection Info ---
-  const connection = state.connections.find(
-    (c) => c.id === state.activeConnectionId
+  parts.push(
+    `\nConnection-specific details (dialect, DB, active result tab context) are provided per message in the "Execution Context Stamp".`
   );
-  if (connection) {
-    parts.push(`\n## Current Connection`);
-    parts.push(`- **Name**: ${connection.name}`);
-    parts.push(`- **Type**: ${connection.db_type.toUpperCase()}`);
-    if (connection.host) parts.push(`- **Host**: ${connection.host}`);
-    parts.push(`- **Database**: ${connection.database}`);
-    parts.push(
-      `- **Status**: ${connection.is_connected ? "Connected" : "Disconnected"}`
-    );
-    parts.push(
-      `\nAlways write SQL appropriate for the ${connection.db_type.toUpperCase()} dialect.`
-    );
-  } else {
-    parts.push(
-      `\nNo active database connection. You can still help with general SQL questions.`
-    );
+
+  parts.push(`\n## Runtime Context`);
+  parts.push(`- Use tool calls to fetch fresh schema/data details instead of relying on potentially stale prompt state.`);
+  if (executionContext?.targetConnectionId) {
+    parts.push(`- Default target connection ID: \`${executionContext.targetConnectionId}\``);
   }
-
-  // --- Schema Summary (names only — AI uses describe_table for column details) ---
-  if (state.schemas.length > 0) {
-    parts.push(`\n## Database Schema Summary`);
-    parts.push(`Only object names are listed below. Use the \`describe_table\` tool to get column details for any table or view when needed.\n`);
-
-    for (const schema of state.schemas) {
-      const tables = state.tablesBySchema[schema.name] || [];
-      const views = state.viewsBySchema[schema.name] || [];
-      const functions = state.functionsBySchema[schema.name] || [];
-      const types = state.typesBySchema[schema.name] || [];
-
-      if (tables.length === 0 && views.length === 0 && functions.length === 0 && types.length === 0) continue;
-
-      parts.push(`### Schema: \`${schema.name}\``);
-
-      if (tables.length > 0) {
-        parts.push(`**Tables**: ${tables.map((t) => `\`${t.name}\``).join(", ")}`);
-      }
-      if (views.length > 0) {
-        parts.push(`**Views**: ${views.map((v) => `\`${v.name}\``).join(", ")}`);
-      }
-      if (functions.length > 0) {
-        parts.push(`**Functions**: ${functions.map((f) => `\`${f.name}\``).join(", ")}`);
-      }
-      if (types.length > 0) {
-        parts.push(`**Types**: ${types.map((t) => `\`${t.name}\``).join(", ")}`);
-      }
-    }
+  if (executionContext?.metadataVersion != null) {
+    parts.push(`- Expected metadata version for this run: \`${executionContext.metadataVersion}\``);
   }
-
-  // Note: Editor/cell context is NOT included here — it is captured at send time
-  // via buildMessageContext() and appended to each user message individually.
-  // This ensures the context snapshot is tied to the message, not shared globally.
+  if (executionContext?.metadataWarning) {
+    parts.push(`- Warning: ${executionContext.metadataWarning}`);
+  }
+  parts.push(
+    `- Active result tab open: ${activeResultTab ? `yes (\`${activeResultTab.name}\`, id \`${activeResultTab.id}\`)` : "no"}`
+  );
+  if (activeResultTab) {
+    parts.push(`- Active result tab query:\n\`\`\`sql\n${activeResultTab.sqlCell.sql}\n\`\`\``);
+    parts.push(
+      `- Active result tab last executed at: \`${activeResultTab.lastExecutedAt ? new Date(activeResultTab.lastExecutedAt).toISOString() : "never"}\``
+    );
+    parts.push(
+      `- Active result tab database at last execution: \`${activeResultTab.lastExecutedDatabase ?? activeResultConnection?.database ?? "unknown"}\``
+    );
+    parts.push(`- Active result tab connection id: \`${activeResultTab.connectionId}\``);
+  }
 
   // --- Instructions ---
   parts.push(`\n## Instructions`);
@@ -203,6 +211,9 @@ export function buildSystemPrompt(): string {
   );
   parts.push(
     `- Treat \`Schema Tree Focus\` context attached to user messages as high-priority signals about what the user is working on.`
+  );
+  parts.push(
+    `- When writing SQL, ALWAYS BE SURE OF THE columsn being sed, there are tools to describe a table, do not put any SQL without being unsure of the metadata.`
   );
   parts.push(
     `- When writing SQL, always use the correct dialect for the connected database.`
@@ -214,7 +225,13 @@ export function buildSystemPrompt(): string {
     `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected).`
   );
   parts.push(
-    `- The \`execute_readonly_sql\` tool requires user approval and should only be used when truly needed to verify data or test queries. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
+    `- The \`execute_readonly_sql\` tool requires user approval and should be used when needed to verify data or test queries or understand the schema/data better. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
+  );
+  parts.push(
+    `- Use \`read_results\` to inspect existing rows from an open result tab in batches before deciding to run a new query.`
+  );
+  parts.push(
+    `- Tools may accept \`connection_id\`; when omitted, use the run's default connection.`
   );
   parts.push(
     `- When writing any SQL, via insert cell or replace content, always view all the SQL as a whole, wven when doing multiple tool calls to do each of them. Analyse if it makes sense to generate the whole SQL.`

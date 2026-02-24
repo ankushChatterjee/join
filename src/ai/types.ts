@@ -20,6 +20,14 @@ export interface ToolCallDisplay {
   status: "pending" | "running" | "completed" | "denied";
 }
 
+export interface ChatMessageMetadata {
+  connectionId?: string | null;
+  metadataVersion?: number | null;
+  resultTabId?: string | null;
+  resultVersion?: number | null;
+  capturedAt?: number | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
@@ -27,6 +35,7 @@ export interface ChatMessage {
   toolCalls?: ToolCallDisplay[];
   timestamp: number;
   isError?: boolean;
+  metadata?: ChatMessageMetadata;
 }
 
 export interface PendingApproval {
