@@ -1,5 +1,5 @@
-mod db;
-mod storage;
+pub mod db;
+pub mod storage;
 
 use db::{ConnectionConfig, DatabaseType, QueryResult};
 use serde::{Deserialize, Serialize};
@@ -572,4 +572,218 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::de::DeserializeOwned;
+    use serde_json::{json, Value};
+    use std::fmt::Debug;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::webview::InvokeRequest;
+
+    fn setup_temp_config() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("join-lib-tests-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        unsafe {
+            std::env::set_var("JOIN_CONFIG_DIR", &dir);
+        }
+        dir
+    }
+
+    fn build_test_app() -> tauri::App<tauri::test::MockRuntime> {
+        mock_builder()
+            .invoke_handler(tauri::generate_handler![
+                add_connection,
+                connect,
+                disconnect,
+                get_schemas,
+                get_tables,
+                execute_query,
+                export_to_csv,
+                get_env_var,
+            ])
+            .build(mock_context(noop_assets()))
+            .expect("build app")
+    }
+
+    fn invoke_ok<T, W>(webview: &W, cmd: &str, payload: Value) -> T
+    where
+        T: DeserializeOwned + Debug,
+        W: AsRef<tauri::Webview<tauri::test::MockRuntime>>,
+    {
+        let request = InvokeRequest {
+            cmd: cmd.into(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: "http://tauri.localhost".parse().expect("url"),
+            body: InvokeBody::Json(payload),
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_string(),
+        };
+        let response = tauri::test::get_ipc_response(webview, request).expect("invoke should succeed");
+        response.deserialize::<T>().expect("response should deserialize")
+    }
+
+    fn invoke_err<W>(webview: &W, cmd: &str, payload: Value) -> Value
+    where
+        W: AsRef<tauri::Webview<tauri::test::MockRuntime>>,
+    {
+        let request = InvokeRequest {
+            cmd: cmd.into(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: "http://tauri.localhost".parse().expect("url"),
+            body: InvokeBody::Json(payload),
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_string(),
+        };
+        tauri::test::get_ipc_response(webview, request).expect_err("invoke should fail")
+    }
+
+    #[test]
+    fn escape_csv_quotes_commas_and_newlines() {
+        assert_eq!(escape_csv(&json!("simple")), "simple");
+        assert_eq!(escape_csv(&json!("a,b")), "\"a,b\"");
+        assert_eq!(escape_csv(&json!("line\nbreak")), "\"line\nbreak\"");
+        assert_eq!(escape_csv(&json!("a\"b")), "\"a\"\"b\"");
+    }
+
+    #[test]
+    fn get_env_var_enforces_allowlist() {
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "token-123");
+        }
+        assert_eq!(get_env_var("ANTHROPIC_API_KEY".into()).expect("allowed"), "token-123");
+        let err = get_env_var("PATH".into()).expect_err("path should be blocked");
+        assert!(err.contains("not allowed"));
+    }
+
+    #[test]
+    fn tauri_ipc_sqlite_smoke_flow() {
+        let _lock = storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_config();
+        let app = build_test_app();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("webview");
+
+        let conn: ConnectionInfo = invoke_ok(
+            &webview,
+            "add_connection",
+            json!({
+                "request": {
+                    "name": "sqlite-smoke",
+                    "db_type": "sqlite",
+                    "host": null,
+                    "port": null,
+                    "database": ":memory:",
+                    "username": null,
+                    "password": null,
+                    "ssl_mode": null
+                }
+            }),
+        );
+
+        let _: () = invoke_ok(
+            &webview,
+            "connect",
+            json!({
+                "connectionId": conn.id
+            }),
+        );
+
+        let _: QueryResult = invoke_ok(
+            &webview,
+            "execute_query",
+            json!({
+                "connectionId": conn.id,
+                "sql": "CREATE TABLE smoke (id INTEGER PRIMARY KEY, name TEXT);"
+            }),
+        );
+        let _: QueryResult = invoke_ok(
+            &webview,
+            "execute_query",
+            json!({
+                "connectionId": conn.id,
+                "sql": "INSERT INTO smoke (name) VALUES ('alpha');"
+            }),
+        );
+        let rows: QueryResult = invoke_ok(
+            &webview,
+            "execute_query",
+            json!({
+                "connectionId": conn.id,
+                "sql": "SELECT id, name FROM smoke ORDER BY id;"
+            }),
+        );
+        assert_eq!(rows.row_count, 1);
+        assert_eq!(rows.columns.len(), 2);
+
+        let schemas: Vec<db::SchemaInfo> = invoke_ok(
+            &webview,
+            "get_schemas",
+            json!({
+                "connectionId": conn.id
+            }),
+        );
+        assert!(schemas.iter().any(|s| s.name == "main"));
+
+        let tables: Vec<db::TableInfo> = invoke_ok(
+            &webview,
+            "get_tables",
+            json!({
+                "connectionId": conn.id,
+                "schema": "main"
+            }),
+        );
+        assert!(tables.iter().any(|t| t.name == "smoke"));
+
+        let csv_path = temp.join("smoke.csv");
+        let _: () = invoke_ok(
+            &webview,
+            "export_to_csv",
+            json!({
+                "filePath": csv_path.to_string_lossy().to_string(),
+                "data": {
+                    "columns": ["name", "note"],
+                    "rows": [["alpha", "hello,world"], ["beta", "line\nbreak"]]
+                }
+            }),
+        );
+        let csv = fs::read_to_string(csv_path).expect("csv should exist");
+        assert!(csv.contains("\"hello,world\""));
+        assert!(csv.contains("\"line\nbreak\""));
+
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "token-ipc");
+        }
+        let key: String = invoke_ok(
+            &webview,
+            "get_env_var",
+            json!({
+                "name": "ANTHROPIC_API_KEY"
+            }),
+        );
+        assert_eq!(key, "token-ipc");
+
+        let denied = invoke_err(
+            &webview,
+            "get_env_var",
+            json!({
+                "name": "PATH"
+            }),
+        );
+        assert!(denied.to_string().contains("not allowed"));
+    }
 }

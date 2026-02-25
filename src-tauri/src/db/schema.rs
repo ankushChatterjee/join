@@ -1164,3 +1164,47 @@ fn parse_single_postgres_argument(arg: &str) -> Option<FunctionArgInfo> {
         has_default,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_mysql_enum_set_values, parse_postgres_function_arguments};
+
+    #[test]
+    fn parses_mysql_enum_values() {
+        let values = parse_mysql_enum_set_values("enum('pending','paid','shipped')");
+        assert_eq!(values, vec!["pending", "paid", "shipped"]);
+    }
+
+    #[test]
+    fn parses_mysql_set_values() {
+        let values = parse_mysql_enum_set_values("set('a','b','c')");
+        assert_eq!(values, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn parses_postgres_function_arguments_with_modes_and_defaults() {
+        let parsed = parse_postgres_function_arguments(Some(
+            "a integer, OUT result text, b numeric(10,2) DEFAULT 0, VARIADIC tags text[]",
+        ));
+
+        assert_eq!(parsed.len(), 4);
+        assert_eq!(parsed[0].name.as_deref(), Some("a"));
+        assert_eq!(parsed[0].data_type, "integer");
+        assert_eq!(parsed[0].mode, "IN");
+        assert!(!parsed[0].has_default);
+
+        assert_eq!(parsed[1].name.as_deref(), Some("result"));
+        assert_eq!(parsed[1].data_type, "text");
+        assert_eq!(parsed[1].mode, "OUT");
+        assert!(!parsed[1].has_default);
+
+        assert_eq!(parsed[2].name.as_deref(), Some("b"));
+        assert_eq!(parsed[2].data_type, "numeric(10,2)");
+        assert_eq!(parsed[2].mode, "IN");
+        assert!(parsed[2].has_default);
+
+        assert_eq!(parsed[3].name.as_deref(), Some("tags"));
+        assert_eq!(parsed[3].data_type, "text[]");
+        assert_eq!(parsed[3].mode, "VARIADIC");
+    }
+}

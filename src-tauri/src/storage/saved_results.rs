@@ -38,10 +38,7 @@ pub struct SavedResult {
 }
 
 fn get_saved_results_base_dir() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("join")
-        .join("saved-results");
+    let config_dir = super::config::get_join_config_dir().join("saved-results");
     fs::create_dir_all(&config_dir).ok();
     config_dir
 }
@@ -230,4 +227,76 @@ pub fn delete_connection_saved_results(connection_id: &str) -> Result<(), Config
         fs::remove_dir_all(dir)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn setup_temp_config() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("join-saved-results-tests-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        unsafe {
+            std::env::set_var("JOIN_CONFIG_DIR", &dir);
+        }
+        dir
+    }
+
+    fn sample_query_result() -> QueryResult {
+        QueryResult {
+            columns: vec![
+                ColumnDef {
+                    name: "id".into(),
+                    type_name: "int4".into(),
+                    is_primary_key: Some(true),
+                    is_indexed: Some(true),
+                },
+                ColumnDef {
+                    name: "note".into(),
+                    type_name: "text".into(),
+                    is_primary_key: None,
+                    is_indexed: None,
+                },
+            ],
+            rows: vec![
+                vec![JsonValue::from(1), JsonValue::from("hello,world")],
+                vec![JsonValue::from(2), JsonValue::from("line\nbreak")],
+            ],
+            row_count: 2,
+            execution_time_ms: 12,
+        }
+    }
+
+    #[test]
+    fn saved_result_roundtrip_and_rename_delete() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        let request = SaveSavedResultRequest {
+            id: None,
+            name: Some("Weekly Report".into()),
+            sql: "SELECT * FROM reports".into(),
+            preview_source: Some("public.reports".into()),
+            query_result: sample_query_result(),
+        };
+
+        let saved = save_saved_result("conn-1", &request).expect("save");
+        assert_eq!(saved.metadata.row_count, 2);
+
+        let loaded = get_saved_result("conn-1", &saved.metadata.id).expect("load");
+        assert_eq!(loaded.query_result.row_count, 2);
+        assert_eq!(loaded.query_result.rows.len(), 2);
+
+        let renamed = rename_saved_result("conn-1", &saved.metadata.id, "Renamed").expect("rename");
+        assert_eq!(renamed.name, "Renamed");
+
+        delete_saved_result("conn-1", &saved.metadata.id).expect("delete");
+        assert!(get_saved_result("conn-1", &saved.metadata.id).is_err());
+    }
 }

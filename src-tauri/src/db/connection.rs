@@ -214,3 +214,72 @@ pub async fn test_connection(config: &ConnectionConfig, password: Option<&str>) 
     pool.close().await;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builds_postgres_connection_string_with_defaults() {
+        let config = ConnectionConfig {
+            id: "id".into(),
+            name: "name".into(),
+            db_type: DatabaseType::Postgresql,
+            host: None,
+            port: None,
+            database: "app_db".into(),
+            username: None,
+            ssl_mode: None,
+        };
+
+        let conn = config.build_connection_string(Some("secret"));
+        assert_eq!(
+            conn,
+            "postgres://postgres:secret@localhost:5432/app_db?sslmode=prefer"
+        );
+    }
+
+    #[test]
+    fn builds_mysql_connection_string_with_defaults() {
+        let config = ConnectionConfig {
+            id: "id".into(),
+            name: "name".into(),
+            db_type: DatabaseType::Mysql,
+            host: None,
+            port: None,
+            database: "app_db".into(),
+            username: None,
+            ssl_mode: None,
+        };
+
+        let conn = config.build_connection_string(Some("secret"));
+        assert_eq!(
+            conn,
+            "mysql://root:secret@localhost:3306/app_db?ssl-mode=preferred"
+        );
+    }
+
+    #[tokio::test]
+    async fn sqlite_connection_lifecycle_works() {
+        let config = ConnectionConfig {
+            id: "test-sqlite-conn".into(),
+            name: "sqlite".into(),
+            db_type: DatabaseType::Sqlite,
+            host: None,
+            port: None,
+            database: ":memory:".into(),
+            username: None,
+            ssl_mode: None,
+        };
+
+        connect(&config, None).await.expect("connect should work");
+        assert!(is_connected(&config.id).await);
+        test_connection(&config, None)
+            .await
+            .expect("test_connection should work");
+        disconnect(&config.id)
+            .await
+            .expect("disconnect should work");
+        assert!(!is_connected(&config.id).await);
+    }
+}

@@ -24,10 +24,17 @@ impl Serialize for CredentialError {
 pub fn store_password(connection_id: &str, password: &str) -> Result<(), CredentialError> {
     let entry = Entry::new(SERVICE_NAME, connection_id)
         .map_err(|e| CredentialError::StorageError(e.to_string()))?;
-    entry
-        .set_password(password)
-        .map_err(|e| CredentialError::StorageError(e.to_string()))?;
-    Ok(())
+    match entry.set_password(password) {
+        Ok(()) => Ok(()),
+        Err(error) if is_duplicate_item_error(&error) => {
+            // Some keychain backends reject duplicate writes instead of overwriting.
+            let _ = entry.delete_credential();
+            entry
+                .set_password(password)
+                .map_err(|e| CredentialError::StorageError(e.to_string()))
+        }
+        Err(error) => Err(CredentialError::StorageError(error.to_string())),
+    }
 }
 
 pub fn get_password(connection_id: &str) -> Result<String, CredentialError> {
@@ -45,4 +52,11 @@ pub fn delete_password(connection_id: &str) -> Result<(), CredentialError> {
     // Ignore NoEntry errors on delete - it's fine if the password doesn't exist
     let _ = entry.delete_credential();
     Ok(())
+}
+
+fn is_duplicate_item_error(error: &keyring::Error) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("already exists")
+        || message.contains("item already exists")
+        || message.contains("duplicate item")
 }

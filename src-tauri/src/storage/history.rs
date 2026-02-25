@@ -26,9 +26,7 @@ pub struct QueryHistory {
 
 /// Get the path to the query history file
 fn get_history_path() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("join");
+    let config_dir = super::config::get_join_config_dir();
 
     fs::create_dir_all(&config_dir).ok();
     config_dir.join("query_history.json")
@@ -75,3 +73,49 @@ pub fn clear_history() -> Result<(), ConfigError> {
     save_history(&QueryHistory::default())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn setup_temp_config() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("join-history-tests-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        unsafe {
+            std::env::set_var("JOIN_CONFIG_DIR", &dir);
+        }
+        dir
+    }
+
+    #[test]
+    fn add_history_entry_keeps_latest_50() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        clear_history().expect("clear");
+
+        for i in 0..55 {
+            add_history_entry(QueryHistoryEntry {
+                id: format!("id-{i}"),
+                sql: format!("SELECT {i}"),
+                connection_id: "conn-1".into(),
+                connection_name: "Conn".into(),
+                timestamp: i,
+                row_count: Some(i),
+                execution_time_ms: Some(i),
+                error: None,
+            })
+            .expect("add");
+        }
+
+        let history = load_history().expect("load");
+        assert_eq!(history.entries.len(), 50);
+        assert_eq!(history.entries[0].id, "id-54");
+        assert_eq!(history.entries[49].id, "id-5");
+    }
+}

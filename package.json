@@ -7,7 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "bun run test:quick",
+    "test:quick": "bun run scripts/run-test-suite.ts quick",
+    "test:frontend": "bun test src --reporter=junit --reporter-outfile reports/junit/frontend.xml",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:integration": "bun run scripts/run-test-suite.ts integration",
+    "test:all": "bun run scripts/run-test-suite.ts full",
+    "test:report": "bun run scripts/run-test-suite.ts report"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.42",
@@ -42,12 +49,18 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/diff": "^7.0.2",
     "@types/node": "^25.0.6",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "bun-types": "^1.3.9",
+    "jsdom": "^28.1.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.0.18"
   }
 }

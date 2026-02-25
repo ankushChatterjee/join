@@ -51,7 +51,10 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                 .iter()
                 .map(|col| ColumnDef {
                     name: col.name().to_string(),
-                    type_name: col.type_info().name().to_string(),
+                    type_name: std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        col.type_info().name().to_string()
+                    }))
+                    .unwrap_or_else(|_| "unknown".to_string()),
                     is_primary_key: None,
                     is_indexed: None,
                 })
@@ -163,7 +166,13 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
         .iter()
         .enumerate()
         .map(|(i, col)| {
-            let type_name = col.type_info().name().to_uppercase();
+            // Some custom PostgreSQL types can surface unresolved OIDs in sqlx;
+            // guard name resolution so result conversion stays resilient.
+            let type_name = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                col.type_info().name().to_uppercase()
+            }))
+            .unwrap_or_else(|_| "UNKNOWN".to_string());
+            let is_array_like = type_name.ends_with("[]") || type_name.starts_with('_');
             
             // Handle NULL
             if let Ok(raw) = row.try_get_raw(i) {
@@ -197,9 +206,6 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             if let Ok(v) = row.try_get::<bool, _>(i) {
                 return json!(v);
             }
-            if let Ok(v) = row.try_get::<String, _>(i) {
-                return json!(v);
-            }
             // PostgreSQL UUID
             if let Ok(v) = row.try_get::<uuid::Uuid, _>(i) {
                 return json!(v.to_string());
@@ -224,50 +230,52 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                 return v;
             }
             
-            // PostgreSQL arrays - try common array types
-            // Integer arrays
-            if let Ok(v) = row.try_get::<Vec<i64>, _>(i) {
-                return json!(v);
-            }
-            if let Ok(v) = row.try_get::<Vec<i32>, _>(i) {
-                return json!(v);
-            }
-            if let Ok(v) = row.try_get::<Vec<i16>, _>(i) {
-                return json!(v);
-            }
-            // Float arrays
-            if let Ok(v) = row.try_get::<Vec<f64>, _>(i) {
-                return json!(v);
-            }
-            if let Ok(v) = row.try_get::<Vec<f32>, _>(i) {
-                return json!(v);
-            }
-            // String/text arrays
-            if let Ok(v) = row.try_get::<Vec<String>, _>(i) {
-                return json!(v);
-            }
-            // Boolean arrays
-            if let Ok(v) = row.try_get::<Vec<bool>, _>(i) {
-                return json!(v);
-            }
-            // UUID arrays
-            if let Ok(v) = row.try_get::<Vec<uuid::Uuid>, _>(i) {
-                return json!(v.iter().map(|u| u.to_string()).collect::<Vec<_>>());
-            }
-            // Timestamp arrays
-            if let Ok(v) = row.try_get::<Vec<chrono::NaiveDateTime>, _>(i) {
-                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
-            }
-            if let Ok(v) = row.try_get::<Vec<chrono::DateTime<chrono::Utc>>, _>(i) {
-                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
-            }
-            // Date arrays
-            if let Ok(v) = row.try_get::<Vec<chrono::NaiveDate>, _>(i) {
-                return json!(v.iter().map(|d| d.to_string()).collect::<Vec<_>>());
-            }
-            // Time arrays
-            if let Ok(v) = row.try_get::<Vec<chrono::NaiveTime>, _>(i) {
-                return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+            // PostgreSQL arrays - try common array types (only on array-like OIDs)
+            if is_array_like {
+                // Integer arrays
+                if let Ok(v) = row.try_get::<Vec<i64>, _>(i) {
+                    return json!(v);
+                }
+                if let Ok(v) = row.try_get::<Vec<i32>, _>(i) {
+                    return json!(v);
+                }
+                if let Ok(v) = row.try_get::<Vec<i16>, _>(i) {
+                    return json!(v);
+                }
+                // Float arrays
+                if let Ok(v) = row.try_get::<Vec<f64>, _>(i) {
+                    return json!(v);
+                }
+                if let Ok(v) = row.try_get::<Vec<f32>, _>(i) {
+                    return json!(v);
+                }
+                // String/text arrays
+                if let Ok(v) = row.try_get::<Vec<String>, _>(i) {
+                    return json!(v);
+                }
+                // Boolean arrays
+                if let Ok(v) = row.try_get::<Vec<bool>, _>(i) {
+                    return json!(v);
+                }
+                // UUID arrays
+                if let Ok(v) = row.try_get::<Vec<uuid::Uuid>, _>(i) {
+                    return json!(v.iter().map(|u| u.to_string()).collect::<Vec<_>>());
+                }
+                // Timestamp arrays
+                if let Ok(v) = row.try_get::<Vec<chrono::NaiveDateTime>, _>(i) {
+                    return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+                }
+                if let Ok(v) = row.try_get::<Vec<chrono::DateTime<chrono::Utc>>, _>(i) {
+                    return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+                }
+                // Date arrays
+                if let Ok(v) = row.try_get::<Vec<chrono::NaiveDate>, _>(i) {
+                    return json!(v.iter().map(|d| d.to_string()).collect::<Vec<_>>());
+                }
+                // Time arrays
+                if let Ok(v) = row.try_get::<Vec<chrono::NaiveTime>, _>(i) {
+                    return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+                }
             }
             
             // For custom types (enums, composite types, domains), try to get raw bytes as text
@@ -288,6 +296,11 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                         return json!(text);
                     }
                 }
+            }
+
+            // Fallback textual decode for types not covered above.
+            if let Ok(v) = row.try_get::<String, _>(i) {
+                return json!(v);
             }
             
             // Fallback

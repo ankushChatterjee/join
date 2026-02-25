@@ -78,10 +78,7 @@ pub struct ChatSessionMeta {
 
 /// Get the chats directory
 fn get_chats_dir() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("join")
-        .join("chats");
+    let config_dir = super::config::get_join_config_dir().join("chats");
 
     fs::create_dir_all(&config_dir).ok();
     config_dir
@@ -163,4 +160,68 @@ pub fn delete_chat_session(session_id: &str) -> Result<(), ConfigError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn setup_temp_config() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("join-chats-tests-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        unsafe {
+            std::env::set_var("JOIN_CONFIG_DIR", &dir);
+        }
+        dir
+    }
+
+    fn sample_session(id: &str, title: &str, updated_at: i64) -> ChatSession {
+        ChatSession {
+            id: id.into(),
+            title: title.into(),
+            model_id: "model".into(),
+            connection_id: Some("conn-1".into()),
+            created_at: updated_at - 1000,
+            updated_at,
+            messages: vec![ChatMessage {
+                id: format!("msg-{id}"),
+                role: "user".into(),
+                content: "hello".into(),
+                tool_calls: None,
+                timestamp: updated_at - 500,
+                is_error: None,
+                metadata: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn chat_sessions_roundtrip_and_sorting() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        let older = sample_session("s1", "Older", 100);
+        let newer = sample_session("s2", "Newer", 200);
+        save_chat_session(&older).expect("save older");
+        save_chat_session(&newer).expect("save newer");
+
+        let listed = list_chat_sessions().expect("list");
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].id, "s2");
+        assert_eq!(listed[1].id, "s1");
+
+        let loaded = get_chat_session("s2").expect("get");
+        assert_eq!(loaded.title, "Newer");
+
+        delete_chat_session("s1").expect("delete");
+        let listed_after_delete = list_chat_sessions().expect("list after");
+        assert_eq!(listed_after_delete.len(), 1);
+        assert_eq!(listed_after_delete[0].id, "s2");
+    }
 }

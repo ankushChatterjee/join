@@ -54,10 +54,7 @@ pub struct Script {
 
 /// Get the base directory for all scripts
 fn get_scripts_base_dir() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("join")
-        .join("scripts");
+    let config_dir = super::config::get_join_config_dir().join("scripts");
 
     fs::create_dir_all(&config_dir).ok();
     config_dir
@@ -297,4 +294,67 @@ pub fn delete_connection_scripts(connection_id: &str) -> Result<(), ConfigError>
         fs::remove_dir_all(&dir)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn setup_temp_config() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("join-scripts-tests-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        unsafe {
+            std::env::set_var("JOIN_CONFIG_DIR", &dir);
+        }
+        dir
+    }
+
+    #[test]
+    fn update_script_normalizes_empty_sheet_and_selection() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        let script = create_script("conn-1", "My Script").expect("create script");
+
+        let sheet = SqlSheetDocument {
+            version: 0,
+            selected_cell_id: Some("missing-cell".into()),
+            cells: vec![],
+        };
+        update_script_content("conn-1", &script.metadata.id, &sheet).expect("update");
+
+        let loaded = get_script("conn-1", &script.metadata.id).expect("load script");
+        assert_eq!(loaded.sheet.version, SHEET_FORMAT_VERSION);
+        assert_eq!(loaded.sheet.cells.len(), 1);
+        assert_eq!(
+            loaded.sheet.selected_cell_id.as_deref(),
+            Some(loaded.sheet.cells[0].id.as_str())
+        );
+    }
+
+    #[test]
+    fn get_script_migrates_legacy_sql_file() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        let script = create_script("conn-legacy", "Legacy Script").expect("create script");
+
+        let legacy_sql = "SELECT * FROM customers;";
+        let legacy_path = get_script_sql_path("conn-legacy", &script.metadata.id);
+        fs::write(&legacy_path, legacy_sql).expect("write legacy sql");
+        fs::remove_file(get_script_sheet_path("conn-legacy", &script.metadata.id))
+            .expect("remove sheet");
+
+        let loaded = get_script("conn-legacy", &script.metadata.id).expect("load script");
+        assert_eq!(loaded.sheet.cells.len(), 1);
+        assert_eq!(loaded.sheet.cells[0].sql, legacy_sql);
+        assert!(get_script_sheet_path("conn-legacy", &script.metadata.id).exists());
+    }
 }
