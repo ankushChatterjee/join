@@ -4,11 +4,12 @@
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
 // --- Model Configuration ---
 
-export type ProviderId = "anthropic" | "gemini";
+export type ProviderId = "anthropic" | "gemini" | "moonshotai" | "zai";
 
 export interface ModelConfig {
   id: string;
@@ -27,18 +28,32 @@ export const MODEL_CONFIGS: ModelConfig[] = [
     envVar: "ANTHROPIC_API_KEY",
   },
   {
-    id: "claude-opus-4-5-20250918",
-    name: "Claude 4.5 Opus",
+    id: "claude-sonnet-4-6",
+    name: "Claude 4.6 Sonnet",
     providerId: "anthropic",
     maxOutputTokens: 16384,
     envVar: "ANTHROPIC_API_KEY",
   },
   {
-    id: "claude-opus-4-6-20260210",
+    id: "claude-opus-4-6",
     name: "Claude 4.6 Opus",
     providerId: "anthropic",
     maxOutputTokens: 16384,
     envVar: "ANTHROPIC_API_KEY",
+  },
+  {
+    id: "gemini-3-pro-preview",
+    name: "Gemini 3 Pro",
+    providerId: "gemini",
+    maxOutputTokens: 8192,
+    envVar: "GEMINI_API_KEY",
+  },
+  {
+    id: "gemini-3-flash-preview",
+    name: "Gemini 3 Flash",
+    providerId: "gemini",
+    maxOutputTokens: 8192,
+    envVar: "GEMINI_API_KEY",
   },
   {
     id: "gemini-2.5-pro",
@@ -46,6 +61,27 @@ export const MODEL_CONFIGS: ModelConfig[] = [
     providerId: "gemini",
     maxOutputTokens: 8192,
     envVar: "GEMINI_API_KEY",
+  },
+  {
+    id: "gemini-3.1-pro-preview",
+    name: "Gemini 3.1 Pro",
+    providerId: "gemini",
+    maxOutputTokens: 8192,
+    envVar: "GEMINI_API_KEY",
+  },
+  {
+    id: "moonshotai/kimi-k2.5",
+    name: "Kimi K2.5",
+    providerId: "moonshotai",
+    maxOutputTokens: 8192,
+    envVar: "OPEN_ROUTER_API_KEY",
+  },
+  {
+    id: "z-ai/glm-5",
+    name: "GLM-5",
+    providerId: "zai",
+    maxOutputTokens: 8192,
+    envVar: "OPEN_ROUTER_API_KEY",
   },
 ];
 
@@ -57,6 +93,8 @@ export function getModelsByProvider(): { providerId: ProviderId; providerName: s
   const providers: Record<ProviderId, { providerId: ProviderId; providerName: string; models: ModelConfig[] }> = {
     anthropic: { providerId: "anthropic", providerName: "Anthropic", models: [] },
     gemini: { providerId: "gemini", providerName: "Google", models: [] },
+    moonshotai: { providerId: "moonshotai", providerName: "Moonshot AI (OpenRouter)", models: [] },
+    zai: { providerId: "zai", providerName: "Z.AI (OpenRouter)", models: [] },
   };
 
   for (const model of MODEL_CONFIGS) {
@@ -69,7 +107,7 @@ export function getModelsByProvider(): { providerId: ProviderId; providerName: s
 // --- Provider Instance Cache ---
 
 // Cache provider instances keyed by "providerId:apiKey" to avoid recreating them
-const providerCache = new Map<string, ReturnType<typeof createAnthropic> | ReturnType<typeof createGoogleGenerativeAI>>();
+const providerCache = new Map<string, ReturnType<typeof createAnthropic> | ReturnType<typeof createGoogleGenerativeAI> | ReturnType<typeof createOpenRouter>>();
 
 /**
  * Get a Vercel AI SDK language model instance for the given model ID.
@@ -127,6 +165,17 @@ export async function getModel(modelId: string) {
     return provider(modelId);
   }
 
+  if (config.providerId === "moonshotai" || config.providerId === "zai") {
+    let provider = providerCache.get(cacheKey) as ReturnType<typeof createOpenRouter> | undefined;
+    if (!provider) {
+      provider = createOpenRouter({
+        apiKey,
+        fetch: tauriFetch as unknown as typeof globalThis.fetch,
+      });
+      providerCache.set(cacheKey, provider);
+    }
+    return provider(modelId);
+  }
+
   throw new Error(`Unknown provider: ${config.providerId}`);
 }
-

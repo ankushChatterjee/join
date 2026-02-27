@@ -475,7 +475,7 @@ async fn export_to_csv(file_path: String, data: ExportData) -> Result<(), String
 #[tauri::command]
 fn get_env_var(name: String) -> Result<String, String> {
     // Only allow specific env vars for security
-    let allowed = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY"];
+    let allowed = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY"];
     if !allowed.contains(&name.as_str()) {
         return Err(format!("Access to environment variable '{}' is not allowed", name));
     }
