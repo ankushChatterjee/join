@@ -2,6 +2,7 @@
 
 A desktop SQL client with embedded AI assistance.
 
+![Screenshot](screenshots/screenshot0.png)
 
 ## Getting Started
 
