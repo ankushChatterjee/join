@@ -242,9 +242,13 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             if let Ok(v) = row.try_get::<chrono::NaiveTime, _>(i) {
                 return json!(v.to_string());
             }
-            // PostgreSQL JSON/JSONB
-            if let Ok(v) = row.try_get::<serde_json::Value, _>(i) {
-                return v;
+            // PostgreSQL JSON/JSONB only.
+            // Keep this narrowly scoped so non-JSON custom types (e.g. composite)
+            // still flow through composite normalization logic below.
+            if type_name == "JSON" || type_name == "JSONB" {
+                if let Ok(v) = row.try_get::<serde_json::Value, _>(i) {
+                    return v;
+                }
             }
             
             // PostgreSQL arrays - try common array types (only on array-like OIDs)
@@ -300,12 +304,20 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             if let Ok(raw) = row.try_get_raw(i) {
                 // Try to decode as UTF-8 text from the raw value
                 if let Ok(bytes) = raw.as_bytes() {
+                    // Check if this is binary composite format (contains null bytes)
+                    if bytes.len() >= 4 && bytes[0..4].iter().any(|&b| b == 0) {
+                        // Binary composite format: parse it
+                        if let Some(parsed) = parse_binary_composite(bytes, &type_name) {
+                            return parsed;
+                        }
+                    }
+                    
                     if let Ok(text) = std::str::from_utf8(bytes) {
-                        // For composite types, convert (a,b,c) format to JSON object
-                        if text.starts_with('(') && text.ends_with(')') {
+                        // For composite types, normalize both raw "(...)" and quoted "\"(...)\"" forms.
+                        if let Some(raw_composite) = normalize_composite_raw(text) {
                             return json!({
                                 "_type": type_name.to_lowercase(),
-                                "_raw": text,
+                                "_raw": raw_composite,
                                 "_display": "composite"
                             });
                         }
@@ -317,6 +329,15 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
 
             // Fallback textual decode for types not covered above.
             if let Ok(v) = row.try_get::<String, _>(i) {
+                // Composite types can arrive here with the extended protocol as raw
+                // "(...)" text. Normalize them to the same object shape used above.
+                if let Some(raw_composite) = normalize_composite_raw(&v) {
+                    return json!({
+                        "_type": type_name.to_lowercase(),
+                        "_raw": raw_composite,
+                        "_display": "composite"
+                    });
+                }
                 return json!(v);
             }
             
@@ -324,6 +345,76 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             json!(format!("[{}]", type_name))
         })
         .collect()
+}
+
+fn normalize_composite_raw(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        return Some(trimmed.to_string());
+    }
+
+    // Some decode paths can wrap the record text in quotes: "\"(a,b)\""
+    if trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        if inner.starts_with('(') && inner.ends_with(')') {
+            return Some(inner.to_string());
+        }
+    }
+
+    None
+}
+
+/// Parse PostgreSQL binary composite format into a JSON representation.
+/// Binary format: [4-byte field count][for each field: 4-byte type OID][4-byte length][data]
+fn parse_binary_composite(bytes: &[u8], type_name: &str) -> Option<JsonValue> {
+    if bytes.len() < 4 {
+        return None;
+    }
+    
+    // Read field count (big-endian u32)
+    let field_count = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+    
+    let mut fields = Vec::with_capacity(field_count);
+    let mut offset = 4;
+    
+    for _ in 0..field_count {
+        // Need at least 8 more bytes (OID + length)
+        if offset + 8 > bytes.len() {
+            return None;
+        }
+        
+        // Skip 4-byte type OID
+        offset += 4;
+        
+        // Read 4-byte length (big-endian i32, -1 means NULL)
+        let length = i32::from_be_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]]);
+        offset += 4;
+        
+        if length < 0 {
+            // NULL field
+            fields.push("NULL".to_string());
+        } else {
+            let len = length as usize;
+            if offset + len > bytes.len() {
+                return None;
+            }
+            
+            // Try to decode as UTF-8 text
+            let field_data = &bytes[offset..offset + len];
+            let field_str = std::str::from_utf8(field_data).unwrap_or("[binary]");
+            fields.push(field_str.to_string());
+            offset += len;
+        }
+    }
+    
+    // Build text representation: (field1,field2,...)
+    let text_repr = format!("({})", fields.join(","));
+    
+    Some(json!({
+        "_type": type_name.to_lowercase(),
+        "_raw": text_repr,
+        "_display": "composite"
+    }))
 }
 
 fn convert_mysql_row(row: &sqlx::mysql::MySqlRow) -> Vec<JsonValue> {
