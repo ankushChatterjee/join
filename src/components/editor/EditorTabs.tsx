@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { X, Plus, Table2 } from "lucide-react";
+import { X, Table2 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
@@ -166,16 +166,12 @@ export function EditorTabs() {
     openResultTabs,
     activeEditorTab,
     connections,
-    createScript,
-    activeConnectionId,
   } = useAppStore(
     useShallow((state) => ({
       openScripts: state.openScripts,
       openResultTabs: state.openResultTabs,
       activeEditorTab: state.activeEditorTab,
       connections: state.connections,
-      createScript: state.createScript,
-      activeConnectionId: state.activeConnectionId,
     }))
   );
 
@@ -188,6 +184,15 @@ export function EditorTabs() {
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 0);
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (e.deltaY !== 0) {
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
   }, []);
 
   useEffect(() => {
@@ -209,12 +214,6 @@ export function EditorTabs() {
     tab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [activeEditorTab]);
 
-  const handleNewScript = async () => {
-    if (activeConnectionId) {
-      await createScript(activeConnectionId);
-    }
-  };
-
   const isConnectionActive = (connectionId: string) => {
     const conn = connections.find((c) => c.id === connectionId);
     return conn?.is_connected ?? false;
@@ -232,7 +231,8 @@ export function EditorTabs() {
 
       <div
         ref={scrollContainerRef}
-        className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full"
+        onWheel={handleWheel}
+        className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full w-fit"
       >
         {openScripts.map((script) => (
           <ScriptTab
@@ -252,17 +252,7 @@ export function EditorTabs() {
       </div>
 
       {canScrollRight && (
-        <div className="absolute right-7 top-0 bottom-0 w-4 bg-gradient-to-l from-base-900 to-transparent z-10 pointer-events-none" />
-      )}
-
-      {activeConnectionId && (
-        <button
-          onClick={handleNewScript}
-          className="ml-0.5 p-1 rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast shrink-0"
-          title="New SQL sheet"
-        >
-          <Plus className="w-3.5 h-3.5" strokeWidth={1.8} />
-        </button>
+        <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-base-900 to-transparent z-10 pointer-events-none" />
       )}
     </div>
   );
