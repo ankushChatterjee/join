@@ -22,6 +22,7 @@ A desktop SQL client with embedded AI assistance.
    ```bash
    bun install
    ```
+   Use Bun only for dependency and script management in this repo (`npm`, `yarn`, and `pnpm` are unsupported).
 
 3. Set up environment variables:
 
@@ -29,9 +30,10 @@ A desktop SQL client with embedded AI assistance.
    ```
    ANTHROPIC_API_KEY=your_key_here
    GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
+   OPEN_ROUTER_API_KEY=your_key_here
    ```
 
-   You can use either Anthropic (Claude) or Google's Gemini models.
+   You can use Anthropic (Claude), Google's Gemini, and OpenRouter-backed models.
 
 4. Run in development mode:
    ```bash
