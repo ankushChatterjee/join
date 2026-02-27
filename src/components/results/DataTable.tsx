@@ -65,7 +65,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                     <th
                       key={header.id}
                       className={cn(
-                      "h-8 px-2.5 text-left font-semibold text-[12px] text-base-100 bg-base-900 border-b border-base-700 whitespace-nowrap tracking-[0.02em]",
+                      "px-2.5 py-1.5 text-left font-semibold text-[12px] text-base-100 bg-base-900 border-b border-base-700 whitespace-nowrap tracking-[0.02em]",
                       canSort && "cursor-pointer select-none hover:bg-base-850 transition-colors-fast"
                     )}
                     onClick={header.column.getToggleSortingHandler()}

@@ -284,6 +284,42 @@ function ArrayCellDisplay({ preview, count }: { preview: string; count: number }
   );
 }
 
+// Column header component showing name + type badge + PK/IDX badges
+function ColumnHeader({
+  name,
+  typeName,
+  isPrimaryKey,
+  isIndexed,
+}: {
+  name: string;
+  typeName: string;
+  isPrimaryKey?: boolean;
+  isIndexed?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 py-0.5">
+      <div className="flex items-center gap-1 leading-none">
+        <span>{name}</span>
+        {isPrimaryKey && (
+          <span className="px-1 py-0 rounded-sm bg-amber-500/20 text-[10px] font-semibold text-amber-400 leading-[14px]">
+            PK
+          </span>
+        )}
+        {isIndexed && !isPrimaryKey && (
+          <span className="px-1 py-0 rounded-sm bg-base-700/60 text-[10px] font-semibold text-base-300 leading-[14px]">
+            IDX
+          </span>
+        )}
+      </div>
+      {typeName && typeName !== "unknown" && (
+        <span className="text-[10px] font-mono font-normal text-base-400 leading-none">
+          {typeName}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Helper to create columns dynamically from data with SQL types
 export function createColumnsFromData<T extends Record<string, unknown>>(
   data: T[],
@@ -298,7 +334,17 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
   return keys.map((key, index) =>
     columnHelper.accessor((row) => row[key], {
       id: key,
-      header: key,
+      header: () => {
+        const colDef = sqlColumns?.[index];
+        return (
+          <ColumnHeader
+            name={key}
+            typeName={colDef?.type_name ?? ""}
+            isPrimaryKey={colDef?.is_primary_key}
+            isIndexed={colDef?.is_indexed}
+          />
+        );
+      },
       cell: (info) => {
         const value = info.getValue();
         const colDef = sqlColumns?.[index];
