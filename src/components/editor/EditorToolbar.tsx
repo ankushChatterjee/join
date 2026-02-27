@@ -65,13 +65,6 @@ export function EditorToolbar() {
 
       {/* Editor Tabs */}
       <EditorTabs />
-
-      {/* Keyboard shortcut hint */}
-      <div className="text-[11px] text-base-200 hidden xl:flex items-center gap-1 shrink-0 ml-1.5">
-        <kbd className="px-1 py-0.5 rounded-sm bg-base-850 border border-base-700 font-mono text-[11px] text-base-100">
-          ⌘↵
-        </kbd>
-      </div>
     </div>
   );
 }
