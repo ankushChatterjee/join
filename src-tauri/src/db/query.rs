@@ -30,10 +30,27 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
     
     match pool {
         DatabasePool::Postgres(pool) => {
-            let rows = sqlx::raw_sql(sql)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+            // Detect multi-statement SQL (contains ';' not just as a trailing terminator).
+            // Prepared statements (query()) don't support multiple commands, so we fall back
+            // to raw_sql for that case. Using query() is preferred because it uses the
+            // extended query protocol which resolves custom type OIDs (e.g. ENUMs, composite
+            // types) against pg_type, returning the real type name instead of "?".
+            let is_multi_stmt = {
+                let trimmed = sql.trim().trim_end_matches(';');
+                trimmed.contains(';')
+            };
+
+            let rows = if is_multi_stmt {
+                sqlx::raw_sql(sql)
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
+            } else {
+                sqlx::query(sql)
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
+            };
             
             let execution_time_ms = start.elapsed().as_millis() as u64;
             
