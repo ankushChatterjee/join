@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type SuiteStatus = "passed" | "failed";
@@ -41,6 +41,7 @@ function runCommand(
   cmd: string[],
   extraEnv?: Record<string, string>,
 ): SuiteResult {
+  console.log(`[suite:${name}] running: ${cmd.join(" ")}`);
   const started = Date.now();
   const proc = Bun.spawnSync({
     cmd,
@@ -74,12 +75,25 @@ function runCommand(
     "utf8",
   );
 
+  const durationMs = ended - started;
+  const status: SuiteStatus = exitCode === 0 ? "passed" : "failed";
+  console.log(
+    `[suite:${name}] ${status.toUpperCase()} (exit=${exitCode}, duration=${msToSeconds(durationMs)}s)`,
+  );
+  if (status === "failed") {
+    const firstStderrLine = stderr.split("\n").find((line) => line.trim().length > 0);
+    if (firstStderrLine) {
+      console.log(`[suite:${name}] reason: ${firstStderrLine}`);
+    }
+    console.log(`[suite:${name}] log: ${logPath.replace(`${rootDir}/`, "")}`);
+  }
+
   return {
     name,
     command: cmd.join(" "),
-    status: exitCode === 0 ? "passed" : "failed",
+    status,
     exitCode,
-    durationMs: ended - started,
+    durationMs,
     logPath,
   };
 }
@@ -200,6 +214,38 @@ function createMarkdownReport(results: SuiteResult[]) {
   writeFileSync(join(reportsDir, "test-report.md"), lines.join("\n"), "utf8");
 }
 
+function printSummary(results: SuiteResult[]) {
+  const failed = results.filter((r) => r.status === "failed");
+  console.log("");
+  console.log("=== Test Summary ===");
+  for (const r of results) {
+    console.log(
+      `${r.status === "passed" ? "PASS" : "FAIL"} ${r.name} (${msToSeconds(r.durationMs)}s)`,
+    );
+  }
+
+  if (failed.length > 0) {
+    console.log("");
+    console.log(`Failures: ${failed.length}`);
+    for (const r of failed) {
+      console.log(`- ${r.name}: see ${r.logPath.replace(`${rootDir}/`, "")}`);
+    }
+
+    const dockerPermissionFailure = failed.find((r) => {
+      const log = readFileSync(r.logPath, "utf8");
+      return log.includes("permission denied") && log.includes("docker.sock");
+    });
+    if (dockerPermissionFailure) {
+      console.log("");
+      console.log("Docker daemon access is unavailable.");
+      console.log("Start Docker Desktop (or daemon) and ensure your user can access /var/run/docker.sock.");
+      console.log("Then rerun: bun run test:all");
+    }
+  }
+
+  console.log(`Report: ${join("reports", "test-report.md")}`);
+}
+
 const suiteResults: SuiteResult[] = [];
 
 function addResult(result: SuiteResult) {
@@ -277,6 +323,10 @@ try {
     addResult(dockerCompose(["down", "-v"]));
   }
   createMarkdownReport(suiteResults);
+  printSummary(suiteResults);
+
+  const hasFailures = suiteResults.some((r) => r.status === "failed");
+  process.exitCode = hasFailures ? 1 : 0;
 }
 
 const failed = suiteResults.some((r) => r.status === "failed");
