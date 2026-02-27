@@ -57,6 +57,10 @@ fn get_saved_result_csv_path(connection_id: &str, saved_result_id: &str) -> Path
     get_connection_saved_results_dir(connection_id).join(format!("{saved_result_id}.csv"))
 }
 
+fn get_saved_result_data_path(connection_id: &str, saved_result_id: &str) -> PathBuf {
+    get_connection_saved_results_dir(connection_id).join(format!("{saved_result_id}.data.json"))
+}
+
 fn load_metadata(connection_id: &str, saved_result_id: &str) -> Result<SavedResultMetadata, ConfigError> {
     let path = get_saved_result_meta_path(connection_id, saved_result_id);
     let content = fs::read_to_string(path)?;
@@ -79,7 +83,13 @@ fn to_csv_cell(value: &JsonValue) -> String {
     }
 }
 
-fn write_csv(connection_id: &str, saved_result_id: &str, result: &QueryResult) -> Result<(), ConfigError> {
+fn write_result_data(connection_id: &str, saved_result_id: &str, result: &QueryResult) -> Result<(), ConfigError> {
+    // Write JSON file preserving full type information (column types and value types).
+    let data_path = get_saved_result_data_path(connection_id, saved_result_id);
+    let content = serde_json::to_string(result)?;
+    fs::write(data_path, content)?;
+
+    // Also write CSV as a human-readable export fallback.
     let csv_path = get_saved_result_csv_path(connection_id, saved_result_id);
     let mut writer = csv::Writer::from_path(csv_path)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -97,7 +107,16 @@ fn write_csv(connection_id: &str, saved_result_id: &str, result: &QueryResult) -
     Ok(())
 }
 
-fn read_csv(connection_id: &str, saved_result_id: &str, execution_time_ms: i64) -> Result<QueryResult, ConfigError> {
+fn read_result_data(connection_id: &str, saved_result_id: &str, execution_time_ms: i64) -> Result<QueryResult, ConfigError> {
+    // Prefer the JSON file which preserves column types and value types.
+    let data_path = get_saved_result_data_path(connection_id, saved_result_id);
+    if data_path.exists() {
+        let content = fs::read_to_string(data_path)?;
+        let result: QueryResult = serde_json::from_str(&content)?;
+        return Ok(result);
+    }
+
+    // Fall back to CSV for results saved before the JSON format was introduced.
     let csv_path = get_saved_result_csv_path(connection_id, saved_result_id);
     let mut reader = csv::Reader::from_path(csv_path)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -186,7 +205,7 @@ pub fn save_saved_result(connection_id: &str, request: &SaveSavedResultRequest) 
         updated_at: now,
     };
 
-    write_csv(connection_id, &id, &request.query_result)?;
+    write_result_data(connection_id, &id, &request.query_result)?;
     save_metadata(&metadata)?;
 
     Ok(SavedResult {
@@ -197,15 +216,17 @@ pub fn save_saved_result(connection_id: &str, request: &SaveSavedResultRequest) 
 
 pub fn get_saved_result(connection_id: &str, saved_result_id: &str) -> Result<SavedResult, ConfigError> {
     let metadata = load_metadata(connection_id, saved_result_id)?;
-    let query_result = read_csv(connection_id, saved_result_id, metadata.execution_time_ms)?;
+    let query_result = read_result_data(connection_id, saved_result_id, metadata.execution_time_ms)?;
     Ok(SavedResult { metadata, query_result })
 }
 
 pub fn delete_saved_result(connection_id: &str, saved_result_id: &str) -> Result<(), ConfigError> {
     let meta_path = get_saved_result_meta_path(connection_id, saved_result_id);
     let csv_path = get_saved_result_csv_path(connection_id, saved_result_id);
+    let data_path = get_saved_result_data_path(connection_id, saved_result_id);
     fs::remove_file(meta_path).ok();
     fs::remove_file(csv_path).ok();
+    fs::remove_file(data_path).ok();
     Ok(())
 }
 
@@ -262,10 +283,24 @@ mod tests {
                     is_primary_key: None,
                     is_indexed: None,
                 },
+                ColumnDef {
+                    name: "tags".into(),
+                    type_name: "_text".into(),
+                    is_primary_key: None,
+                    is_indexed: None,
+                },
             ],
             rows: vec![
-                vec![JsonValue::from(1), JsonValue::from("hello,world")],
-                vec![JsonValue::from(2), JsonValue::from("line\nbreak")],
+                vec![
+                    JsonValue::from(1),
+                    JsonValue::from("hello,world"),
+                    JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")]),
+                ],
+                vec![
+                    JsonValue::from(2),
+                    JsonValue::from("line\nbreak"),
+                    JsonValue::Array(vec![JsonValue::from("x")]),
+                ],
             ],
             row_count: 2,
             execution_time_ms: 12,
@@ -292,6 +327,14 @@ mod tests {
         let loaded = get_saved_result("conn-1", &saved.metadata.id).expect("load");
         assert_eq!(loaded.query_result.row_count, 2);
         assert_eq!(loaded.query_result.rows.len(), 2);
+
+        // Column type metadata must be preserved.
+        assert_eq!(loaded.query_result.columns[0].type_name, "int4");
+        assert_eq!(loaded.query_result.columns[2].type_name, "_text");
+
+        // Array values must be preserved as arrays, not flattened to strings.
+        assert!(loaded.query_result.rows[0][2].is_array(), "array value should round-trip as array");
+        assert_eq!(loaded.query_result.rows[0][2], JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")]));
 
         let renamed = rename_saved_result("conn-1", &saved.metadata.id, "Renamed").expect("rename");
         assert_eq!(renamed.name, "Renamed");
