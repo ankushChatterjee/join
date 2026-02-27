@@ -371,6 +371,8 @@ function AiChatPanel() {
     shouldStickToBottomRef.current = distanceFromBottom < 96;
   }, []);
 
+  const wasStreamingRef = useRef(false);
+
   const messageSignature = `${messages.length}:${messages[messages.length - 1]?.id ?? ""}:${isStreaming ? 1 : 0}:${streamingText.length}:${streamingToolCalls.length}`;
 
   // Auto-scroll only on chat events (new messages/stream updates), never on editor-only re-renders.
@@ -378,9 +380,14 @@ function AiChatPanel() {
     if (messageSignature === lastMessageSignatureRef.current) return;
     lastMessageSignatureRef.current = messageSignature;
 
-    if (isStreaming || shouldStickToBottomRef.current) {
-      scheduleScrollToBottom(isStreaming ? "auto" : "smooth");
+    // When streaming starts, always scroll to bottom initially
+    if (isStreaming && !wasStreamingRef.current) {
+      shouldStickToBottomRef.current = true;
+      scheduleScrollToBottom("auto");
+    } else if (isStreaming && shouldStickToBottomRef.current) {
+      scheduleScrollToBottom("auto");
     }
+    wasStreamingRef.current = isStreaming;
   }, [messageSignature, isStreaming, scheduleScrollToBottom]);
 
   // Fallback for async layout growth (markdown/code/table rendering): follow content size changes while streaming.
@@ -389,13 +396,20 @@ function AiChatPanel() {
     if (!contentEl || typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      if (isStreaming || shouldStickToBottomRef.current) {
+      if (isStreaming && shouldStickToBottomRef.current) {
         scheduleScrollToBottom("auto");
       }
     });
     observer.observe(contentEl);
     return () => observer.disconnect();
   }, [isStreaming, scheduleScrollToBottom]);
+
+  // Reset stick-to-bottom when streaming ends
+  useEffect(() => {
+    if (!isStreaming) {
+      shouldStickToBottomRef.current = true;
+    }
+  }, [isStreaming]);
 
   // Auto-resize textarea
   useEffect(() => {
