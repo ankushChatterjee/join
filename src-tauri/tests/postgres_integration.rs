@@ -123,9 +123,94 @@ async fn postgres_metadata_and_query_integration() {
         panic!("expected composite type object");
     }
 
+    let all_types = execute_query(
+        &connection_id,
+        "SELECT
+           c_smallint,
+           c_int,
+           c_bigint,
+           c_real,
+           c_double,
+           c_numeric,
+           c_bool,
+           c_uuid,
+           c_timestamp,
+           c_timestamptz,
+           c_date,
+           c_time,
+           c_jsonb,
+           c_smallint_array,
+           c_int_array,
+           c_bigint_array,
+           c_real_array,
+           c_double_array,
+           c_text_array,
+           c_bool_array,
+           c_uuid_array,
+           c_timestamp_array,
+           c_timestamptz_array,
+           c_date_array,
+           c_time_array,
+           c_enum,
+           c_composite,
+           c_domain
+         FROM all_supported_types
+         ORDER BY id
+         LIMIT 1",
+    )
+    .await
+    .expect("all supported type query");
+
+    assert_eq!(all_types.row_count, 1);
+    assert_eq!(all_types.columns.len(), 28);
+    let r = &all_types.rows[0];
+
+    assert_eq!(r[0].as_i64(), Some(7));
+    assert_eq!(r[1].as_i64(), Some(42));
+    assert_eq!(r[2].as_i64(), Some(900719925474099));
+    assert!((r[3].as_f64().expect("real as f64") - 3.25).abs() < 1e-6);
+    assert!((r[4].as_f64().expect("double as f64") - 6.283185307).abs() < 1e-9);
+    assert_eq!(r[5].as_str(), Some("1234567890.123456"));
+    assert_eq!(r[6].as_bool(), Some(true));
+    assert_eq!(r[7].as_str(), Some("123e4567-e89b-12d3-a456-426614174000"));
+    assert_eq!(r[8].as_str(), Some("2026-01-02 03:04:05"));
+    assert!(r[9].as_str().unwrap_or_default().contains("2026-01-02 03:04:05"));
+    assert_eq!(r[10].as_str(), Some("2026-01-02"));
+    assert_eq!(r[11].as_str(), Some("03:04:05"));
+
+    let json_obj = r[12].as_object().expect("jsonb object");
+    assert_eq!(json_obj.get("name"), Some(&Value::String("types-row".into())));
+    assert_eq!(json_obj.get("ok"), Some(&Value::Bool(true)));
+    assert_eq!(json_obj.get("count"), Some(&Value::Number(3.into())));
+
+    assert_eq!(r[13].as_array().expect("smallint array").len(), 3);
+    assert_eq!(r[14].as_array().expect("int array").len(), 3);
+    assert_eq!(r[15].as_array().expect("bigint array").len(), 3);
+    assert_eq!(r[16].as_array().expect("real array").len(), 2);
+    assert_eq!(r[17].as_array().expect("double array").len(), 2);
+    assert_eq!(r[18].as_array().expect("text array").len(), 2);
+    assert_eq!(r[19].as_array().expect("bool array").len(), 3);
+    assert_eq!(r[20].as_array().expect("uuid array").len(), 2);
+    assert_eq!(r[21].as_array().expect("timestamp array").len(), 2);
+    assert_eq!(r[22].as_array().expect("timestamptz array").len(), 2);
+    assert_eq!(r[23].as_array().expect("date array").len(), 2);
+    assert_eq!(r[24].as_array().expect("time array").len(), 2);
+
+    assert_eq!(r[25].as_str(), Some("shipped"));
+    if let Value::Object(obj) = &r[26] {
+        assert_eq!(obj.get("_display"), Some(&Value::String("composite".into())));
+        assert!(obj
+            .get("_raw")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("99 Data Way"));
+    } else {
+        panic!("expected composite type object in all_supported_types");
+    }
+    assert_eq!(r[27].as_i64(), Some(9));
+
     let bad = execute_query(&connection_id, "SELECT * FROM does_not_exist").await;
     assert!(bad.is_err());
 
     disconnect(&connection_id).await.expect("disconnect");
 }
-
