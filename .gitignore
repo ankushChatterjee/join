@@ -28,3 +28,6 @@ bun.lockb
 *.sln
 *.sw?
 .env
+
+# Test reports
+reports
