@@ -9,6 +9,7 @@ import type {
   ChatSession,
   ChatSessionData,
   PendingApproval,
+  PendingQuestion,
   ToolCallDisplay,
   StreamingPart,
 } from "@/ai/types";
@@ -61,6 +62,9 @@ interface AiState {
   // Approval state (multiple tools may request approval concurrently)
   pendingApprovals: PendingApproval[];
 
+  // Question state (multiple tools may request questions concurrently)
+  pendingQuestions: PendingQuestion[];
+
   // Context Management
   tokenUsage: number;
   maxTokens: number;
@@ -81,6 +85,8 @@ interface AiState {
   sendMessage: (text: string) => Promise<void>;
   stopStreaming: () => void;
   approveToolCall: (toolCallId: string, approved: boolean) => void;
+  answerQuestion: (toolCallId: string, answers: string[][]) => void;
+  rejectQuestion: (toolCallId: string) => void;
 
   // Persistence
   saveActiveSession: () => Promise<void>;
@@ -138,6 +144,7 @@ export const useAiStore = create<AiState>((set, get) => {
   streamingParts: [],
   abortController: null,
   pendingApprovals: [],
+  pendingQuestions: [],
 
   // Context Management
   tokenUsage: 0,
@@ -437,6 +444,11 @@ export const useAiStore = create<AiState>((set, get) => {
               pendingApprovals: [...state.pendingApprovals, approval],
             }));
           },
+          onRequestQuestion: (question) => {
+            set((state) => ({
+              pendingQuestions: [...state.pendingQuestions, question],
+            }));
+          },
           onComplete: (assistantMessage: ChatMessage) => {
             flushPendingStreamingText();
             // Include tool calls from streaming state
@@ -474,6 +486,7 @@ export const useAiStore = create<AiState>((set, get) => {
                 streamingParts: [],
                 abortController: null,
                 pendingApprovals: [],
+                pendingQuestions: [],
               };
             });
 
@@ -518,6 +531,7 @@ export const useAiStore = create<AiState>((set, get) => {
                 streamingParts: [],
                 abortController: null,
                 pendingApprovals: [],
+                pendingQuestions: [],
               };
             });
 
@@ -559,6 +573,7 @@ export const useAiStore = create<AiState>((set, get) => {
             streamingParts: [],
             abortController: null,
             pendingApprovals: [],
+            pendingQuestions: [],
           };
         });
 
@@ -566,9 +581,12 @@ export const useAiStore = create<AiState>((set, get) => {
         get().calculateTokenUsage();
         resetStreamingBuffer();
       } else {
-        // Reject any pending approvals on abort
+        // Reject any pending approvals and questions on abort
         for (const a of get().pendingApprovals) {
           a.resolve(false);
+        }
+        for (const q of get().pendingQuestions) {
+          q.reject();
         }
         set({
           isStreaming: false,
@@ -577,6 +595,7 @@ export const useAiStore = create<AiState>((set, get) => {
           streamingParts: [],
           abortController: null,
           pendingApprovals: [],
+          pendingQuestions: [],
         });
         resetStreamingBuffer();
       }
@@ -584,16 +603,20 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   stopStreaming: () => {
-    const { abortController, pendingApprovals } = get();
-    // Reject all pending approvals
+    const { abortController, pendingApprovals, pendingQuestions } = get();
+    // Reject all pending approvals and questions
     for (const a of pendingApprovals) {
       a.resolve(false);
+    }
+    for (const q of pendingQuestions) {
+      q.reject();
     }
     abortController?.abort();
     set({
       isStreaming: false,
       abortController: null,
       pendingApprovals: [],
+      pendingQuestions: [],
       streamingParts: [],
     });
     resetStreamingBuffer();
@@ -606,6 +629,28 @@ export const useAiStore = create<AiState>((set, get) => {
       target.resolve(approved);
       set({
         pendingApprovals: pendingApprovals.filter((a) => a.toolCallId !== toolCallId),
+      });
+    }
+  },
+
+  answerQuestion: (toolCallId: string, answers: string[][]) => {
+    const { pendingQuestions } = get();
+    const target = pendingQuestions.find((q) => q.toolCallId === toolCallId);
+    if (target) {
+      target.resolve(answers);
+      set({
+        pendingQuestions: pendingQuestions.filter((q) => q.toolCallId !== toolCallId),
+      });
+    }
+  },
+
+  rejectQuestion: (toolCallId: string) => {
+    const { pendingQuestions } = get();
+    const target = pendingQuestions.find((q) => q.toolCallId === toolCallId);
+    if (target) {
+      target.reject();
+      set({
+        pendingQuestions: pendingQuestions.filter((q) => q.toolCallId !== toolCallId),
       });
     }
   },

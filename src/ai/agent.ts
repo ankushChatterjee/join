@@ -4,7 +4,7 @@
 
 import { streamText, stepCountIs } from "ai";
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, ToolCallDisplay, PendingApproval } from "./types";
+import type { ChatMessage, ToolCallDisplay, PendingApproval, PendingQuestion } from "./types";
 import { chatMessagesToModelMessages } from "./types";
 import { getModel, getModelConfig } from "./providers";
 import { allTools } from "./tools";
@@ -25,6 +25,7 @@ const MAX_TOOL_ITERATIONS = 15;
 
 export interface AgentContext {
   onRequestApproval?: (approval: PendingApproval) => void;
+  onRequestQuestion?: (question: PendingQuestion) => void;
   executionContext: AgentExecutionContext;
 }
 
@@ -35,6 +36,7 @@ export interface AgentCallbacks {
   onToolCallStart: (toolCall: { id: string; name: string; input: Record<string, unknown> }) => void;
   onToolCallEnd: (toolCallId: string, result: string, isError?: boolean) => void;
   onRequestApproval: (approval: PendingApproval) => void;
+  onRequestQuestion: (question: PendingQuestion) => void;
   onComplete: (message: ChatMessage) => void;
   onError: (error: Error) => void;
 }
@@ -65,6 +67,7 @@ export async function runAgent(
   // Context object passed to all tool execute() calls
   const agentContext: AgentContext = {
     onRequestApproval: callbacks.onRequestApproval,
+    onRequestQuestion: callbacks.onRequestQuestion,
     executionContext,
   };
 

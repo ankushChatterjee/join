@@ -18,6 +18,7 @@ import {
   replaceEditorContentTool,
   addCellTool,
 } from "./editorTools";
+import { askQuestion } from "./questionTool";
 
 /** All tools available to the AI agent, keyed by tool name */
 export const allTools = {
@@ -36,6 +37,7 @@ export const allTools = {
   insert_sql: insertSql,
   replace_editor_content: replaceEditorContentTool,
   add_cell: addCellTool,
+  ask_question: askQuestion,
 };
 
 export type AllToolsType = typeof allTools;

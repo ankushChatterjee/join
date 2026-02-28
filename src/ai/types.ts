@@ -46,6 +46,28 @@ export interface PendingApproval {
   resolve: (approved: boolean) => void;
 }
 
+// --- Question Types ---
+
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface QuestionInfo {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiple?: boolean;
+  custom?: boolean;
+}
+
+export interface PendingQuestion {
+  toolCallId: string;
+  questions: QuestionInfo[];
+  resolve: (answers: string[][]) => void;
+  reject: () => void;
+}
+
 // Streaming parts - track order of content during streaming
 export type StreamingPart =
   | { type: "text"; text: string; index: number }

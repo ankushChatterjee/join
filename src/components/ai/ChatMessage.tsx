@@ -18,9 +18,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
-import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, StreamingPart } from "@/ai/types";
+import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, PendingQuestion, StreamingPart } from "@/ai/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { QuestionCard } from "./QuestionCard";
 
 // --- Markdown Renderer ---
 
@@ -339,6 +340,7 @@ interface ChatMessageProps {
   streamingToolCalls?: ToolCallDisplay[];
   streamingParts?: StreamingPart[];
   pendingApprovals?: PendingApproval[];
+  pendingQuestions?: PendingQuestion[];
 }
 
 const ChatMessageComponentInner = ({
@@ -348,6 +350,7 @@ const ChatMessageComponentInner = ({
   streamingToolCalls,
   streamingParts,
   pendingApprovals = [],
+  pendingQuestions = [],
 }: ChatMessageProps) => {
   if (message.role === "user") {
     return (
@@ -426,6 +429,10 @@ const ChatMessageComponentInner = ({
             {isStreaming && content && (
               <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
             )}
+            {/* Pending questions */}
+            {pendingQuestions.map((question) => (
+              <QuestionCard key={question.toolCallId} pendingQuestion={question} />
+            ))}
           </>
         ) : (
           // No parts - use old layout
@@ -444,6 +451,11 @@ const ChatMessageComponentInner = ({
             {/* Pending approvals */}
             {pendingApprovals.map((approval) => (
               <SqlApprovalCard key={approval.toolCallId} approval={approval} />
+            ))}
+
+            {/* Pending questions */}
+            {pendingQuestions.map((question) => (
+              <QuestionCard key={question.toolCallId} pendingQuestion={question} />
             ))}
 
             {/* Message content */}

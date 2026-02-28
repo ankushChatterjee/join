@@ -282,6 +282,7 @@ function AiChatPanel() {
     streamingToolCalls,
     streamingParts,
     pendingApprovals,
+    pendingQuestions,
     sendMessage,
     stopStreaming,
     createSession,
@@ -294,6 +295,7 @@ function AiChatPanel() {
       streamingToolCalls: state.streamingToolCalls,
       streamingParts: state.streamingParts,
       pendingApprovals: state.pendingApprovals,
+      pendingQuestions: state.pendingQuestions,
       sendMessage: state.sendMessage,
       stopStreaming: state.stopStreaming,
       createSession: state.createSession,
@@ -509,7 +511,12 @@ function AiChatPanel() {
         ) : (
           <div ref={messagesContentRef} className="mx-auto w-full max-w-[760px] px-2.5 py-3">
             {messages.map((msg) => (
-              <ChatMessageComponent key={msg.id} message={msg} />
+              <ChatMessageComponent 
+                key={msg.id} 
+                message={msg} 
+                pendingApprovals={pendingApprovals}
+                pendingQuestions={pendingQuestions}
+              />
             ))}
 
             {/* Streaming assistant message */}
@@ -526,6 +533,7 @@ function AiChatPanel() {
                 streamingToolCalls={streamingToolCalls}
                 streamingParts={streamingParts}
                 pendingApprovals={pendingApprovals}
+                pendingQuestions={pendingQuestions}
               />
             )}
             <div ref={bottomAnchorRef} />
