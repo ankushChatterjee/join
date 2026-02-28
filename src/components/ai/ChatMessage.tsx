@@ -287,18 +287,24 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
 
 function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
   const { approveToolCall } = useAiStore();
+  
+  const isAddCell = approval.toolName === "add_cell";
+  const title = isAddCell ? "Add Cell Approval" : "SQL Query Approval";
+  const description = isAddCell 
+    ? "The agent wants to add this query to a new cell:"
+    : "The AI wants to run this query:";
 
   return (
     <div className="my-3 overflow-hidden rounded-sm border border-amber-500/30 bg-amber-500/5">
       <div className="flex items-center gap-1.5 border-b border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5">
         <ShieldAlert className="w-4 h-4 text-amber-400" />
         <span className="text-xs font-medium text-amber-300">
-          SQL Query Approval
+          {title}
         </span>
       </div>
       <div className="p-2.5">
         <p className="mb-2 text-xs text-base-300">
-          The AI wants to run this query:
+          {description}
         </p>
         <pre className="panel-scroll mb-2.5 overflow-x-auto rounded-sm border border-base-700 bg-base-900 px-2.5 py-2 text-xs font-mono text-base-200">
           {approval.sql}

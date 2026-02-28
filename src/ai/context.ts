@@ -225,7 +225,7 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- \`insert_sql\` and \`replace_editor_content\` only modify the currently selected cell (shown as "Cell N" where N is its position).`
   );
   parts.push(
-    `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected).`
+    `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected). This tool requires user approval.`
   );
   parts.push(
     `- The \`execute_readonly_sql\` tool requires user approval and should be used when needed to verify data or test queries or understand the schema/data better. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`

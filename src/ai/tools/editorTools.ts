@@ -5,6 +5,7 @@
 import { tool } from "ai";
 import { z } from "zod/v4";
 import { useAppStore } from "@/stores/appStore";
+import type { AgentContext } from "../agent";
 import {
   getSelectedText,
   getFullEditorContent,
@@ -163,17 +164,44 @@ export const replaceEditorContentTool = tool({
 });
 
 // --- add_cell ---
+// This tool requires user approval. The approval flow is handled by awaiting
+// a Promise inside execute() — the onRequestApproval callback is passed
+// through the experimental_context from the streamText call.
 export const addCellTool = tool({
   description:
-    "Add a new SQL cell to the active sheet. Use this when no cell is selected or when you want to create a new cell for a separate query.",
+    "Add a new SQL cell to the active sheet. Use this when no cell is selected or when you want to create a new cell for a separate query. This requires user approval.",
   inputSchema: z.object({
     sql: z
       .string()
       .optional()
       .describe("Optional SQL content for the new cell"),
   }),
-  execute: async ({ sql }) => {
+  execute: async ({ sql }, { toolCallId, experimental_context, abortSignal }) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    
+    // Request user approval before adding the cell
+    if (ctx?.onRequestApproval) {
+      const approved = await new Promise<boolean>((resolve) => {
+        ctx.onRequestApproval!({
+          toolCallId,
+          toolName: "add_cell",
+          sql: sql ?? "(empty cell)",
+          resolve,
+        });
+      });
+
+      if (abortSignal?.aborted) {
+        throw new Error("Aborted");
+      }
+
+      if (!approved) {
+        return "User declined to add a new cell.";
+      }
+    }
+    
+    // Get fresh state after approval
     const { openScripts, activeScriptId, addScriptCell, activeEditorTab } = useAppStore.getState();
+    
     if (activeEditorTab?.kind === "result") {
       return "Result tabs only support a single query cell. Editing is allowed, but adding cells is not.";
     }
