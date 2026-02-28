@@ -22,6 +22,14 @@ import { useAppStore } from "@/stores/appStore";
 
 const STREAM_TEXT_FLUSH_MS = 40;
 
+const debugLog = async (message: string) => {
+  try {
+    await invoke("debug_log", { message });
+  } catch {
+    // Silently fail - debug logging is optional
+  }
+};
+
 interface ChatSessionMeta {
   id: string;
   title: string;
@@ -312,6 +320,9 @@ export const useAiStore = create<AiState>((set, get) => {
     const rawText = text.trim();
     const fullText = messageContext ? `${rawText}${messageContext}` : rawText;
 
+    // Log full prompt to Rust console
+    await debugLog(`[AGENT] FULL PROMPT (raw: ${rawText.length}, context: ${messageContext?.length || 0}, full: ${fullText.length} chars):\n${fullText}`);
+
     // Add user message — store only the raw typed text
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -471,6 +482,11 @@ export const useAiStore = create<AiState>((set, get) => {
 
             // Recalculate once complete
             get().calculateTokenUsage();
+
+            // Log response and token usage to Rust console
+            debugLog(`[AGENT] RESPONSE:\n${finalMessage.content}`);
+            debugLog(`[AGENT] TOKENS: ${get().tokenUsage} / ${get().maxTokens}`);
+
             resetStreamingBuffer();
           },
           onError: (error: Error) => {

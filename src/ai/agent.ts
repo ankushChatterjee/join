@@ -3,12 +3,21 @@
 // ============================================================================
 
 import { streamText, stepCountIs } from "ai";
+import { invoke } from "@tauri-apps/api/core";
 import type { ChatMessage, ToolCallDisplay, PendingApproval } from "./types";
 import { chatMessagesToModelMessages } from "./types";
 import { getModel, getModelConfig } from "./providers";
 import { allTools } from "./tools";
 import { buildSystemPrompt } from "./context";
 import type { AgentExecutionContext } from "./executionContext";
+
+const debugLog = async (message: string) => {
+  try {
+    await invoke("debug_log", { message });
+  } catch {
+    // Silently fail - debug logging is optional
+  }
+};
 
 const MAX_TOOL_ITERATIONS = 15;
 
@@ -47,19 +56,11 @@ export async function runAgent(
   const modelConfig = getModelConfig(modelId);
   const systemPrompt = buildSystemPrompt(executionContext);
 
+  // Log system prompt to Rust console
+  await debugLog(`[AGENT] SYSTEM PROMPT (${systemPrompt.length} chars):\n${systemPrompt}`);
+
   // Convert chat history to AI SDK ModelMessage format
   const messages = chatMessagesToModelMessages(conversationHistory);
-
-  console.log("=".repeat(80));
-  console.log("[Agent] FULL SYSTEM PROMPT START");
-  console.log("=".repeat(80));
-  console.log(systemPrompt);
-  console.log("=".repeat(80));
-  console.log("[Agent] FULL SYSTEM PROMPT END");
-  console.log("=".repeat(80));
-  console.log(`[Agent] Model: ${modelId}`);
-  console.log("[Agent] Tools:", Object.keys(allTools).join(", "));
-  console.log("[Agent] History messages:", messages.length);
 
   // Context object passed to all tool execute() calls
   const agentContext: AgentContext = {

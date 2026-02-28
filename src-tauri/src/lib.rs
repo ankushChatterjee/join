@@ -507,6 +507,15 @@ fn delete_chat_session(session_id: String) -> Result<(), String> {
 }
 
 // ============================================================================
+// Tauri Commands - Debug
+// ============================================================================
+
+#[tauri::command]
+fn debug_log(message: String) {
+    println!("[DEBUG] {}", message);
+}
+
+// ============================================================================
 // App Entry Point
 // ============================================================================
 
@@ -569,6 +578,8 @@ pub fn run() {
             get_chat_session,
             save_chat_session,
             delete_chat_session,
+            // Debug
+            debug_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
