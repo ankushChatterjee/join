@@ -78,6 +78,7 @@ export interface ChatSession {
   title: string;
   modelId: string;
   connectionId: string | null;
+  forkedFrom?: string;
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
@@ -89,6 +90,7 @@ export interface ChatSessionData {
   title: string;
   modelId: string;
   connectionId: string | null;
+  forkedFrom?: string;
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];

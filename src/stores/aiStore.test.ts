@@ -31,6 +31,245 @@ function resetStore() {
   });
 }
 
+describe("aiStore session management", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    resetStore();
+  });
+
+  describe("forkSession", () => {
+    it("forks a session with copied messages and forkedFrom field", async () => {
+      // Setup existing session to fork
+      const originalSession = {
+        id: "original-id",
+        title: "Original Chat",
+        modelId: "claude-sonnet",
+        connectionId: "conn-123",
+        createdAt: 1000,
+        updatedAt: 2000,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            content: "Hello",
+            timestamp: 1500,
+          },
+          {
+            id: "msg-2",
+            role: "assistant",
+            content: "Hi there!",
+            timestamp: 1600,
+          },
+        ],
+      };
+
+      // Mock get_chat_session to return the original
+      invokeMock.mockImplementation((cmd: string, _args: any) => {
+        if (cmd === "get_chat_session") {
+          return Promise.resolve(originalSession);
+        }
+        if (cmd === "save_chat_session") {
+          return Promise.resolve();
+        }
+        return Promise.resolve();
+      });
+
+      // Setup store with the session
+      useAiStore.setState({
+        sessions: [
+          {
+            id: "original-id",
+            title: "Original Chat",
+            modelId: "claude-sonnet",
+            connectionId: "conn-123",
+            createdAt: 1000,
+            updatedAt: 2000,
+          },
+        ],
+      });
+
+      const newSessionId = await useAiStore.getState().forkSession("original-id");
+
+      // Verify a new session ID was returned
+      expect(newSessionId).toBeTruthy();
+      expect(newSessionId).not.toBe("original-id");
+
+      // Verify save_chat_session was called with forked data
+      const saveCalls = invokeMock.mock.calls.filter((call: any[]) => call[0] === "save_chat_session");
+      expect(saveCalls.length).toBe(1);
+
+      const savedSession = saveCalls[0][1].session;
+      expect(savedSession.title).toBe("Original Chat");
+      expect(savedSession.forkedFrom).toBe("original-id");
+      expect(savedSession.connectionId).toBe("conn-123");
+      expect(savedSession.messages.length).toBe(2);
+      expect(savedSession.messages[0].content).toBe("Hello");
+      expect(savedSession.messages[1].content).toBe("Hi there!");
+      // Messages should have new IDs
+      expect(savedSession.messages[0].id).not.toBe("msg-1");
+      expect(savedSession.messages[1].id).not.toBe("msg-2");
+
+      // Verify the new session is now active
+      const state = useAiStore.getState();
+      expect(state.activeSessionId).toBe(newSessionId);
+      expect(state.activeSession?.forkedFrom).toBe("original-id");
+      expect(state.sessions.length).toBe(2);
+    });
+
+    it("returns empty string when source session not found", async () => {
+      useAiStore.setState({
+        sessions: [], // No sessions
+      });
+
+      const result = await useAiStore.getState().forkSession("non-existent");
+
+      expect(result).toBe("");
+      expect(invokeMock).not.toHaveBeenCalledWith("get_chat_session", expect.anything());
+    });
+
+    it("forks session with empty messages", async () => {
+      const emptySession = {
+        id: "empty-id",
+        title: "Empty Chat",
+        modelId: "gpt-4",
+        connectionId: null,
+        createdAt: 1000,
+        updatedAt: 2000,
+        messages: [],
+      };
+
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "get_chat_session") {
+          return Promise.resolve(emptySession);
+        }
+        if (cmd === "save_chat_session") {
+          return Promise.resolve();
+        }
+        return Promise.resolve();
+      });
+
+      useAiStore.setState({
+        sessions: [
+          {
+            id: "empty-id",
+            title: "Empty Chat",
+            modelId: "gpt-4",
+            connectionId: null,
+            createdAt: 1000,
+            updatedAt: 2000,
+          },
+        ],
+      });
+
+      const newSessionId = await useAiStore.getState().forkSession("empty-id");
+
+      expect(newSessionId).toBeTruthy();
+
+      const saveCalls = invokeMock.mock.calls.filter((call: any[]) => call[0] === "save_chat_session");
+      const savedSession = saveCalls[0][1].session;
+      expect(savedSession.messages).toEqual([]);
+      expect(savedSession.forkedFrom).toBe("empty-id");
+    });
+
+    it("forked session appears first in sessions list", async () => {
+      const originalSession = {
+        id: "original-id",
+        title: "Original",
+        modelId: "model",
+        connectionId: null,
+        createdAt: 1000,
+        updatedAt: 2000,
+        messages: [],
+      };
+
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "get_chat_session") {
+          return Promise.resolve(originalSession);
+        }
+        if (cmd === "save_chat_session") {
+          return Promise.resolve();
+        }
+        return Promise.resolve();
+      });
+
+      useAiStore.setState({
+        sessions: [
+          {
+            id: "original-id",
+            title: "Original",
+            modelId: "model",
+            connectionId: null,
+            createdAt: 1000,
+            updatedAt: 2000,
+          },
+          {
+            id: "other-id",
+            title: "Other",
+            modelId: "model",
+            connectionId: null,
+            createdAt: 500,
+            updatedAt: 1500,
+          },
+        ],
+      });
+
+      await useAiStore.getState().forkSession("original-id");
+
+      const state = useAiStore.getState();
+      // Forked session should be first
+      expect(state.sessions[0].forkedFrom).toBe("original-id");
+    });
+  });
+
+  describe("createSession", () => {
+    it("creates new session without forkedFrom", async () => {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "save_chat_session") {
+          return Promise.resolve();
+        }
+        return Promise.resolve();
+      });
+
+      const sessionId = await useAiStore.getState().createSession();
+
+      expect(sessionId).toBeTruthy();
+
+      const saveCalls = invokeMock.mock.calls.filter((call: any[]) => call[0] === "save_chat_session");
+      const savedSession = saveCalls[0][1].session;
+      expect(savedSession.forkedFrom).toBeUndefined();
+      expect(savedSession.title).toBe("New Chat");
+    });
+  });
+
+  describe("loadSession", () => {
+    it("loads session with forkedFrom field", async () => {
+      const forkedSession = {
+        id: "forked-id",
+        title: "Forked Session",
+        modelId: "model",
+        connectionId: null,
+        forkedFrom: "original-id",
+        createdAt: 1000,
+        updatedAt: 2000,
+        messages: [],
+      };
+
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "get_chat_session") {
+          return Promise.resolve(forkedSession);
+        }
+        return Promise.resolve();
+      });
+
+      await useAiStore.getState().loadSession("forked-id");
+
+      const state = useAiStore.getState();
+      expect(state.activeSession?.forkedFrom).toBe("original-id");
+      expect(state.activeSession?.id).toBe("forked-id");
+    });
+  });
+});
+
 describe("aiStore question handling", () => {
   beforeEach(() => {
     invokeMock.mockReset();

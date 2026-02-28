@@ -59,6 +59,8 @@ pub struct ChatSession {
     pub title: String,
     pub model_id: String,
     pub connection_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forked_from: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub messages: Vec<ChatMessage>,
@@ -72,6 +74,8 @@ pub struct ChatSessionMeta {
     pub title: String,
     pub model_id: String,
     pub connection_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forked_from: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -107,6 +111,7 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
                             title: session.title,
                             model_id: session.model_id,
                             connection_id: session.connection_id,
+                            forked_from: session.forked_from,
                             created_at: session.created_at,
                             updated_at: session.updated_at,
                         });
@@ -186,12 +191,39 @@ mod tests {
             title: title.into(),
             model_id: "model".into(),
             connection_id: Some("conn-1".into()),
+            forked_from: None,
             created_at: updated_at - 1000,
             updated_at,
             messages: vec![ChatMessage {
                 id: format!("msg-{id}"),
                 role: "user".into(),
                 content: "hello".into(),
+                tool_calls: None,
+                timestamp: updated_at - 500,
+                is_error: None,
+                metadata: None,
+            }],
+        }
+    }
+
+    fn sample_forked_session(
+        id: &str,
+        title: &str,
+        forked_from: &str,
+        updated_at: i64,
+    ) -> ChatSession {
+        ChatSession {
+            id: id.into(),
+            title: title.into(),
+            model_id: "model".into(),
+            connection_id: Some("conn-1".into()),
+            forked_from: Some(forked_from.into()),
+            created_at: updated_at - 1000,
+            updated_at,
+            messages: vec![ChatMessage {
+                id: format!("msg-{id}"),
+                role: "user".into(),
+                content: "forked content".into(),
                 tool_calls: None,
                 timestamp: updated_at - 500,
                 is_error: None,
@@ -223,5 +255,150 @@ mod tests {
         let listed_after_delete = list_chat_sessions().expect("list after");
         assert_eq!(listed_after_delete.len(), 1);
         assert_eq!(listed_after_delete[0].id, "s2");
+    }
+
+    #[test]
+    fn forked_session_preserves_forked_from_field() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+
+        let original = sample_session("original", "Original Session", 100);
+        let forked = sample_forked_session("forked", "Forked Session", "original", 200);
+
+        save_chat_session(&original).expect("save original");
+        save_chat_session(&forked).expect("save forked");
+
+        // Verify forked session is saved correctly
+        let loaded_forked = get_chat_session("forked").expect("get forked");
+        assert_eq!(loaded_forked.id, "forked");
+        assert_eq!(loaded_forked.forked_from, Some("original".to_string()));
+        assert_eq!(loaded_forked.title, "Forked Session");
+
+        // Verify listing includes fork information
+        let listed = list_chat_sessions().expect("list");
+        assert_eq!(listed.len(), 2);
+
+        let forked_meta = listed.iter().find(|s| s.id == "forked").unwrap();
+        assert_eq!(forked_meta.forked_from, Some("original".to_string()));
+
+        // Original session should not have forked_from
+        let original_meta = listed.iter().find(|s| s.id == "original").unwrap();
+        assert_eq!(original_meta.forked_from, None);
+    }
+
+    #[test]
+    fn forked_session_roundtrip() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+
+        // Create a session with multiple messages
+        let forked = ChatSession {
+            id: "fork-1".into(),
+            title: "Fork with Messages".into(),
+            model_id: "gpt-4".into(),
+            connection_id: Some("conn-2".into()),
+            forked_from: Some("original-session".into()),
+            created_at: 1000,
+            updated_at: 2000,
+            messages: vec![
+                ChatMessage {
+                    id: "msg-1".into(),
+                    role: "user".into(),
+                    content: "First message".into(),
+                    tool_calls: None,
+                    timestamp: 1500,
+                    is_error: None,
+                    metadata: Some(ChatMessageMetadata {
+                        connection_id: Some("conn-2".into()),
+                        metadata_version: Some(1),
+                        result_tab_id: None,
+                        result_version: None,
+                        captured_at: Some(1500),
+                    }),
+                },
+                ChatMessage {
+                    id: "msg-2".into(),
+                    role: "assistant".into(),
+                    content: "Assistant response".into(),
+                    tool_calls: None,
+                    timestamp: 1600,
+                    is_error: None,
+                    metadata: None,
+                },
+            ],
+        };
+
+        save_chat_session(&forked).expect("save forked session");
+
+        let loaded = get_chat_session("fork-1").expect("load forked session");
+        assert_eq!(loaded.id, "fork-1");
+        assert_eq!(loaded.forked_from, Some("original-session".into()));
+        assert_eq!(loaded.messages.len(), 2);
+        assert_eq!(loaded.messages[0].role, "user");
+        assert_eq!(loaded.messages[1].role, "assistant");
+
+        // Verify metadata is preserved
+        let first_msg_metadata = loaded.messages[0].metadata.as_ref().unwrap();
+        assert_eq!(first_msg_metadata.connection_id, Some("conn-2".into()));
+        assert_eq!(first_msg_metadata.metadata_version, Some(1));
+    }
+
+    #[test]
+    fn forked_session_without_forked_from_is_none() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+
+        // Create a regular session without forked_from
+        let regular = ChatSession {
+            id: "regular".into(),
+            title: "Regular Session".into(),
+            model_id: "claude".into(),
+            connection_id: None,
+            forked_from: None,
+            created_at: 1000,
+            updated_at: 2000,
+            messages: vec![],
+        };
+
+        save_chat_session(&regular).expect("save regular");
+
+        let loaded = get_chat_session("regular").expect("load regular");
+        assert_eq!(loaded.forked_from, None);
+
+        // Verify listing shows None
+        let listed = list_chat_sessions().expect("list");
+        let regular_meta = listed.iter().find(|s| s.id == "regular").unwrap();
+        assert_eq!(regular_meta.forked_from, None);
+    }
+
+    #[test]
+    fn delete_forked_session_works() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+
+        let original = sample_session("orig-del", "Original", 100);
+        let forked = sample_forked_session("fork-del", "To Delete", "orig-del", 200);
+
+        save_chat_session(&original).expect("save original");
+        save_chat_session(&forked).expect("save forked");
+
+        // Delete the forked session
+        delete_chat_session("fork-del").expect("delete forked");
+
+        // Verify it's gone
+        let listed = list_chat_sessions().expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "orig-del");
+
+        // Verify original still exists with correct fork info
+        assert_eq!(listed[0].forked_from, None);
     }
 }

@@ -14,6 +14,7 @@ import {
   MessageSquare,
   X,
   Sparkles,
+  GitFork,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
@@ -277,6 +278,7 @@ function TokenUsageBar() {
 function AiChatPanel() {
   const {
     activeSession,
+    sessions,
     isStreaming,
     streamingText,
     streamingToolCalls,
@@ -286,10 +288,12 @@ function AiChatPanel() {
     sendMessage,
     stopStreaming,
     createSession,
+    forkSession,
     togglePanel,
   } = useAiStore(
     useShallow((state) => ({
       activeSession: state.activeSession,
+      sessions: state.sessions,
       isStreaming: state.isStreaming,
       streamingText: state.streamingText,
       streamingToolCalls: state.streamingToolCalls,
@@ -299,6 +303,7 @@ function AiChatPanel() {
       sendMessage: state.sendMessage,
       stopStreaming: state.stopStreaming,
       createSession: state.createSession,
+      forkSession: state.forkSession,
       togglePanel: state.togglePanel,
     }))
   );
@@ -444,6 +449,16 @@ function AiChatPanel() {
     await createSession();
   };
 
+  const handleForkChat = async () => {
+    if (!activeSession) return;
+    await forkSession(activeSession.id);
+  };
+
+  // Get the original session title if this is a forked session
+  const forkedFromTitle = activeSession?.forkedFrom
+    ? sessions.find((s) => s.id === activeSession.forkedFrom)?.title
+    : null;
+
   const inputDisabled = isStreaming && pendingApprovals.length === 0;
   const canSend = inputText.trim().length > 0 && !isStreaming;
 
@@ -472,12 +487,30 @@ function AiChatPanel() {
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
+          <button
+            onClick={handleForkChat}
+            disabled={!activeSession}
+            className={cn(
+              "w-6 h-6 flex items-center justify-center rounded-sm outline-none transition-colors-fast",
+              activeSession
+                ? "text-base-300 hover:bg-base-800 hover:text-base-100"
+                : "text-base-500 cursor-not-allowed"
+            )}
+            title="Fork chat"
+          >
+            <GitFork className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <div className="min-w-0 flex-1 px-1">
           <p className="truncate text-[11px] font-semibold text-base-200">
             {activeSession?.title || "New chat"}
           </p>
+          {forkedFromTitle && (
+            <p className="truncate text-[10px] text-base-400">
+              Forked from: {forkedFromTitle}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-0.5">

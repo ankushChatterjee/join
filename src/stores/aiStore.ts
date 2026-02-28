@@ -36,6 +36,7 @@ interface ChatSessionMeta {
   title: string;
   modelId: string;
   connectionId: string | null;
+  forkedFrom?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -77,6 +78,7 @@ interface AiState {
   // Session actions
   loadSessions: () => Promise<void>;
   createSession: () => Promise<string>;
+  forkSession: (sessionId: string) => Promise<string>;
   loadSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   setActiveSession: (sessionId: string | null) => void;
@@ -205,6 +207,7 @@ export const useAiStore = create<AiState>((set, get) => {
         title: session.title,
         modelId: session.modelId,
         connectionId: session.connectionId,
+        forkedFrom: session.forkedFrom,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
       };
@@ -219,6 +222,65 @@ export const useAiStore = create<AiState>((set, get) => {
       return session.id;
     } catch (error) {
       console.error("Failed to create chat session:", error);
+      return "";
+    }
+  },
+
+  forkSession: async (sessionId: string) => {
+    const { sessions } = get();
+    
+    // Find the source session
+    const sourceMeta = sessions.find((s) => s.id === sessionId);
+    if (!sourceMeta) {
+      console.error("Source session not found for fork:", sessionId);
+      return "";
+    }
+
+    try {
+      // Load full session data
+      const sourceSession = await invoke<ChatSession>("get_chat_session", {
+        sessionId,
+      });
+
+      const { selectedModelId } = get();
+      const newSession: ChatSessionData = {
+        id: crypto.randomUUID(),
+        title: sourceSession.title,
+        modelId: selectedModelId,
+        connectionId: sourceSession.connectionId,
+        forkedFrom: sessionId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: sourceSession.messages.map((msg) => ({
+          ...msg,
+          id: crypto.randomUUID(), // Generate new IDs for messages
+        })),
+      };
+
+      await invoke("save_chat_session", { session: newSession });
+
+      const meta: ChatSessionMeta = {
+        id: newSession.id,
+        title: newSession.title,
+        modelId: newSession.modelId,
+        connectionId: newSession.connectionId,
+        forkedFrom: newSession.forkedFrom,
+        createdAt: newSession.createdAt,
+        updatedAt: newSession.updatedAt,
+      };
+
+      set((state) => ({
+        sessions: [meta, ...state.sessions],
+        activeSessionId: newSession.id,
+        activeSession: { ...newSession },
+      }));
+
+      // Calculate token usage for the forked session
+      get().calculateTokenUsage();
+
+      return newSession.id;
+    } catch (error) {
+      console.error("Failed to fork chat session:", error);
       return "";
     }
   },
