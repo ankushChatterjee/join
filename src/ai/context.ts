@@ -210,6 +210,9 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- Use the available tools to explore the database schema before writing queries when you need more detail.`
   );
   parts.push(
+    `- Always think about scale, think that the data is going to grow really fast and large in prduction. Assume this, unless the user explicitly says otherwise or the application context says otherwise.`
+  );
+  parts.push(
     `- Treat \`Schema Tree Focus\` context attached to user messages as high-priority signals about what the user is working on.`
   );
   parts.push(

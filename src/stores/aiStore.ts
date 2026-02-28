@@ -10,6 +10,7 @@ import type {
   ChatSessionData,
   PendingApproval,
   ToolCallDisplay,
+  StreamingPart,
 } from "@/ai/types";
 import { runAgent } from "@/ai/agent";
 import { encodingForModel, TiktokenModel } from "js-tiktoken";
@@ -46,6 +47,7 @@ interface AiState {
   isStreaming: boolean;
   streamingText: string;
   streamingToolCalls: ToolCallDisplay[];
+  streamingParts: StreamingPart[];
   abortController: AbortController | null;
 
   // Approval state (multiple tools may request approval concurrently)
@@ -83,14 +85,19 @@ interface AiState {
 export const useAiStore = create<AiState>((set, get) => {
   let pendingStreamingText = "";
   let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let nextPartIndex = 0;
 
   const flushPendingStreamingText = () => {
     if (!pendingStreamingText) return;
     const chunk = pendingStreamingText;
+    const index = nextPartIndex++;
     pendingStreamingText = "";
     const state = get();
     if (!state.isStreaming) return;
-    set({ streamingText: state.streamingText + chunk });
+    set({ 
+      streamingText: state.streamingText + chunk,
+      streamingParts: [...state.streamingParts, { type: "text", text: chunk, index }],
+    });
   };
 
   const scheduleStreamingFlush = () => {
@@ -103,6 +110,7 @@ export const useAiStore = create<AiState>((set, get) => {
 
   const resetStreamingBuffer = () => {
     pendingStreamingText = "";
+    nextPartIndex = 0;
     if (streamFlushTimer) {
       clearTimeout(streamFlushTimer);
       streamFlushTimer = null;
@@ -119,6 +127,7 @@ export const useAiStore = create<AiState>((set, get) => {
   isStreaming: false,
   streamingText: "",
   streamingToolCalls: [],
+  streamingParts: [],
   abortController: null,
   pendingApprovals: [],
 
@@ -336,6 +345,7 @@ export const useAiStore = create<AiState>((set, get) => {
       isStreaming: true,
       streamingText: "",
       streamingToolCalls: [],
+      streamingParts: [],
     });
     resetStreamingBuffer();
 
@@ -372,16 +382,16 @@ export const useAiStore = create<AiState>((set, get) => {
             scheduleStreamingFlush();
           },
           onToolCallStart: (toolCall) => {
+            const index = nextPartIndex++;
+            const toolCallDisplay: ToolCallDisplay = {
+              id: toolCall.id,
+              name: toolCall.name,
+              input: toolCall.input,
+              status: "running" as const,
+            };
             set((state) => ({
-              streamingToolCalls: [
-                ...state.streamingToolCalls,
-                {
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  input: toolCall.input,
-                  status: "running" as const,
-                },
-              ],
+              streamingToolCalls: [...state.streamingToolCalls, toolCallDisplay],
+              streamingParts: [...state.streamingParts, { type: "tool", toolCall: toolCallDisplay, index }],
             }));
           },
           onToolCallEnd: (toolCallId, result, isError) => {
@@ -396,6 +406,19 @@ export const useAiStore = create<AiState>((set, get) => {
                   }
                   : tc
               ),
+              streamingParts: state.streamingParts.map((part) =>
+                part.type === "tool" && part.toolCall.id === toolCallId
+                  ? {
+                    ...part,
+                    toolCall: {
+                      ...part.toolCall,
+                      status: "completed" as const,
+                      result,
+                      isError,
+                    },
+                  }
+                  : part
+              ),
             }));
           },
           onRequestApproval: (approval: PendingApproval) => {
@@ -407,9 +430,11 @@ export const useAiStore = create<AiState>((set, get) => {
             flushPendingStreamingText();
             // Include tool calls from streaming state
             const toolCalls = get().streamingToolCalls;
+            const parts = get().streamingParts;
             const finalMessage: ChatMessage = {
               ...assistantMessage,
               toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+              parts: parts.length > 0 ? parts : undefined,
               metadata: {
                 connectionId: executionContext.targetConnectionId,
                 metadataVersion: executionContext.metadataVersion,
@@ -435,6 +460,7 @@ export const useAiStore = create<AiState>((set, get) => {
                 isStreaming: false,
                 streamingText: "",
                 streamingToolCalls: [],
+                streamingParts: [],
                 abortController: null,
                 pendingApprovals: [],
               };
@@ -473,6 +499,7 @@ export const useAiStore = create<AiState>((set, get) => {
                 isStreaming: false,
                 streamingText: "",
                 streamingToolCalls: [],
+                streamingParts: [],
                 abortController: null,
                 pendingApprovals: [],
               };
@@ -513,6 +540,7 @@ export const useAiStore = create<AiState>((set, get) => {
             isStreaming: false,
             streamingText: "",
             streamingToolCalls: [],
+            streamingParts: [],
             abortController: null,
             pendingApprovals: [],
           };
@@ -530,6 +558,7 @@ export const useAiStore = create<AiState>((set, get) => {
           isStreaming: false,
           streamingText: "",
           streamingToolCalls: [],
+          streamingParts: [],
           abortController: null,
           pendingApprovals: [],
         });
@@ -549,6 +578,7 @@ export const useAiStore = create<AiState>((set, get) => {
       isStreaming: false,
       abortController: null,
       pendingApprovals: [],
+      streamingParts: [],
     });
     resetStreamingBuffer();
   },

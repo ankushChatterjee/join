@@ -33,6 +33,7 @@ export interface ChatMessage {
   role: ChatMessageRole;
   content: string;
   toolCalls?: ToolCallDisplay[];
+  parts?: StreamingPart[];
   timestamp: number;
   isError?: boolean;
   metadata?: ChatMessageMetadata;
@@ -44,6 +45,11 @@ export interface PendingApproval {
   sql: string;
   resolve: (approved: boolean) => void;
 }
+
+// Streaming parts - track order of content during streaming
+export type StreamingPart =
+  | { type: "text"; text: string; index: number }
+  | { type: "tool"; toolCall: ToolCallDisplay; index: number };
 
 export interface ChatSession {
   id: string;

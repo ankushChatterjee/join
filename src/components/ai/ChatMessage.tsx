@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
-import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval } from "@/ai/types";
+import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, StreamingPart } from "@/ai/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -331,6 +331,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   streamingText?: string;
   streamingToolCalls?: ToolCallDisplay[];
+  streamingParts?: StreamingPart[];
   pendingApprovals?: PendingApproval[];
 }
 
@@ -339,6 +340,7 @@ const ChatMessageComponentInner = ({
   isStreaming,
   streamingText,
   streamingToolCalls,
+  streamingParts,
   pendingApprovals = [],
 }: ChatMessageProps) => {
   if (message.role === "user") {
@@ -360,6 +362,9 @@ const ChatMessageComponentInner = ({
   const toolCalls = isStreaming
     ? streamingToolCalls || []
     : message.toolCalls || [];
+  const parts = isStreaming
+    ? streamingParts || []
+    : message.parts || [];
   const isError = message.isError;
 
   // Error message UI
@@ -380,38 +385,79 @@ const ChatMessageComponentInner = ({
   return (
     <div className="py-1.5">
       <div className="rounded-sm border border-base-700/70 bg-base-900/50 px-2.5 py-2">
-        {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
-        {toolCalls.length > 0 && (
-          <div className="mb-2">
-            {toolCalls
-              .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
-              .map((tc) => (
-                <ToolCallItem key={tc.id} toolCall={tc} />
-              ))}
-          </div>
-        )}
+        {parts.length > 0 ? (
+          // Inline parts - render in order
+          <>
+            {parts.map((part, i) => {
+              if (part.type === "text") {
+                // Group consecutive text parts
+                if (i > 0 && parts[i - 1].type === "text") {
+                  return null; // Skip, will be rendered with previous text
+                }
+                // Collect all consecutive text parts
+                let textContent = part.text;
+                let j = i + 1;
+                while (j < parts.length && parts[j].type === "text") {
+                  textContent += (parts[j] as { type: "text"; text: string; index: number }).text;
+                  j++;
+                }
+                return (
+                  <MarkdownContent key={`text-${part.index}`} content={textContent} />
+                );
+              } else {
+                // Tool call - skip if it has a pending approval
+                if (pendingApprovals.some((a) => a.toolCallId === part.toolCall.id)) {
+                  return (
+                    <SqlApprovalCard key={`approval-${part.toolCall.id}`} approval={pendingApprovals.find((a) => a.toolCallId === part.toolCall.id)!} />
+                  );
+                }
+                return (
+                  <ToolCallItem key={`tool-${part.toolCall.id}`} toolCall={part.toolCall} />
+                );
+              }
+            })}
+            {/* Streaming cursor - only when streaming */}
+            {isStreaming && content && (
+              <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
+            )}
+          </>
+        ) : (
+          // No parts - use old layout
+          <>
+            {/* Tool calls (skip any that have a pending approval — the approval cards handle those) */}
+            {toolCalls.length > 0 && (
+              <div className="mb-2">
+                {toolCalls
+                  .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
+                  .map((tc) => (
+                    <ToolCallItem key={tc.id} toolCall={tc} />
+                  ))}
+              </div>
+            )}
 
-        {/* Pending approvals */}
-        {pendingApprovals.map((approval) => (
-          <SqlApprovalCard key={approval.toolCallId} approval={approval} />
-        ))}
+            {/* Pending approvals */}
+            {pendingApprovals.map((approval) => (
+              <SqlApprovalCard key={approval.toolCallId} approval={approval} />
+            ))}
 
-        {/* Message content */}
-        {content && (
-          <MarkdownContent content={content} />
-        )}
+            {/* Message content */}
+            {content && (
+              <MarkdownContent content={content} />
+            )}
 
-        {/* Streaming indicator */}
-        {isStreaming && !content && toolCalls.length === 0 && (
-          <div className="flex items-center gap-2 py-0.5 text-xs text-base-300">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            <span>Thinking...</span>
-          </div>
-        )}
+            {/* Streaming indicator */}
+            {isStreaming && !content && toolCalls.length === 0 && (
+              <div className="flex items-center gap-2 py-0.5 text-xs text-base-300">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Thinking...</span>
+              </div>
+            )}
 
-        {/* Streaming cursor */}
-        {isStreaming && content && (
-          <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
+            {/* Streaming cursor */}
+            {isStreaming && content && (
+              <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
+            )}
+          </>
         )}
       </div>
     </div>
