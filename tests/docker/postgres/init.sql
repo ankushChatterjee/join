@@ -13,6 +13,9 @@ CREATE TABLE customers (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+COMMENT ON COLUMN customers.name IS 'Customer full name';
+COMMENT ON COLUMN customers.metadata IS 'Additional customer metadata in JSON format';
+
 CREATE TABLE orders (
   id SERIAL PRIMARY KEY,
   customer_id INTEGER NOT NULL REFERENCES customers(id),
@@ -23,6 +26,10 @@ CREATE TABLE orders (
   quantity positive_int NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+COMMENT ON COLUMN orders.status IS 'Order status: pending, paid, or shipped';
+COMMENT ON COLUMN orders.total IS 'Total order amount in currency';
+COMMENT ON COLUMN orders.tags IS 'Tags associated with this order';
 
 CREATE INDEX idx_orders_customer_id ON orders(customer_id);
 

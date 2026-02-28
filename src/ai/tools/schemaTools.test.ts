@@ -8,9 +8,11 @@ mock.module("@tauri-apps/api/core", () => ({
 let useAppStore: (typeof import("@/stores/appStore"))["useAppStore"];
 let findJoinPath: (typeof import("./schemaTools"))["findJoinPath"];
 
+let describeTable: (typeof import("./schemaTools"))["describeTable"];
+
 beforeAll(async () => {
   ({ useAppStore } = await import("@/stores/appStore"));
-  ({ findJoinPath } = await import("./schemaTools"));
+  ({ findJoinPath, describeTable } = await import("./schemaTools"));
 });
 
 function baseExecutionContext() {
@@ -94,7 +96,7 @@ describe("schema tools", () => {
     expect(parsed.sql_skeleton).toContain("JOIN public.customers");
   });
 
-  it("returns a not-found response when no path exists", async () => {
+  it("returns not-found response when no path exists", async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === "get_schemas") return Promise.resolve([{ name: "public" }]);
       if (cmd === "get_tables") {
@@ -121,5 +123,64 @@ describe("schema tools", () => {
     const parsed = JSON.parse(raw);
     expect(parsed.found).toBe(false);
     expect(parsed.message).toContain("No foreign-key join path");
+  });
+
+  it("describe_table returns columns with comments", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_columns") {
+        return Promise.resolve([
+          {
+            name: "id",
+            data_type: "integer",
+            is_nullable: false,
+            is_primary_key: true,
+            comment: null,
+          },
+          {
+            name: "status",
+            data_type: "text",
+            is_nullable: true,
+            is_primary_key: false,
+            comment: "Order status: pending, paid, or shipped",
+          },
+          {
+            name: "total",
+            data_type: "numeric",
+            is_nullable: false,
+            is_primary_key: false,
+            comment: "Total order amount",
+          },
+        ]);
+      }
+      if (cmd === "get_indexes") return Promise.resolve([]);
+      if (cmd === "get_foreign_keys") return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    const raw = await (describeTable as any).execute(
+      {
+        schema: "public",
+        table: "orders",
+      },
+      {
+        experimental_context: { executionContext: baseExecutionContext() },
+      },
+    );
+
+    const parsed = JSON.parse(raw);
+    expect(parsed.table).toBe("public.orders");
+    expect(parsed.columns).toHaveLength(3);
+    
+    // Column without comment
+    const idCol = parsed.columns.find((c: any) => c.name === "id");
+    expect(idCol.comment).toBeNull();
+    
+    // Column with comment
+    const statusCol = parsed.columns.find((c: any) => c.name === "status");
+    expect(statusCol.comment).toBe("Order status: pending, paid, or shipped");
+    
+    // Another column with comment
+    const totalCol = parsed.columns.find((c: any) => c.name === "total");
+    expect(totalCol.comment).toBe("Total order amount");
   });
 });

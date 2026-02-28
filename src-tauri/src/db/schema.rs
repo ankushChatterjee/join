@@ -20,6 +20,7 @@ pub struct ColumnInfo {
     pub data_type: String,
     pub is_nullable: bool,
     pub is_primary_key: bool,
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,7 +227,8 @@ pub async fn get_columns(
                         ELSE c.data_type
                     END as data_type,
                     (c.is_nullable = 'YES') as is_nullable,
-                    COALESCE(tc.constraint_type = 'PRIMARY KEY', false) as is_primary_key
+                    COALESCE(tc.constraint_type = 'PRIMARY KEY', false) as is_primary_key,
+                    pgd.description as comment
                 FROM information_schema.columns c
                 LEFT JOIN information_schema.key_column_usage kcu 
                     ON c.table_schema = kcu.table_schema 
@@ -235,6 +237,12 @@ pub async fn get_columns(
                 LEFT JOIN information_schema.table_constraints tc 
                     ON kcu.constraint_name = tc.constraint_name 
                     AND tc.constraint_type = 'PRIMARY KEY'
+                LEFT JOIN pg_catalog.pg_class pc 
+                    ON pc.relname = c.table_name
+                    AND pc.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = c.table_schema)
+                LEFT JOIN pg_catalog.pg_description pgd 
+                    ON pgd.objoid = pc.oid 
+                    AND pgd.objsubid = c.ordinal_position
                 WHERE c.table_schema = '{}' AND c.table_name = '{}'
                 ORDER BY c.ordinal_position",
                 schema_name, table
@@ -250,6 +258,7 @@ pub async fn get_columns(
                 data_type: row.get("data_type"),
                 is_nullable: row.try_get("is_nullable").unwrap_or(true),
                 is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
+                comment: row.try_get("comment").ok(),
             }).collect())
         }
         DatabasePool::MySql(pool) => {
@@ -278,6 +287,7 @@ pub async fn get_columns(
                 data_type: row.get("data_type"),
                 is_nullable: row.try_get("is_nullable").unwrap_or(true),
                 is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
+                comment: None,
             }).collect())
         }
         DatabasePool::Sqlite(pool) => {
@@ -293,6 +303,7 @@ pub async fn get_columns(
                 data_type: row.get("type"),
                 is_nullable: row.get::<i32, _>("notnull") == 0,
                 is_primary_key: row.get::<i32, _>("pk") == 1,
+                comment: None,
             }).collect())
         }
     }
@@ -1167,7 +1178,8 @@ fn parse_single_postgres_argument(arg: &str) -> Option<FunctionArgInfo> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_mysql_enum_set_values, parse_postgres_function_arguments};
+    use super::{parse_mysql_enum_set_values, parse_postgres_function_arguments, ColumnInfo};
+    use serde_json;
 
     #[test]
     fn parses_mysql_enum_values() {
@@ -1179,6 +1191,36 @@ mod tests {
     fn parses_mysql_set_values() {
         let values = parse_mysql_enum_set_values("set('a','b','c')");
         assert_eq!(values, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn column_info_serializes_with_comment() {
+        let col = ColumnInfo {
+            name: "status".to_string(),
+            data_type: "text".to_string(),
+            is_nullable: true,
+            is_primary_key: false,
+            comment: Some("Order status column".to_string()),
+        };
+        let json = serde_json::to_string(&col).unwrap();
+        let parsed: ColumnInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "status");
+        assert_eq!(parsed.comment, Some("Order status column".to_string()));
+    }
+
+    #[test]
+    fn column_info_serializes_without_comment() {
+        let col = ColumnInfo {
+            name: "id".to_string(),
+            data_type: "integer".to_string(),
+            is_nullable: false,
+            is_primary_key: true,
+            comment: None,
+        };
+        let json = serde_json::to_string(&col).unwrap();
+        let parsed: ColumnInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "id");
+        assert_eq!(parsed.comment, None);
     }
 
     #[test]

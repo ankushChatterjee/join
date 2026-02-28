@@ -37,6 +37,7 @@ export interface ColumnInfo {
   data_type: string;
   is_nullable: boolean;
   is_primary_key: boolean;
+  comment?: string;
 }
 
 export interface ViewInfo {

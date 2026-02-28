@@ -395,6 +395,7 @@ export const describeTable = tool({
           type: c.data_type,
           nullable: c.is_nullable,
           primaryKey: c.is_primary_key,
+          comment: c.comment,
         })),
         indexes: indexes.map((i) => ({
           name: i.name,

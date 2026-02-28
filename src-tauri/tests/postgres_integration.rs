@@ -50,6 +50,19 @@ async fn postgres_metadata_and_query_integration() {
         .expect("columns");
     assert!(columns.iter().any(|c| c.name == "status" && c.data_type.contains("order_status")));
     assert!(columns.iter().any(|c| c.name == "tags"));
+    
+    // Test column comments
+    let status_col = columns.iter().find(|c| c.name == "status").expect("status column");
+    assert_eq!(status_col.comment, Some("Order status: pending, paid, or shipped".to_string()));
+    
+    let total_col = columns.iter().find(|c| c.name == "total").expect("total column");
+    assert_eq!(total_col.comment, Some("Total order amount in currency".to_string()));
+    
+    let tags_col = columns.iter().find(|c| c.name == "tags").expect("tags column");
+    assert_eq!(tags_col.comment, Some("Tags associated with this order".to_string()));
+    
+    let id_col = columns.iter().find(|c| c.name == "id").expect("id column");
+    assert_eq!(id_col.comment, None, "Column without comment should be None");
 
     let indexes = get_indexes(&connection_id, "orders", Some("public"))
         .await
