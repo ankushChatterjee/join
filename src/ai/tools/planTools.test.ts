@@ -414,6 +414,7 @@ describe("explain_sql", () => {
     const parsed = JSON.parse(raw);
 
     expect(parsed.safe_to_proceed).toBe(false);
+    expect(parsed.suggested_rule).toBe("query-missing-indexes");
     expect(parsed.warnings.length).toBeGreaterThan(0);
     expect(parsed.warnings[0]).toContain("orders");
     expect(parsed.estimated_cost).toBe(9999.5);
@@ -448,6 +449,7 @@ describe("explain_sql", () => {
     expect(parsed.safe_to_proceed).toBe(true);
     expect(parsed.warnings).toHaveLength(0);
     expect(parsed.indexes_used).toContain("orders_customer_id_idx");
+    expect(parsed.suggested_rule).toBeUndefined();
   });
 
   it("postgres: walks nested plan nodes to find deep sequential scans", async () => {
@@ -494,6 +496,7 @@ describe("explain_sql", () => {
     expect(parsed.safe_to_proceed).toBe(false);
     expect(parsed.warnings.some((w: string) => w.includes("order_items"))).toBe(true);
     expect(parsed.indexes_used).toContain("products_pkey");
+    expect(parsed.suggested_rule).toBe("query-missing-indexes");
   });
 
   it("postgres: handles malformed EXPLAIN JSON gracefully", async () => {
@@ -564,6 +567,7 @@ describe("explain_sql", () => {
     const parsed = JSON.parse(raw);
 
     expect(parsed.safe_to_proceed).toBe(false);
+    expect(parsed.suggested_rule).toBeUndefined();
     expect(parsed.warnings[0]).toContain("orders");
   });
 

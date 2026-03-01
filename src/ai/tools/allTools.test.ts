@@ -12,9 +12,10 @@ const TOOL_NAMES = Object.keys(allTools) as (keyof typeof allTools)[];
 
 describe("allTools aggregate validation", () => {
   it("exports all expected tools", () => {
-    const expected = [
+    const expected: (keyof typeof allTools)[] = [
       "plan_sql_query",
       "explain_sql",
+      "get_postgres_best_practice",
       "list_schemas",
       "list_tables",
       "describe_table",
@@ -65,6 +66,12 @@ describe("allTools aggregate validation", () => {
     const schema = (allTools.explain_sql as any).inputSchema;
     const result = schema.safeParse({ sql: "SELECT 1" });
     expect(result.success).toBe(true);
+  });
+
+  it("get_postgres_best_practice schema requires rule_id", () => {
+    const schema = (allTools.get_postgres_best_practice as any).inputSchema;
+    expect(schema.safeParse({ rule_id: "query-missing-indexes" }).success).toBe(true);
+    expect(schema.safeParse({}).success).toBe(false);
   });
 
   it("list_schemas schema accepts empty object", () => {

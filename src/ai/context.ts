@@ -9,6 +9,7 @@ import {
   getCursorPosition,
 } from "@/components/editor/editorUtils";
 import type { AgentExecutionContext } from "./executionContext";
+import { getCatalog } from "./skills/postgresBestPractices";
 
 /**
  * Capture the current editor / cell state as a context block to be appended
@@ -227,11 +228,12 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `\n**Step 3 — WRITE**: Draft SQL using only verified column names from Step 2.\n` +
     `- Always use the correct dialect for the connected database.\n` +
     `- Run \`lint_sql_safety\` and resolve any high-severity warnings before continuing.\n` +
-    `- Prefer the FK join conditions returned by \`plan_sql_query\` over guessing join predicates.`
+    `- Prefer the FK join conditions returned by \`plan_sql_query\` over guessing join predicates.\n` +
+    `- For Postgres, consider calling \`get_postgres_best_practice\` when drafting SQL if you need index/schema guidance.`
   );
   parts.push(
     `\n**Step 4 — VERIFY**: Call \`explain_sql\` on the draft SQL.\n` +
-    `- If \`safe_to_proceed\` is false or warnings mention sequential scans, revise the query.\n` +
+    `- If \`safe_to_proceed\` is false or warnings mention sequential scans, call \`get_postgres_best_practice\` with the relevant rule_id (e.g. query-missing-indexes) and apply the fix.\n` +
     `- After passing verification, write the SQL with \`insert_sql\` or \`replace_editor_content\`.`
   );
 
@@ -273,5 +275,11 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
   parts.push(
     `- Use emojis only when absolutely necessary or explicitly requested. Avoid using them.`
   );
+
+  // --- Postgres Best Practices (on-demand) ---
+  if (executionContext?.targetConnectionDialect === "postgresql") {
+    parts.push(`\n${getCatalog()}`);
+  }
+
   return parts.join("\n");
 }

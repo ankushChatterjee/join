@@ -484,17 +484,26 @@ export const explainSql = tool({
       }
     }
 
-    return JSON.stringify(
-      {
-        safe_to_proceed: warnings.length === 0,
-        estimated_cost: estimatedCost,
-        warnings,
-        indexes_used: indexesUsed,
-        dialect,
-        explain_time_ms: result.execution_time_ms,
-      },
-      null,
-      2
+    const hasSeqScan = warnings.some(
+      (w) =>
+        w.includes("Sequential scan") ||
+        w.includes("Full table scan") ||
+        w.includes("Full scan")
     );
+
+    const output: Record<string, unknown> = {
+      safe_to_proceed: warnings.length === 0,
+      estimated_cost: estimatedCost,
+      warnings,
+      indexes_used: indexesUsed,
+      dialect,
+      explain_time_ms: result.execution_time_ms,
+    };
+
+    if (hasSeqScan && dialect === "postgresql") {
+      output.suggested_rule = "query-missing-indexes";
+    }
+
+    return JSON.stringify(output, null, 2);
   },
 });
