@@ -276,6 +276,36 @@ describe("plan_sql_query", () => {
     expect(allSteps).toContain("explain_sql");
   });
 
+  it("postgres: returns recommended_best_practice_rules and guidance step", async () => {
+    invokeMock.mockImplementation(ordersCustomersInvoke);
+
+    const raw = await (planSqlQuery as any).execute(
+      { goal: "Orders with customer names", tables: ["public.orders", "public.customers"] },
+      { experimental_context: baseAgentContext("postgresql") }
+    );
+    const parsed = JSON.parse(raw);
+    const allSteps = parsed.next_steps.join(" ");
+
+    expect(parsed.recommended_best_practice_rules).toContain("query-missing-indexes");
+    expect(parsed.recommended_best_practice_rules).toContain("query-composite-indexes");
+    expect(parsed.recommended_best_practice_rules).toContain("schema-foreign-key-indexes");
+    expect(allSteps).toContain("get_postgres_best_practice");
+  });
+
+  it("non-postgres: does not include Postgres best-practice recommendations", async () => {
+    invokeMock.mockImplementation(ordersCustomersInvoke);
+
+    const raw = await (planSqlQuery as any).execute(
+      { goal: "Orders with customer names", tables: ["public.orders", "public.customers"] },
+      { experimental_context: baseAgentContext("mysql") }
+    );
+    const parsed = JSON.parse(raw);
+    const allSteps = parsed.next_steps.join(" ");
+
+    expect(parsed.recommended_best_practice_rules).toEqual([]);
+    expect(allSteps).not.toContain("get_postgres_best_practice");
+  });
+
   it("uses the default connection when no connection_id is provided", async () => {
     invokeMock.mockImplementation(ordersCustomersInvoke);
 

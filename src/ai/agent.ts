@@ -19,7 +19,7 @@ const debugLog = async (message: string) => {
   }
 };
 
-const MAX_TOOL_ITERATIONS = 15;
+const MAX_TOOL_ITERATIONS = 25;
 
 // --- Agent Context (passed to tools via experimental_context) ---
 

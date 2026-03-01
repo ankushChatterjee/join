@@ -47,6 +47,15 @@ interface JoinEdge {
   toColumn: string;
 }
 
+interface PlannedJoinPath {
+  from: string;
+  to: string;
+  found: boolean;
+  conditions: string[];
+  via_constraints: string[];
+  sql_snippet: string;
+}
+
 function parseTableRef(raw: string): TableRef {
   const trimmed = raw.trim();
   const dot = trimmed.indexOf(".");
@@ -58,6 +67,40 @@ function parseTableRef(raw: string): TableRef {
 
 function tableKey(ref: TableRef): string {
   return `${ref.schema}.${ref.table}`;
+}
+
+function inferPostgresBestPracticeRules(
+  goal: string,
+  tables: string[],
+  joinPaths: PlannedJoinPath[]
+): string[] {
+  const rules = new Set<string>(["query-missing-indexes"]);
+  const loweredGoal = goal.toLowerCase();
+  const lowerTables = tables.map((t) => t.toLowerCase());
+
+  if (tables.length >= 2 || joinPaths.length > 0) {
+    rules.add("query-composite-indexes");
+    rules.add("schema-foreign-key-indexes");
+  }
+
+  if (/\b(page|pagination|cursor|offset|infinite scroll)\b/.test(loweredGoal)) {
+    rules.add("data-pagination");
+  }
+
+  if (/\b(jsonb|json)\b/.test(loweredGoal) || lowerTables.some((t) => t.includes("json"))) {
+    rules.add("advanced-jsonb-indexing");
+  }
+
+  if (/\b(rls|row level security|policy|tenant|multi-tenant|permission|auth|authorization)\b/.test(loweredGoal)) {
+    rules.add("security-rls-basics");
+    rules.add("security-rls-performance");
+  }
+
+  if (/\b(n\+1|n plus one|chatty)\b/.test(loweredGoal)) {
+    rules.add("data-n-plus-one");
+  }
+
+  return Array.from(rules);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +202,7 @@ function bfsPath(
 
 export const planSqlQuery = tool({
   description:
-    "ALWAYS call this first when writing a new SQL query. Validates that your planned tables exist in the database, then auto-discovers FK join paths between them. Returns validated table names and join conditions ready to use. If any tables are missing, correct them and retry before calling describe_table or writing any SQL.",
+    "ALWAYS call this first when writing a new SQL query. Validates that your planned tables exist in the database, then auto-discovers FK join paths between them. Returns validated table names and join conditions ready to use. For Postgres runs, also returns recommended get_postgres_best_practice rule IDs to ground query design before drafting SQL. If any tables are missing, correct them and retry before calling describe_table or writing any SQL.",
   inputSchema: z.object({
     goal: z.string().describe("What the SQL should accomplish in plain English"),
     tables: z
@@ -238,14 +281,7 @@ export const planSqlQuery = tool({
     }
 
     // --- 3. Discover FK join paths (for multi-table queries) ---
-    const joinPaths: Array<{
-      from: string;
-      to: string;
-      found: boolean;
-      conditions: string[];
-      via_constraints: string[];
-      sql_snippet: string;
-    }> = [];
+    const joinPaths: PlannedJoinPath[] = [];
 
     if (validatedTables.length >= 2) {
       // Only fetch FKs for schemas that appear in the validated table list
@@ -310,6 +346,11 @@ export const planSqlQuery = tool({
 
     const allJoinsFound = joinPaths.length === 0 || joinPaths.every((j) => j.found);
     const validatedKeys = validatedTables.map(tableKey);
+    const dialect = ctx?.executionContext.targetConnectionDialect ?? "unknown";
+    const recommendedBestPracticeRules =
+      dialect === "postgresql"
+        ? inferPostgresBestPracticeRules(goal, validatedKeys, joinPaths)
+        : [];
 
     const nextSteps: string[] = [
       `Call describe_table for each of: ${validatedKeys.join(", ")}`,
@@ -330,6 +371,13 @@ export const planSqlQuery = tool({
       "Run lint_sql_safety on the draft SQL",
       "Run explain_sql before writing to the editor"
     );
+    if (dialect === "postgresql") {
+      nextSteps.splice(
+        nextSteps.length - 2,
+        0,
+        `Before drafting final SQL, choose the most relevant rule_id using the planning context (goal, validated tables, join paths), then call get_postgres_best_practice. Recommended rule_ids: ${recommendedBestPracticeRules.join(", ")}`
+      );
+    }
 
     return JSON.stringify(
       {
@@ -338,6 +386,7 @@ export const planSqlQuery = tool({
         validated_tables: validatedKeys,
         all_join_paths_found: allJoinsFound,
         join_paths: joinPaths,
+        recommended_best_practice_rules: recommendedBestPracticeRules,
         next_steps: nextSteps,
       },
       null,
