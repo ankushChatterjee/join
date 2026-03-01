@@ -228,7 +228,7 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `\n**Step 3 — WRITE**: Draft SQL using only verified column names from Step 2.\n` +
     `- Always use the correct dialect for the connected database.\n` +
     `- For Postgres, always call \`get_postgres_best_practice\` when drafting SQL to understand the best practices and apply them.\n` +
-    `- Run \`lint_sql_safety\` and resolve any high-severity warnings before continuing.\n` +
+    `- Run \`lint_sql_safety\` with the current connection's dialect and resolve any high-severity warnings before continuing.\n` +
     `- Prefer the FK join conditions returned by \`plan_sql_query\` over guessing join predicates.\n`
   );
   parts.push(

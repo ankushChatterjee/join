@@ -5,6 +5,7 @@
 import { tool } from "ai";
 import { z } from "zod/v4";
 import { invoke } from "@tauri-apps/api/core";
+import { Parser } from "node-sql-parser";
 import { useAppStore } from "@/stores/appStore";
 import type { AgentContext } from "../agent";
 
@@ -253,11 +254,12 @@ export const readResults = tool({
 // --- lint_sql_safety ---
 export const lintSqlSafety = tool({
   description:
-    "Run lightweight SQL safety and performance lint checks. Use this before returning final SQL to surface risky patterns.",
+    "Run SQL safety and performance lint checks. Use this before returning final SQL to surface risky patterns, logical errors and dialect-specific syntax issues.",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to lint for safety/performance issues"),
+    dialect: z.enum(["postgresql", "mysql", "sqlite"]).describe("The SQL dialect of the current connection"),
   }),
-  execute: async ({ sql }) => {
+  execute: async ({ sql, dialect }) => {
     const warnings: Array<{
       severity: "high" | "medium" | "low";
       code: string;
@@ -266,7 +268,21 @@ export const lintSqlSafety = tool({
     }> = [];
 
     const text = sql.trim();
-    const lower = text.toLowerCase();
+
+    // 1. Strip comments and literals to avoid false positives in regex
+    const stripSql = (s: string) => {
+      // Remove single-line comments
+      let clean = s.replace(/--.*$/gm, "");
+      // Remove multi-line comments
+      clean = clean.replace(/\/\*[\s\S]*?\*\//g, "");
+      // Replace string literals (approximated)
+      clean = clean.replace(/'[^']*'/g, "''");
+      clean = clean.replace(/"[^"]*"/g, '""');
+      return clean;
+    };
+
+    const cleanSql = stripSql(text);
+    const lower = cleanSql.toLowerCase();
 
     const hasKeyword = (regex: RegExp) => regex.test(lower);
     const pushWarning = (
@@ -277,6 +293,8 @@ export const lintSqlSafety = tool({
     ) => {
       warnings.push({ severity, code, message, suggestion });
     };
+
+    // --- SAFETY CHECKS (Regex) ---
 
     if (hasKeyword(/\b(insert|update|delete|drop|truncate|alter|create|grant|revoke)\b/)) {
       pushWarning(
@@ -296,11 +314,23 @@ export const lintSqlSafety = tool({
       );
     }
 
-    const joinCount = (lower.match(/\bjoin\b/g) || []).length;
-    const onCount = (lower.match(/\bon\b/g) || []).length;
+    // Fix Cartesian Join check: Avoid matching ON DELETE, ON UPDATE, ON CONFLICT
+    // Also ignore CROSS JOIN which is intentional
+    const joinMatches = lower.match(/\bjoin\b/g) || [];
+    const crossJoinMatches = lower.match(/\bcross\s+join\b/g) || [];
+    const actualJoins = joinMatches.length - crossJoinMatches.length;
+
+    const onMatches = lower.match(/\bon\s+/g) || [];
+    const filteredOnCount = onMatches.filter((m) => {
+      const index = lower.indexOf(m);
+      const precedingText = lower.substring(Math.max(0, index - 20), index);
+      return !precedingText.match(/\b(delete|update|conflict)\b/);
+    }).length;
+
     const usingCount = (lower.match(/\busing\s*\(/g) || []).length;
     const naturalJoinCount = (lower.match(/\bnatural\s+join\b/g) || []).length;
-    if (joinCount > 0 && onCount + usingCount + naturalJoinCount < joinCount) {
+
+    if (actualJoins > 0 && filteredOnCount + usingCount + naturalJoinCount < actualJoins) {
       pushWarning(
         "high",
         "POSSIBLE_CARTESIAN_JOIN",
@@ -341,6 +371,166 @@ export const lintSqlSafety = tool({
         "NOT IN with subqueries can behave unexpectedly when NULLs are present.",
         "Prefer NOT EXISTS or ensure subquery excludes NULL values."
       );
+    }
+
+    // --- DIALECT SPECIFIC CHECKS (Regex) ---
+
+    if (dialect !== "postgresql") {
+      if (hasKeyword(/\bilike\b/)) {
+        pushWarning(
+          "high",
+          "POSTGRES_SPECIFIC_ILIKE",
+          "ILIKE is PostgreSQL-specific.",
+          `Use LOWER(col) LIKE LOWER(val) for ${dialect}.`
+        );
+      }
+      if (hasKeyword(/::[a-zA-Z]+/)) {
+        pushWarning(
+          "high",
+          "POSTGRES_SPECIFIC_CAST",
+          ":: cast operator is PostgreSQL-specific.",
+          `Use CAST(expr AS type) for ${dialect}.`
+        );
+      }
+      if (hasKeyword(/\breturning\b/)) {
+        pushWarning(
+          "high",
+          "POSTGRES_SPECIFIC_RETURNING",
+          "RETURNING clause is not universally supported outside PostgreSQL.",
+          `Check if ${dialect} supports RETURNING (MariaDB does, MySQL does not).`
+        );
+      }
+    }
+
+    if (dialect === "postgresql") {
+      if (hasKeyword(/`[^`]+`/)) {
+        pushWarning(
+          "high",
+          "MYSQL_SPECIFIC_IDENTIFIER",
+          "Backticks are not supported in PostgreSQL.",
+          "Use double-quotes for identifiers."
+        );
+      }
+      if (hasKeyword(/\bifnull\s*\(/)) {
+        pushWarning(
+          "high",
+          "MYSQL_SPECIFIC_IFNULL",
+          "IFNULL is MySQL-specific.",
+          "Use COALESCE() which is standard."
+        );
+      }
+      if (hasKeyword(/\bgroup_concat\s*\(/)) {
+        pushWarning(
+          "high",
+          "MYSQL_SPECIFIC_GROUP_CONCAT",
+          "GROUP_CONCAT is MySQL-specific.",
+          "Use STRING_AGG() in PostgreSQL."
+        );
+      }
+    }
+
+    if (dialect === "mysql") {
+      if (hasKeyword(/\bfull\s+outer\s+join\b/) || hasKeyword(/\bfull\s+join\b/)) {
+        pushWarning(
+          "high",
+          "MYSQL_MISSING_FULL_JOIN",
+          "MySQL does not support FULL OUTER JOIN.",
+          "Use LEFT JOIN UNION RIGHT JOIN or reconsider the logic."
+        );
+      }
+    }
+
+    if (dialect === "sqlite") {
+      if (hasKeyword(/\bright\s+join\b/) || hasKeyword(/\bfull\s+outer\s+join\b/) || hasKeyword(/\bfull\s+join\b/)) {
+        pushWarning(
+          "high",
+          "SQLITE_MISSING_RIGHT_FULL_JOIN",
+          "Older SQLite versions do not support RIGHT or FULL OUTER JOIN.",
+          "Use LEFT JOIN with tables swapped or UNION logic."
+        );
+      }
+    }
+
+    // --- CORRECTNESS CHECKS (Regex) ---
+
+    if (hasKeyword(/=\s*null\b/) || hasKeyword(/<>\s*null\b/) || hasKeyword(/!=\s*null\b/)) {
+      pushWarning(
+        "high",
+        "NULL_EQUALITY_COMPARISON",
+        "Using = NULL or <> NULL is incorrect.",
+        "Use IS NULL or IS NOT NULL."
+      );
+    }
+
+    if (hasKeyword(/\bwhere\b.*?\b(count|sum|avg|min|max)\s*\(/)) {
+      pushWarning(
+        "high",
+        "AGGREGATE_IN_WHERE",
+        "Aggregates (COUNT, SUM, etc.) cannot be used in a WHERE clause.",
+        "Use HAVING if you need to filter on aggregate results."
+      );
+    }
+
+    // --- AST CHECKS (Structural analysis) ---
+    const parser = new Parser();
+    try {
+      const dbMap: Record<string, string> = {
+        postgresql: "postgresql",
+        mysql: "mysql",
+        sqlite: "sqlite",
+      };
+      // Use "postgresql" as fallback for parser database type
+      const ast = parser.astify(text, { database: dbMap[dialect] || "postgresql" });
+      const astArray = Array.isArray(ast) ? (ast as any[]) : [ast as any];
+
+      for (const node of astArray) {
+        if (node.type === "select") {
+          // Check for HAVING without GROUP BY
+          if (node.having && !node.groupby) {
+            pushWarning(
+              "high",
+              "HAVING_WITHOUT_GROUP_BY",
+              "HAVING clause used without GROUP BY.",
+              "Add GROUP BY or move filtering logic to WHERE if possible."
+            );
+          }
+
+          // Check for aggregate functions in WHERE (more precise than regex)
+          // We can't easily traverse the WHERE tree here without a recursive visitor,
+          // but we can check if window functions are used without OVER
+          const checkNode = (obj: any) => {
+            if (!obj || typeof obj !== "object") return;
+            // When parsed as a regular function (missing OVER), it might be a window function used incorrectly
+            if (obj.type === "function") {
+              let funcName = "";
+              if (typeof obj.name === "string") {
+                funcName = obj.name;
+              } else if (obj.name && Array.isArray(obj.name.name)) {
+                // node-sql-parser nests names like { name: [{ value: 'row_number' }] }
+                funcName = obj.name.name[0]?.value || "";
+              }
+
+              if (
+                ["row_number", "rank", "dense_rank", "ntile", "lag", "lead"].includes(
+                  funcName.toLowerCase()
+                )
+              ) {
+                pushWarning(
+                  "high",
+                  "WINDOW_FUNCTION_WITHOUT_OVER",
+                  `Window function ${funcName.toUpperCase()} requires an OVER clause.`,
+                  "Add OVER() or OVER(PARTITION BY ... ORDER BY ...)."
+                );
+              }
+            }
+            Object.values(obj).forEach(checkNode);
+          };
+          checkNode(node);
+        }
+      }
+    } catch (e) {
+      // Fallback: Parser might fail on complex or dialect-specific syntax
+      // We've already run regex checks which are more resilient
     }
 
     return JSON.stringify(

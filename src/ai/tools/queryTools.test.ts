@@ -198,11 +198,165 @@ describe("query tools", () => {
   it("lint_sql_safety reports high risk for write queries", async () => {
     const raw = await (lintSqlSafety as any).execute({
       sql: "DELETE FROM orders;",
+      dialect: "postgresql",
     });
     const parsed = JSON.parse(raw);
     const highWarnings = parsed.warnings.filter((w: { severity: string }) => w.severity === "high");
 
     expect(parsed.safe).toBe(false);
     expect(highWarnings.length).toBeGreaterThan(0);
+  });
+
+  it("lint_sql_safety handles dialect-specific checks", async () => {
+    // ILIKE is PG-only
+    const pgRes = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t WHERE name ILIKE '%a%'",
+      dialect: "postgresql",
+    });
+    expect(JSON.parse(pgRes).safe).toBe(true);
+
+    const mysqlRes = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t WHERE name ILIKE '%a%'",
+      dialect: "mysql",
+    });
+    const parsedMysql = JSON.parse(mysqlRes);
+    expect(parsedMysql.safe).toBe(false);
+    expect(parsedMysql.warnings.some((w: any) => w.code === "POSTGRES_SPECIFIC_ILIKE")).toBe(true);
+  });
+
+  it("lint_sql_safety ignores keywords in comments and strings", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT 'DELETE FROM orders' as msg -- drop table t",
+      dialect: "postgresql",
+    });
+    expect(JSON.parse(res).safe).toBe(true);
+  });
+
+  it("lint_sql_safety detects NULL equality mistakes", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t WHERE col = NULL",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.safe).toBe(false);
+    expect(parsed.warnings.some((w: any) => w.code === "NULL_EQUALITY_COMPARISON")).toBe(true);
+  });
+
+  it("lint_sql_safety detects HAVING without GROUP BY via AST", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT count(*) FROM t HAVING count(*) > 1",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.safe).toBe(false);
+    expect(parsed.warnings.some((w: any) => w.code === "HAVING_WITHOUT_GROUP_BY")).toBe(true);
+  });
+
+  it("lint_sql_safety detects window function without OVER via AST", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT row_number() FROM t",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.safe).toBe(false);
+    expect(parsed.warnings.some((w: any) => w.code === "WINDOW_FUNCTION_WITHOUT_OVER")).toBe(true);
+  });
+
+  it("lint_sql_safety detects aggregates in WHERE clause", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t WHERE COUNT(*) > 1",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.warnings.some((w: any) => w.code === "AGGREGATE_IN_WHERE")).toBe(true);
+  });
+
+  it("lint_sql_safety detects MySQL-specific syntax in PostgreSQL", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT `id`, IFNULL(name, 'N/A'), GROUP_CONCAT(tags) FROM t",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.warnings.some((w: any) => w.code === "MYSQL_SPECIFIC_IDENTIFIER")).toBe(true);
+    expect(parsed.warnings.some((w: any) => w.code === "MYSQL_SPECIFIC_IFNULL")).toBe(true);
+    expect(parsed.warnings.some((w: any) => w.code === "MYSQL_SPECIFIC_GROUP_CONCAT")).toBe(true);
+  });
+
+  it("lint_sql_safety detects unsupported joins in MySQL and SQLite", async () => {
+    const mysqlRes = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id",
+      dialect: "mysql",
+    });
+    expect(JSON.parse(mysqlRes).warnings.some((w: any) => w.code === "MYSQL_MISSING_FULL_JOIN")).toBe(
+      true,
+    );
+
+    const sqliteRes = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t1 RIGHT JOIN t2 ON t1.id = t2.id",
+      dialect: "sqlite",
+    });
+    expect(
+      JSON.parse(sqliteRes).warnings.some((w: any) => w.code === "SQLITE_MISSING_RIGHT_FULL_JOIN"),
+    ).toBe(true);
+  });
+
+  it("lint_sql_safety detects Cartesian joins correctly and avoids false positives", async () => {
+    // False positive case: ON DELETE in preceding text
+    const fpRes = await (lintSqlSafety as any).execute({
+      sql: "INSERT INTO t (id) VALUES (1) ON CONFLICT DO NOTHING",
+      dialect: "postgresql",
+    });
+    expect(JSON.parse(fpRes).warnings.some((w: any) => w.code === "POSSIBLE_CARTESIAN_JOIN")).toBe(
+      false,
+    );
+
+    // Actual Cartesian join
+    const cartesianRes = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t1 JOIN t2",
+      dialect: "postgresql",
+    });
+    expect(
+      JSON.parse(cartesianRes).warnings.some((w: any) => w.code === "POSSIBLE_CARTESIAN_JOIN"),
+    ).toBe(true);
+  });
+
+  it("lint_sql_safety detects SELECT * and UNBOUNDED_SCAN", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM large_table",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.warnings.some((w: any) => w.code === "SELECT_STAR")).toBe(true);
+    expect(parsed.warnings.some((w: any) => w.code === "UNBOUNDED_SCAN")).toBe(true);
+  });
+
+  it("lint_sql_safety detects ORDER BY without LIMIT", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT name FROM t ORDER BY name",
+      dialect: "postgresql",
+    });
+    expect(JSON.parse(res).warnings.some((w: any) => w.code === "ORDER_BY_WITHOUT_LIMIT")).toBe(
+      true,
+    );
+  });
+
+  it("lint_sql_safety handles multiple statements", async () => {
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT count(*) FROM t HAVING count(*) > 1; SELECT row_number() FROM t;",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.warnings.some((w: any) => w.code === "HAVING_WITHOUT_GROUP_BY")).toBe(true);
+    expect(parsed.warnings.some((w: any) => w.code === "WINDOW_FUNCTION_WITHOUT_OVER")).toBe(true);
+  });
+
+  it("lint_sql_safety falls back gracefully on parser failure", async () => {
+    // Very complex or invalid syntax that might break the parser but should still trigger regex checks
+    const res = await (lintSqlSafety as any).execute({
+      sql: "SELECT * FROM t WHERE col = NULL; SOME INVALID SYNTAX THAT PARSER HATES",
+      dialect: "postgresql",
+    });
+    const parsed = JSON.parse(res);
+    expect(parsed.warnings.some((w: any) => w.code === "NULL_EQUALITY_COMPARISON")).toBe(true);
   });
 });

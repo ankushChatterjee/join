@@ -133,9 +133,11 @@ describe("allTools aggregate validation", () => {
     expect(schema.safeParse({}).success).toBe(true);
   });
 
-  it("lint_sql_safety schema requires sql", () => {
+  it("lint_sql_safety schema requires sql and dialect", () => {
     const schema = (allTools.lint_sql_safety as any).inputSchema;
-    expect(schema.safeParse({ sql: "SELECT * FROM t" }).success).toBe(true);
+    expect(schema.safeParse({ sql: "SELECT * FROM t", dialect: "postgresql" }).success).toBe(true);
+    expect(schema.safeParse({ sql: "SELECT * FROM t" }).success).toBe(false);
+    expect(schema.safeParse({ dialect: "postgresql" }).success).toBe(false);
     expect(schema.safeParse({}).success).toBe(false);
   });
 
