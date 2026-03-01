@@ -31,9 +31,11 @@ Be concise but complete. Use bullet points.`,
     query_build: `You are compacting a conversation log for an AI assistant's memory.
 Summarize the following query-building segment. Preserve:
 - What the user wanted to achieve
-- Which tables and joins were used (with exact names)
+- If a plan_sql_query tool call appears: the goal, validated_tables list, and any join conditions discovered
+- Which tables and joins were used (with exact names and schema prefixes)
 - Key WHERE/GROUP BY/ORDER BY decisions
 - Any performance considerations raised
+- If an explain_sql tool call appears: the warnings and whether safe_to_proceed was true
 - The final SQL if one was produced (include it verbatim in a SQL block)
 - Whether the user accepted or rejected the SQL
 

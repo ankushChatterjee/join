@@ -19,9 +19,12 @@ import {
   addCellTool,
 } from "./editorTools";
 import { askQuestion } from "./questionTool";
+import { planSqlQuery, explainSql } from "./planTools";
 
 /** All tools available to the AI agent, keyed by tool name */
 export const allTools = {
+  plan_sql_query: planSqlQuery,
+  explain_sql: explainSql,
   list_schemas: listSchemas,
   list_tables: listTables,
   describe_table: describeTable,

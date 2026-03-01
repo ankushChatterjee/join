@@ -207,19 +207,38 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     parts.push(`- Active result tab connection id: \`${activeResultTab.connectionId}\``);
   }
 
-  // --- Instructions ---
+  // --- Query Building Workflow ---
+  parts.push(`\n## Query Building Workflow`);
+  parts.push(
+    `Follow this 4-step sequence whenever you write a new SQL query. Do not skip steps.`
+  );
+  parts.push(
+    `\n**Step 1 — PLAN**: Call \`plan_sql_query\` with your goal and the tables you believe are needed.\n` +
+    `- If \`status\` is "error" (tables not found), correct the names and retry — do not proceed.\n` +
+    `- \`plan_sql_query\` auto-discovers FK join paths. Do not call \`find_join_path\` separately.\n` +
+    `- Skip this step ONLY for minor edits to existing SQL (e.g. "add LIMIT 10", "fix a column alias").`
+  );
+  parts.push(
+    `\n**Step 2 — FETCH**: Call \`describe_table\` for every table listed in \`validated_tables\`.\n` +
+    `- These calls can be made in parallel.\n` +
+    `- Do not write any SQL before this step completes. Use only column names confirmed here.`
+  );
+  parts.push(
+    `\n**Step 3 — WRITE**: Draft SQL using only verified column names from Step 2.\n` +
+    `- Always use the correct dialect for the connected database.\n` +
+    `- Run \`lint_sql_safety\` and resolve any high-severity warnings before continuing.\n` +
+    `- Prefer the FK join conditions returned by \`plan_sql_query\` over guessing join predicates.`
+  );
+  parts.push(
+    `\n**Step 4 — VERIFY**: Call \`explain_sql\` on the draft SQL.\n` +
+    `- If \`safe_to_proceed\` is false or warnings mention sequential scans, revise the query.\n` +
+    `- After passing verification, write the SQL with \`insert_sql\` or \`replace_editor_content\`.`
+  );
+
+  // --- General Instructions ---
   parts.push(`\n## Instructions`);
   parts.push(
-    `- Use the available tools to explore the database schema before writing queries when you need more detail.`
-  );
-  parts.push(
     `- Treat \`Schema Tree Focus\` context attached to user messages as high-priority signals about what the user is working on.`
-  );
-  parts.push(
-    `- When writing SQL, ALWAYS BE SURE OF THE columsn being sed, there are tools to describe a table, do not put any SQL without being unsure of the metadata.`
-  );
-  parts.push(
-    `- When writing SQL, always use the correct dialect for the connected database.`
   );
   parts.push(
     `- \`insert_sql\` and \`replace_editor_content\` only modify the currently selected cell (shown as "Cell N" where N is its position).`
@@ -228,7 +247,7 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected). This tool requires user approval.`
   );
   parts.push(
-    `- The \`execute_readonly_sql\` tool requires user approval and should be used when needed to verify data or test queries or understand the schema/data better. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
+    `- The \`execute_readonly_sql\` tool requires user approval and should be used when needed to verify data or explore the schema further. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`
   );
   parts.push(
     `- Use \`read_results\` to inspect existing rows from an open result tab in batches before deciding to run a new query.`
@@ -237,28 +256,19 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- Tools may accept \`connection_id\`; when omitted, use the run's default connection.`
   );
   parts.push(
-    `- When writing any SQL, via insert cell or replace content, always view all the SQL as a whole, wven when doing multiple tool calls to do each of them. Analyse if it makes sense to generate the whole SQL.`
+    `- When writing any SQL via insert cell or replace content, always view all the SQL as a whole, even when doing multiple tool calls. Analyse if it makes sense to generate the whole SQL.`
   );
   parts.push(
-    `- When writing JOINs, prefer using foreign key relationships surfaced by \`describe_table\` to ensure correct join conditions.`
+    `- Always explain your reasoning and the SQL you're writing. For complex or esoteric SQL concepts, briefly explain what the concept does.`
   );
   parts.push(
-    `- When users ask for relationships across tables, use \`find_join_path\` before finalizing JOIN SQL if the path is not explicit.`
-  );
-  parts.push(
-    `- Before returning final SQL, run \`lint_sql_safety\` on your candidate query and address or explicitly mention warnings.`
-  );
-  parts.push(
-    `- Always explain your reasoning and the SQL you're writing, and when explaining give a brief about the SQL concept you are using if the concept is complex/esoteric`
-  );
-  parts.push(
-    `- Always prioritize safety and performance, evaluate yourself and try to find out the problems that might come due to your query.`
+    `- Always prioritize safety and performance. Evaluate your own output and anticipate problems the query might cause.`
   );
   parts.push(
     `- When showing SQL in your response, format it cleanly with proper indentation.`
   );
   parts.push(
-    `- Sometimes, whether a schema or a query is good or not depends on the usage of it in code or elsewhere, when such confusion arrives as the user that question.`
+    `- Sometimes whether a schema or query is correct depends on how it is used in application code. When unsure, ask the user.`
   );
   parts.push(
     `- Use emojis only when absolutely necessary or explicitly requested. Avoid using them.`

@@ -78,7 +78,7 @@ export function classifyIntent(msg: ChatMessage): ConversationIntent {
     .toLowerCase();
 
   const schemaKeywords = /describe_table|list_tables|list_schemas|list_views|list_functions|schema|columns?|indexes?|foreign.?keys?|get_database_overview/;
-  const queryKeywords = /\bselect\b|\bjoin\b|\bwhere\b|\bgroup by\b|\border by\b|insert_sql|replace_editor_content|add_cell|lint_sql|execute_readonly/;
+  const queryKeywords = /\bselect\b|\bjoin\b|\bwhere\b|\bgroup by\b|\border by\b|insert_sql|replace_editor_content|add_cell|lint_sql|execute_readonly|plan_sql_query|explain_sql/;
   const debugKeywords = /error|exception|fail|wrong|incorrect|not working|why|issue|problem|bug/;
   const explainKeywords = /explain|what is|what does|how does|tell me about|describe|understand/;
   const phaticKeywords = /^(hi|hello|hey|thanks|thank you|great|ok|okay|sure|yes|no|got it|perfect|sounds good|cool)[\s.!]*$/;
@@ -170,8 +170,9 @@ export function scoreMessage(
     signals.push({ weight: 9, reason: "user_preference" });
   }
 
-  // Schema discovery results (describe_table carries full column info)
-  const schemaDetailTools = new Set(["describe_table", "describe_view"]);
+  // Schema discovery results (describe_table carries full column info;
+  // plan_sql_query carries validated tables + FK join conditions)
+  const schemaDetailTools = new Set(["describe_table", "describe_view", "plan_sql_query"]);
   if (msg.toolCalls?.some((tc) => schemaDetailTools.has(tc.name) && tc.status === "completed")) {
     signals.push({ weight: 8, reason: "schema_discovery" });
   }
