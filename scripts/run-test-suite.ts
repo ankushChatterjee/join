@@ -3,6 +3,13 @@ import { join } from "node:path";
 
 type SuiteStatus = "passed" | "failed";
 
+type TestCounts = {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+};
+
 type SuiteResult = {
   name: string;
   command: string;
@@ -11,6 +18,7 @@ type SuiteResult = {
   durationMs: number;
   logPath: string;
   junitPath?: string;
+  counts?: TestCounts;
 };
 
 const mode = Bun.argv[2] ?? "quick";
@@ -36,6 +44,28 @@ function msToSeconds(ms: number): string {
   return (ms / 1000).toFixed(2);
 }
 
+function parseBunTestOutput(output: string): TestCounts | undefined {
+  const passMatch = output.match(/(\d+)\s+pass/);
+  const failMatch = output.match(/(\d+)\s+fail/);
+  const skipMatch = output.match(/(\d+)\s+skip/);
+  const ranMatch = output.match(/Ran\s+(\d+)\s+tests/);
+  if (!passMatch || !failMatch) return undefined;
+  const passed = parseInt(passMatch[1], 10);
+  const failed = parseInt(failMatch[1], 10);
+  const skipped = skipMatch ? parseInt(skipMatch[1], 10) : 0;
+  const total = ranMatch ? parseInt(ranMatch[1], 10) : passed + failed + skipped;
+  return { total, passed, failed, skipped };
+}
+
+function parseCargoTestOutput(output: string): TestCounts | undefined {
+  const match = output.match(/test result:.*?(\d+)\s+passed;\s*(\d+)\s+failed;\s*(\d+)\s+ignored/);
+  if (!match) return undefined;
+  const passed = parseInt(match[1], 10);
+  const failed = parseInt(match[2], 10);
+  const skipped = parseInt(match[3], 10);
+  return { total: passed + failed + skipped, passed, failed, skipped };
+}
+
 function runCommand(
   name: string,
   cmd: string[],
@@ -59,21 +89,22 @@ function runCommand(
   const stderr = readText(proc.stderr);
   const exitCode = proc.exitCode ?? 1;
   const logPath = join(logsDir, `${name}.log`);
-  writeFileSync(
-    logPath,
-    [
-      `# Command: ${cmd.join(" ")}`,
-      `# Exit code: ${exitCode}`,
-      "",
-      "## STDOUT",
-      stdout,
-      "",
-      "## STDERR",
-      stderr,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
+  const logContent = [
+    `# Command: ${cmd.join(" ")}`,
+    `# Exit code: ${exitCode}`,
+    "",
+    "## STDOUT",
+    stdout,
+    "",
+    "## STDERR",
+    stderr,
+    "",
+  ].join("\n");
+  writeFileSync(logPath, logContent, "utf8");
+
+  const counts =
+    parseBunTestOutput(stdout + "\n" + stderr) ??
+    parseCargoTestOutput(stdout + "\n" + stderr);
 
   const durationMs = ended - started;
   const status: SuiteStatus = exitCode === 0 ? "passed" : "failed";
@@ -95,6 +126,7 @@ function runCommand(
     exitCode,
     durationMs,
     logPath,
+    counts,
   };
 }
 
@@ -191,12 +223,15 @@ function createMarkdownReport(results: SuiteResult[]) {
     "",
     "## Suite Results",
     "",
-    "| Suite | Status | Duration (s) | Exit | Log | JUnit |",
-    "|---|---|---:|---:|---|---|",
+    "| Suite | Status | Tests (pass/fail/skip) | Duration (s) | Exit | Log | JUnit |",
+    "|---|---|---:|---:|---:|---|---|",
     ...results.map((r) => {
       const logRel = r.logPath.replace(`${rootDir}/`, "");
       const junitRel = r.junitPath ? r.junitPath.replace(`${rootDir}/`, "") : "-";
-      return `| ${r.name} | ${r.status} | ${msToSeconds(r.durationMs)} | ${r.exitCode} | ${logRel} | ${junitRel} |`;
+      const countsCol = r.counts
+        ? `${r.counts.total} (${r.counts.passed}/${r.counts.failed}/${r.counts.skipped})`
+        : "-";
+      return `| ${r.name} | ${r.status} | ${countsCol} | ${msToSeconds(r.durationMs)} | ${r.exitCode} | ${logRel} | ${junitRel} |`;
     }),
     "",
     "## Critical Flow Checklist",
@@ -214,13 +249,42 @@ function createMarkdownReport(results: SuiteResult[]) {
   writeFileSync(join(reportsDir, "test-report.md"), lines.join("\n"), "utf8");
 }
 
+function formatCounts(c: TestCounts | undefined): string {
+  if (!c) return "-";
+  const parts = [`${c.total} total`];
+  if (c.passed > 0) parts.push(`${c.passed} pass`);
+  if (c.failed > 0) parts.push(`${c.failed} fail`);
+  if (c.skipped > 0) parts.push(`${c.skipped} skip`);
+  return parts.join(", ");
+}
+
 function printSummary(results: SuiteResult[]) {
   const failed = results.filter((r) => r.status === "failed");
+  const totalCounts = results.reduce(
+    (acc, r) => {
+      if (!r.counts) return acc;
+      acc.total += r.counts.total;
+      acc.passed += r.counts.passed;
+      acc.failed += r.counts.failed;
+      acc.skipped += r.counts.skipped;
+      return acc;
+    },
+    { total: 0, passed: 0, failed: 0, skipped: 0 },
+  );
+
   console.log("");
   console.log("=== Test Summary ===");
   for (const r of results) {
+    const countsStr = formatCounts(r.counts);
     console.log(
-      `${r.status === "passed" ? "PASS" : "FAIL"} ${r.name} (${msToSeconds(r.durationMs)}s)`,
+      `${r.status === "passed" ? "PASS" : "FAIL"} ${r.name} (${msToSeconds(r.durationMs)}s) — ${countsStr}`,
+    );
+  }
+
+  if (totalCounts.total > 0) {
+    console.log("");
+    console.log(
+      `Total: ${totalCounts.total} tests, ${totalCounts.passed} passed, ${totalCounts.failed} failed, ${totalCounts.skipped} skipped`,
     );
   }
 

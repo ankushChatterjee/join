@@ -6,13 +6,25 @@ mock.module("@tauri-apps/api/core", () => ({
 }));
 
 let useAppStore: (typeof import("@/stores/appStore"))["useAppStore"];
+let listSchemas: (typeof import("./schemaTools"))["listSchemas"];
+let listTables: (typeof import("./schemaTools"))["listTables"];
 let findJoinPath: (typeof import("./schemaTools"))["findJoinPath"];
-
 let describeTable: (typeof import("./schemaTools"))["describeTable"];
+let listViews: (typeof import("./schemaTools"))["listViews"];
+let describeView: (typeof import("./schemaTools"))["describeView"];
+let listFunctions: (typeof import("./schemaTools"))["listFunctions"];
 
 beforeAll(async () => {
   ({ useAppStore } = await import("@/stores/appStore"));
-  ({ findJoinPath, describeTable } = await import("./schemaTools"));
+  ({
+    listSchemas,
+    listTables,
+    findJoinPath,
+    describeTable,
+    listViews,
+    describeView,
+    listFunctions,
+  } = await import("./schemaTools"));
 });
 
 function baseExecutionContext() {
@@ -123,6 +135,121 @@ describe("schema tools", () => {
     const parsed = JSON.parse(raw);
     expect(parsed.found).toBe(false);
     expect(parsed.message).toContain("No foreign-key join path");
+  });
+
+  it("list_schemas returns schema names", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_schemas") {
+        return Promise.resolve([{ name: "public" }, { name: "billing" }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const raw = await (listSchemas as any).execute(
+      {},
+      { experimental_context: { executionContext: baseExecutionContext() } }
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.schemas).toEqual(["public", "billing"]);
+    expect(parsed.connection_id).toBe("c1");
+  });
+
+  it("list_tables returns table names for schema", async () => {
+    invokeMock.mockImplementation((cmd: string, payload: any) => {
+      if (cmd === "get_tables" && payload.schema === "public") {
+        return Promise.resolve([
+          { name: "orders", schema: "public" },
+          { name: "customers", schema: "public" },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const raw = await (listTables as any).execute(
+      { schema: "public" },
+      { experimental_context: { executionContext: baseExecutionContext() } }
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.tables).toEqual(["orders", "customers"]);
+    expect(parsed.connection_id).toBe("c1");
+  });
+
+  it("list_views returns view names for schema", async () => {
+    invokeMock.mockImplementation((cmd: string, payload: any) => {
+      if (cmd === "get_views" && payload.schema === "public") {
+        return Promise.resolve([
+          { name: "v_orders", schema: "public" },
+          { name: "v_customers", schema: "public" },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const raw = await (listViews as any).execute(
+      { schema: "public" },
+      { experimental_context: { executionContext: baseExecutionContext() } }
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.views).toEqual(["v_orders", "v_customers"]);
+    expect(parsed.connection_id).toBe("c1");
+  });
+
+  it("describe_view returns view columns", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_columns") {
+        return Promise.resolve([
+          {
+            name: "id",
+            data_type: "integer",
+            is_nullable: false,
+            is_primary_key: false,
+          },
+          {
+            name: "total",
+            data_type: "numeric",
+            is_nullable: true,
+            is_primary_key: false,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const raw = await (describeView as any).execute(
+      { schema: "public", view: "v_orders" },
+      { experimental_context: { executionContext: baseExecutionContext() } }
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.view).toBe("public.v_orders");
+    expect(parsed.columns).toHaveLength(2);
+    expect(parsed.columns[0].name).toBe("id");
+    expect(parsed.columns[0].type).toBe("integer");
+  });
+
+  it("list_functions returns function names and return types", async () => {
+    invokeMock.mockImplementation((cmd: string, payload: any) => {
+      if (cmd === "get_functions" && payload.schema === "public") {
+        return Promise.resolve([
+          { name: "get_order_total", return_type: "numeric", schema: "public", specific_name: "get_order_total" },
+          { name: "format_date", return_type: "text", schema: "public", specific_name: "format_date" },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const raw = await (listFunctions as any).execute(
+      { schema: "public" },
+      { experimental_context: { executionContext: baseExecutionContext() } }
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.functions).toHaveLength(2);
+    expect(parsed.functions[0].name).toBe("get_order_total");
+    expect(parsed.functions[0].returnType).toBe("numeric");
   });
 
   it("describe_table returns columns with comments", async () => {

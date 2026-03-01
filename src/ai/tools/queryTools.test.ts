@@ -7,12 +7,13 @@ mock.module("@tauri-apps/api/core", () => ({
 
 let useAppStore: (typeof import("@/stores/appStore"))["useAppStore"];
 let executeReadonlySql: (typeof import("./queryTools"))["executeReadonlySql"];
+let getQueryHistory: (typeof import("./queryTools"))["getQueryHistory"];
 let lintSqlSafety: (typeof import("./queryTools"))["lintSqlSafety"];
 let readResults: (typeof import("./queryTools"))["readResults"];
 
 beforeAll(async () => {
   ({ useAppStore } = await import("@/stores/appStore"));
-  ({ executeReadonlySql, lintSqlSafety, readResults } = await import("./queryTools"));
+  ({ executeReadonlySql, getQueryHistory, lintSqlSafety, readResults } = await import("./queryTools"));
 });
 
 function baseExecutionContext() {
@@ -141,6 +142,57 @@ describe("query tools", () => {
     expect(parsed.batch.returned_rows).toBe(1);
     expect(parsed.rows[0].id).toBe(2);
     expect(parsed.batch.has_more).toBe(true);
+  });
+
+  it("get_query_history returns recent entries with limit", async () => {
+    useAppStore.setState({
+      queryHistory: [
+        {
+          sql: "SELECT 1",
+          connectionName: "Main DB",
+          timestamp: 1_700_000_000_000,
+          rowCount: 1,
+          executionTimeMs: 5,
+          error: null,
+        },
+        {
+          sql: "SELECT * FROM orders",
+          connectionName: "Main DB",
+          timestamp: 1_700_000_000_100,
+          rowCount: 10,
+          executionTimeMs: 12,
+          error: null,
+        },
+      ],
+    });
+
+    const raw = await (getQueryHistory as any).execute({ limit: "1" });
+    const parsed = JSON.parse(raw);
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].sql).toBe("SELECT 1");
+    expect(parsed[0].connectionName).toBe("Main DB");
+    expect(parsed[0].rowCount).toBe(1);
+  });
+
+  it("get_query_history uses default limit when not provided", async () => {
+    useAppStore.setState({
+      queryHistory: Array(20)
+        .fill(null)
+        .map((_, i) => ({
+          sql: `SELECT ${i}`,
+          connectionName: "Main DB",
+          timestamp: 1_700_000_000_000 + i,
+          rowCount: 1,
+          executionTimeMs: 1,
+          error: null,
+        })),
+    });
+
+    const raw = await (getQueryHistory as any).execute({});
+    const parsed = JSON.parse(raw);
+
+    expect(parsed).toHaveLength(10);
   });
 
   it("lint_sql_safety reports high risk for write queries", async () => {
