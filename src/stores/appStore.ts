@@ -40,6 +40,7 @@ interface OpenScript {
 }
 
 type ActiveEditorTab = { kind: "script" | "result"; id: string } | null;
+type EditorTabRef = { kind: "script" | "result"; id: string };
 type SavedResultRecord = SavedResultMetadata & { query_result: QueryResult };
 
 interface AppState {
@@ -107,6 +108,7 @@ interface AppState {
   activeScriptId: string | null;
   openResultTabs: ResultTabData[];
   activeEditorTab: ActiveEditorTab;
+  editorTabOrder: EditorTabRef[];
 
   // Actions - Connections
   loadConnections: () => Promise<void>;
@@ -173,6 +175,9 @@ interface AppState {
   toggleResultQueryExpanded: (tabId: string) => void;
   setActiveResultTab: (tabId: string) => void;
   closeResultTab: (tabId: string) => void;
+  reorderEditorTabs: (active: EditorTabRef, over: EditorTabRef) => void;
+  reorderOpenScripts: (oldIndex: number, newIndex: number) => void;
+  reorderOpenResultTabs: (oldIndex: number, newIndex: number) => void;
   deleteSavedResult: (connectionId: string, savedResultId: string) => Promise<void>;
   renameSavedResult: (connectionId: string, savedResultId: string, name: string) => Promise<void>;
 
@@ -251,6 +256,43 @@ function createEmptyMetadataSnapshot(): ConnectionMetadataSnapshot {
     isLoading: false,
     lastRefreshedAt: null,
   };
+}
+
+function normalizeEditorTabOrder(
+  editorTabOrder: EditorTabRef[],
+  openScripts: OpenScript[],
+  openResultTabs: ResultTabData[]
+): EditorTabRef[] {
+  const scriptIds = new Set(openScripts.map((s) => s.id));
+  const resultIds = new Set(openResultTabs.map((t) => t.id));
+  const normalized: EditorTabRef[] = [];
+  const seen = new Set<string>();
+
+  for (const tab of editorTabOrder) {
+    const exists =
+      tab.kind === "script" ? scriptIds.has(tab.id) : resultIds.has(tab.id);
+    if (!exists) continue;
+    const key = `${tab.kind}:${tab.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(tab);
+  }
+
+  for (const script of openScripts) {
+    const key = `script:${script.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({ kind: "script", id: script.id });
+  }
+
+  for (const tab of openResultTabs) {
+    const key = `result:${tab.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({ kind: "result", id: tab.id });
+  }
+
+  return normalized;
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -340,6 +382,7 @@ export const useAppStore = create<AppState>((set, get) => {
   activeScriptId: null,
   openResultTabs: [],
   activeEditorTab: null,
+  editorTabOrder: [],
   metadataByConnection: {},
 
   // Connection actions
@@ -1532,7 +1575,54 @@ export const useAppStore = create<AppState>((set, get) => {
     set({
       openResultTabs: nextResultTabs,
       activeEditorTab: nextActiveEditorTab,
+      editorTabOrder: normalizeEditorTabOrder(
+        get().editorTabOrder,
+        openScripts,
+        nextResultTabs
+      ),
     });
+    get().saveOpenTabs();
+  },
+
+  reorderEditorTabs: (active: EditorTabRef, over: EditorTabRef) => {
+    const { editorTabOrder, openScripts, openResultTabs } = get();
+    const nextOrder = normalizeEditorTabOrder(editorTabOrder, openScripts, openResultTabs);
+    const activeIndex = nextOrder.findIndex(
+      (tab) => tab.kind === active.kind && tab.id === active.id
+    );
+    const overIndex = nextOrder.findIndex(
+      (tab) => tab.kind === over.kind && tab.id === over.id
+    );
+    if (activeIndex === -1 || overIndex === -1 || activeIndex === overIndex) return;
+
+    const reordered = [...nextOrder];
+    const [moved] = reordered.splice(activeIndex, 1);
+    reordered.splice(overIndex, 0, moved);
+    set({ editorTabOrder: reordered });
+    get().saveOpenTabs();
+  },
+
+  reorderOpenScripts: (oldIndex: number, newIndex: number) => {
+    const { openScripts } = get();
+    if (oldIndex < 0 || oldIndex >= openScripts.length || newIndex < 0 || newIndex >= openScripts.length) {
+      return;
+    }
+    const newOpenScripts = [...openScripts];
+    const [movedScript] = newOpenScripts.splice(oldIndex, 1);
+    newOpenScripts.splice(newIndex, 0, movedScript);
+    set({ openScripts: newOpenScripts });
+    get().saveOpenTabs();
+  },
+
+  reorderOpenResultTabs: (oldIndex: number, newIndex: number) => {
+    const { openResultTabs } = get();
+    if (oldIndex < 0 || oldIndex >= openResultTabs.length || newIndex < 0 || newIndex >= openResultTabs.length) {
+      return;
+    }
+    const newOpenResultTabs = [...openResultTabs];
+    const [movedTab] = newOpenResultTabs.splice(oldIndex, 1);
+    newOpenResultTabs.splice(newIndex, 0, movedTab);
+    set({ openResultTabs: newOpenResultTabs });
     get().saveOpenTabs();
   },
 
@@ -1862,6 +1952,7 @@ export const useAppStore = create<AppState>((set, get) => {
       if (tabsState.tabs.length > 0) {
         const openScripts: OpenScript[] = [];
         const openResultTabs: ResultTabData[] = [];
+        const loadedOrder: EditorTabRef[] = [];
 
         for (const tab of tabsState.tabs) {
           const kind = tab.kind ?? "script";
@@ -1894,6 +1985,7 @@ export const useAppStore = create<AppState>((set, get) => {
                   version: 1,
                   createdAt: tab.created_at,
                 });
+                loadedOrder.push({ kind: "result", id: tabId });
                 continue;
               } catch {
                 // fallthrough
@@ -1917,6 +2009,7 @@ export const useAppStore = create<AppState>((set, get) => {
               version: 1,
               createdAt: tab.created_at,
             });
+            loadedOrder.push({ kind: "result", id: tabId });
             continue;
           }
 
@@ -1936,6 +2029,7 @@ export const useAppStore = create<AppState>((set, get) => {
               connectionId: tab.connection_id,
               isDirty: false,
             });
+            loadedOrder.push({ kind: "script", id: script.id });
           } catch {
             const fallbackCell = createEmptyCell(tab.content);
             openScripts.push({
@@ -1946,6 +2040,7 @@ export const useAppStore = create<AppState>((set, get) => {
               connectionId: tab.connection_id,
               isDirty: tab.is_dirty,
             });
+            loadedOrder.push({ kind: "script", id: tab.id });
           }
         }
 
@@ -1970,6 +2065,7 @@ export const useAppStore = create<AppState>((set, get) => {
           openResultTabs,
           activeScriptId,
           activeEditorTab,
+          editorTabOrder: normalizeEditorTabOrder(loadedOrder, openScripts, openResultTabs),
         });
       }
     } catch (error) {
@@ -1978,11 +2074,30 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   saveOpenTabs: async () => {
-    const { openScripts, openResultTabs, activeEditorTab } = get();
+    const { openScripts, openResultTabs, activeEditorTab, editorTabOrder } = get();
+    const orderedTabs = normalizeEditorTabOrder(editorTabOrder, openScripts, openResultTabs);
+    const scriptsById = new Map(openScripts.map((script) => [script.id, script]));
+    const resultsById = new Map(openResultTabs.map((tab) => [tab.id, tab]));
+    const serializedTabs: Array<{
+      id: string;
+      script_id: string | null;
+      kind: "script" | "result";
+      saved_result_id: string | null;
+      name: string;
+      content: string;
+      connection_id: string;
+      is_dirty: boolean;
+      is_query_collapsed: boolean;
+      last_executed_at?: number | null;
+      last_executed_database?: string | null;
+      created_at: number;
+    }> = [];
 
-    const tabsState = {
-      tabs: [
-        ...openScripts.map((script) => ({
+    for (const tabRef of orderedTabs) {
+      if (tabRef.kind === "script") {
+        const script = scriptsById.get(tabRef.id);
+        if (!script) continue;
+        serializedTabs.push({
           id: script.id,
           script_id: script.id,
           kind: "script",
@@ -1996,22 +2111,30 @@ export const useAppStore = create<AppState>((set, get) => {
           is_dirty: script.isDirty,
           is_query_collapsed: false,
           created_at: Date.now(),
-        })),
-        ...openResultTabs.map((tab) => ({
-          id: tab.id,
-          script_id: null,
-          kind: "result",
-          saved_result_id: tab.savedResultId,
-          name: tab.name,
-          content: tab.sqlCell.sql,
-          connection_id: tab.connectionId,
-          is_dirty: tab.isDirty,
-          is_query_collapsed: tab.isQueryCollapsed,
-          last_executed_at: tab.lastExecutedAt,
-          last_executed_database: tab.lastExecutedDatabase,
-          created_at: tab.createdAt,
-        })),
-      ],
+        });
+        continue;
+      }
+
+      const resultTab = resultsById.get(tabRef.id);
+      if (!resultTab) continue;
+      serializedTabs.push({
+        id: resultTab.id,
+        script_id: null,
+        kind: "result",
+        saved_result_id: resultTab.savedResultId,
+        name: resultTab.name,
+        content: resultTab.sqlCell.sql,
+        connection_id: resultTab.connectionId,
+        is_dirty: resultTab.isDirty,
+        is_query_collapsed: resultTab.isQueryCollapsed,
+        last_executed_at: resultTab.lastExecutedAt,
+        last_executed_database: resultTab.lastExecutedDatabase,
+        created_at: resultTab.createdAt,
+      });
+    }
+
+    const tabsState = {
+      tabs: serializedTabs,
       active_tab_id: activeEditorTab?.id ?? null,
     };
 
