@@ -267,6 +267,55 @@ describe("aiStore session management", () => {
       expect(state.activeSession?.forkedFrom).toBe("original-id");
       expect(state.activeSession?.id).toBe("forked-id");
     });
+
+    it("synthesizes inline parts for legacy assistant messages with tool calls", async () => {
+      const legacySession = {
+        id: "legacy-id",
+        title: "Legacy Session",
+        modelId: "model",
+        connectionId: null,
+        createdAt: 1000,
+        updatedAt: 2000,
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "I checked your schema.",
+            toolCalls: [
+              {
+                id: "tool-1",
+                name: "get_table_schema",
+                input: { table: "users" },
+                status: "completed",
+                result: "{\"ok\":true}",
+              },
+            ],
+            timestamp: 1500,
+          },
+        ],
+      };
+
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "get_chat_session") {
+          return Promise.resolve(legacySession);
+        }
+        return Promise.resolve();
+      });
+
+      await useAiStore.getState().loadSession("legacy-id");
+
+      const message = useAiStore.getState().activeSession?.messages[0];
+      expect(message?.parts?.length).toBe(2);
+      expect(message?.parts?.[0]).toMatchObject({
+        type: "text",
+        text: "I checked your schema.",
+        index: 0,
+      });
+      expect(message?.parts?.[1]).toMatchObject({
+        type: "tool",
+        index: 1,
+      });
+    });
   });
 });
 

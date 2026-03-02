@@ -42,6 +42,9 @@ pub struct ChatMessage {
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ChatToolCall>>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parts: Option<Vec<serde_json::Value>>,
     pub timestamp: i64,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -199,6 +202,7 @@ mod tests {
                 role: "user".into(),
                 content: "hello".into(),
                 tool_calls: None,
+                parts: None,
                 timestamp: updated_at - 500,
                 is_error: None,
                 metadata: None,
@@ -225,6 +229,7 @@ mod tests {
                 role: "user".into(),
                 content: "forked content".into(),
                 tool_calls: None,
+                parts: None,
                 timestamp: updated_at - 500,
                 is_error: None,
                 metadata: None,
@@ -310,6 +315,7 @@ mod tests {
                     role: "user".into(),
                     content: "First message".into(),
                     tool_calls: None,
+                    parts: None,
                     timestamp: 1500,
                     is_error: None,
                     metadata: Some(ChatMessageMetadata {
@@ -325,6 +331,7 @@ mod tests {
                     role: "assistant".into(),
                     content: "Assistant response".into(),
                     tool_calls: None,
+                    parts: None,
                     timestamp: 1600,
                     is_error: None,
                     metadata: None,

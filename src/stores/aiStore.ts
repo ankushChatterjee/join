@@ -31,6 +31,36 @@ const debugLog = async (message: string) => {
   }
 };
 
+const normalizeMessageParts = (msg: ChatMessage): ChatMessage => {
+  if (msg.role !== "assistant") return msg;
+
+  if (msg.parts && msg.parts.length > 0) {
+    const sortedParts = [...msg.parts].sort((a, b) => a.index - b.index);
+    const isAlreadySorted = msg.parts.every((part, i) => part === sortedParts[i]);
+    return isAlreadySorted ? msg : { ...msg, parts: sortedParts };
+  }
+
+  if (!msg.toolCalls || msg.toolCalls.length === 0) return msg;
+
+  const synthesizedParts: StreamingPart[] = [];
+  let index = 0;
+
+  if (msg.content) {
+    synthesizedParts.push({ type: "text", text: msg.content, index });
+    index += 1;
+  }
+
+  for (const toolCall of msg.toolCalls) {
+    synthesizedParts.push({ type: "tool", toolCall, index });
+    index += 1;
+  }
+
+  return { ...msg, parts: synthesizedParts };
+};
+
+const normalizeSessionMessages = (messages: ChatMessage[]): ChatMessage[] =>
+  messages.map(normalizeMessageParts);
+
 interface ChatSessionMeta {
   id: string;
   title: string;
@@ -241,6 +271,7 @@ export const useAiStore = create<AiState>((set, get) => {
       const sourceSession = await invoke<ChatSession>("get_chat_session", {
         sessionId,
       });
+      const normalizedSourceMessages = normalizeSessionMessages(sourceSession.messages);
 
       const { selectedModelId } = get();
       const newSession: ChatSessionData = {
@@ -251,7 +282,7 @@ export const useAiStore = create<AiState>((set, get) => {
         forkedFrom: sessionId,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        messages: sourceSession.messages.map((msg) => ({
+        messages: normalizedSourceMessages.map((msg) => ({
           ...msg,
           id: crypto.randomUUID(), // Generate new IDs for messages
         })),
@@ -290,9 +321,13 @@ export const useAiStore = create<AiState>((set, get) => {
       const session = await invoke<ChatSession>("get_chat_session", {
         sessionId,
       });
+      const normalizedSession: ChatSession = {
+        ...session,
+        messages: normalizeSessionMessages(session.messages),
+      };
       set({
         activeSessionId: sessionId,
-        activeSession: session,
+        activeSession: normalizedSession,
       });
       // Recalculate tokens when loading a session
       get().calculateTokenUsage();
