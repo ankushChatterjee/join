@@ -94,7 +94,7 @@ describe("buildSystemPrompt", () => {
       const prompt = buildSystemPrompt(minimalExecutionContext({ targetConnectionDialect: "postgresql" }));
 
       expect(prompt).toContain("get_postgres_best_practice");
-      expect(prompt).toContain("index/schema guidance");
+      expect(prompt).toContain("best practices and apply them");
     });
 
     it("Step 4 VERIFY includes get_postgres_best_practice and query-missing-indexes", () => {
