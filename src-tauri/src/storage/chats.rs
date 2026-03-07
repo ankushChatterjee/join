@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::ConfigError;
+use super::path_safety::{safe_join, validate_id};
 
 /// A single chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +92,11 @@ fn get_chats_dir() -> PathBuf {
     config_dir
 }
 
+fn get_chat_session_path(session_id: &str) -> Result<PathBuf, ConfigError> {
+    validate_id(session_id)?;
+    safe_join(&get_chats_dir(), &format!("{session_id}.json"))
+}
+
 /// List all chat sessions (metadata only)
 pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
     let chats_dir = get_chats_dir();
@@ -135,7 +141,7 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
 
 /// Get a single chat session by ID (with messages)
 pub fn get_chat_session(session_id: &str) -> Result<ChatSession, ConfigError> {
-    let path = get_chats_dir().join(format!("{}.json", session_id));
+    let path = get_chat_session_path(session_id)?;
 
     if !path.exists() {
         return Err(ConfigError::IoError(std::io::Error::new(
@@ -152,7 +158,8 @@ pub fn get_chat_session(session_id: &str) -> Result<ChatSession, ConfigError> {
 
 /// Save a chat session
 pub fn save_chat_session(session: &ChatSession) -> Result<(), ConfigError> {
-    let path = get_chats_dir().join(format!("{}.json", session.id));
+    validate_id(&session.id)?;
+    let path = get_chat_session_path(&session.id)?;
     let content = serde_json::to_string_pretty(session)?;
     fs::write(&path, content)?;
 
@@ -161,7 +168,7 @@ pub fn save_chat_session(session: &ChatSession) -> Result<(), ConfigError> {
 
 /// Delete a chat session
 pub fn delete_chat_session(session_id: &str) -> Result<(), ConfigError> {
-    let path = get_chats_dir().join(format!("{}.json", session_id));
+    let path = get_chat_session_path(session_id)?;
 
     if path.exists() {
         fs::remove_file(&path)?;

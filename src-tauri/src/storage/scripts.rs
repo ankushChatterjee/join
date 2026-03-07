@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::ConfigError;
+use super::path_safety::{safe_join, validate_id};
 
 const SHEET_FORMAT_VERSION: i64 = 1;
 
@@ -61,25 +62,35 @@ fn get_scripts_base_dir() -> PathBuf {
 }
 
 /// Get the directory for a specific connection's scripts
-fn get_connection_scripts_dir(connection_id: &str) -> PathBuf {
-    let dir = get_scripts_base_dir().join(connection_id);
-    fs::create_dir_all(&dir).ok();
-    dir
+fn get_connection_scripts_dir(connection_id: &str) -> Result<PathBuf, ConfigError> {
+    safe_join(&get_scripts_base_dir(), connection_id)
 }
 
 /// Get the path to a script's legacy SQL file.
-fn get_script_sql_path(connection_id: &str, script_id: &str) -> PathBuf {
-    get_connection_scripts_dir(connection_id).join(format!("{}.sql", script_id))
+fn get_script_sql_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+    validate_id(script_id)?;
+    safe_join(
+        &get_connection_scripts_dir(connection_id)?,
+        &format!("{}.sql", script_id),
+    )
 }
 
 /// Get the path to a script's sheet JSON file.
-fn get_script_sheet_path(connection_id: &str, script_id: &str) -> PathBuf {
-    get_connection_scripts_dir(connection_id).join(format!("{}.sheet.json", script_id))
+fn get_script_sheet_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+    validate_id(script_id)?;
+    safe_join(
+        &get_connection_scripts_dir(connection_id)?,
+        &format!("{}.sheet.json", script_id),
+    )
 }
 
 /// Get the path to a script's metadata file
-fn get_script_meta_path(connection_id: &str, script_id: &str) -> PathBuf {
-    get_connection_scripts_dir(connection_id).join(format!("{}.meta.json", script_id))
+fn get_script_meta_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+    validate_id(script_id)?;
+    safe_join(
+        &get_connection_scripts_dir(connection_id)?,
+        &format!("{}.meta.json", script_id),
+    )
 }
 
 fn new_cell_id() -> String {
@@ -136,17 +147,17 @@ fn load_script_metadata(
     connection_id: &str,
     script_id: &str,
 ) -> Result<ScriptMetadata, ConfigError> {
-    let meta_path = get_script_meta_path(connection_id, script_id);
-    let content = fs::read_to_string(&meta_path)?;
+    let meta_path = get_script_meta_path(connection_id, script_id)?;
+    let content = fs::read_to_string(meta_path)?;
     let metadata: ScriptMetadata = serde_json::from_str(&content)?;
     Ok(metadata)
 }
 
 /// Save a script's metadata
 fn save_script_metadata(metadata: &ScriptMetadata) -> Result<(), ConfigError> {
-    let meta_path = get_script_meta_path(&metadata.connection_id, &metadata.id);
+    let meta_path = get_script_meta_path(&metadata.connection_id, &metadata.id)?;
     let content = serde_json::to_string_pretty(metadata)?;
-    fs::write(&meta_path, content)?;
+    fs::write(meta_path, content)?;
     Ok(())
 }
 
@@ -154,17 +165,17 @@ fn load_script_sheet(
     connection_id: &str,
     script_id: &str,
 ) -> Result<SqlSheetDocument, ConfigError> {
-    let sheet_path = get_script_sheet_path(connection_id, script_id);
+    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
 
     if sheet_path.exists() {
-        let content = fs::read_to_string(&sheet_path)?;
+        let content = fs::read_to_string(sheet_path)?;
         let sheet: SqlSheetDocument = serde_json::from_str(&content)?;
         return Ok(normalize_sheet(sheet));
     }
 
     // Legacy migration path: if there is only a .sql file, convert it to one sheet cell.
-    let legacy_content =
-        fs::read_to_string(get_script_sql_path(connection_id, script_id)).unwrap_or_default();
+    let legacy_content = fs::read_to_string(get_script_sql_path(connection_id, script_id)?)
+        .unwrap_or_default();
     let sheet = create_default_sheet(legacy_content);
     save_script_sheet(connection_id, script_id, &sheet)?;
     Ok(sheet)
@@ -175,16 +186,16 @@ fn save_script_sheet(
     script_id: &str,
     sheet: &SqlSheetDocument,
 ) -> Result<(), ConfigError> {
-    let sheet_path = get_script_sheet_path(connection_id, script_id);
+    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
     let normalized = normalize_sheet(sheet.clone());
     let content = serde_json::to_string_pretty(&normalized)?;
-    fs::write(&sheet_path, content)?;
+    fs::write(sheet_path, content)?;
     Ok(())
 }
 
 /// List all scripts for a connection
 pub fn list_scripts(connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigError> {
-    let dir = get_connection_scripts_dir(connection_id);
+    let dir = get_connection_scripts_dir(connection_id)?;
 
     if !dir.exists() {
         return Ok(Vec::new());
@@ -215,6 +226,7 @@ pub fn list_scripts(connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigEr
 
 /// Create a new script
 pub fn create_script(connection_id: &str, name: &str) -> Result<Script, ConfigError> {
+    validate_id(connection_id)?;
     let script_id = format!("script-{}", chrono::Utc::now().timestamp_millis());
     let now = chrono::Utc::now().timestamp_millis();
 
@@ -238,6 +250,8 @@ pub fn create_script(connection_id: &str, name: &str) -> Result<Script, ConfigEr
 
 /// Get a script by ID
 pub fn get_script(connection_id: &str, script_id: &str) -> Result<Script, ConfigError> {
+    validate_id(connection_id)?;
+    validate_id(script_id)?;
     let metadata = load_script_metadata(connection_id, script_id)?;
     let sheet = load_script_sheet(connection_id, script_id)?;
 
@@ -250,6 +264,8 @@ pub fn update_script_content(
     script_id: &str,
     sheet: &SqlSheetDocument,
 ) -> Result<(), ConfigError> {
+    validate_id(connection_id)?;
+    validate_id(script_id)?;
     save_script_sheet(connection_id, script_id, sheet)?;
 
     // Update the metadata timestamp
@@ -266,6 +282,8 @@ pub fn rename_script(
     script_id: &str,
     new_name: &str,
 ) -> Result<ScriptMetadata, ConfigError> {
+    validate_id(connection_id)?;
+    validate_id(script_id)?;
     let mut metadata = load_script_metadata(connection_id, script_id)?;
     metadata.name = new_name.to_string();
     metadata.updated_at = chrono::Utc::now().timestamp_millis();
@@ -275,21 +293,24 @@ pub fn rename_script(
 
 /// Delete a script
 pub fn delete_script(connection_id: &str, script_id: &str) -> Result<(), ConfigError> {
-    let sheet_path = get_script_sheet_path(connection_id, script_id);
-    let legacy_sql_path = get_script_sql_path(connection_id, script_id);
-    let meta_path = get_script_meta_path(connection_id, script_id);
+    validate_id(connection_id)?;
+    validate_id(script_id)?;
+    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
+    let legacy_sql_path = get_script_sql_path(connection_id, script_id)?;
+    let meta_path = get_script_meta_path(connection_id, script_id)?;
 
     // Remove all known files (ignore errors if they don't exist)
-    fs::remove_file(&sheet_path).ok();
-    fs::remove_file(&legacy_sql_path).ok();
-    fs::remove_file(&meta_path).ok();
+    fs::remove_file(sheet_path).ok();
+    fs::remove_file(legacy_sql_path).ok();
+    fs::remove_file(meta_path).ok();
 
     Ok(())
 }
 
 /// Delete all scripts for a connection
 pub fn delete_connection_scripts(connection_id: &str) -> Result<(), ConfigError> {
-    let dir = get_connection_scripts_dir(connection_id);
+    validate_id(connection_id)?;
+    let dir = get_connection_scripts_dir(connection_id)?;
     if dir.exists() {
         fs::remove_dir_all(&dir)?;
     }
@@ -347,14 +368,16 @@ mod tests {
         let script = create_script("conn-legacy", "Legacy Script").expect("create script");
 
         let legacy_sql = "SELECT * FROM customers;";
-        let legacy_path = get_script_sql_path("conn-legacy", &script.metadata.id);
+        let legacy_path = get_script_sql_path("conn-legacy", &script.metadata.id).expect("legacy path");
         fs::write(&legacy_path, legacy_sql).expect("write legacy sql");
-        fs::remove_file(get_script_sheet_path("conn-legacy", &script.metadata.id))
+        fs::remove_file(get_script_sheet_path("conn-legacy", &script.metadata.id).expect("sheet path"))
             .expect("remove sheet");
 
         let loaded = get_script("conn-legacy", &script.metadata.id).expect("load script");
         assert_eq!(loaded.sheet.cells.len(), 1);
         assert_eq!(loaded.sheet.cells[0].sql, legacy_sql);
-        assert!(get_script_sheet_path("conn-legacy", &script.metadata.id).exists());
+        assert!(get_script_sheet_path("conn-legacy", &script.metadata.id)
+            .expect("sheet path")
+            .exists());
     }
 }

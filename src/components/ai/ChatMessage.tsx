@@ -16,6 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeExternalUrl } from "@/lib/urlSafety";
 import { useAiStore } from "@/stores/aiStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, PendingQuestion, StreamingPart } from "@/ai/types";
@@ -111,11 +112,15 @@ function MarkdownContent({
           if (!href) {
             return <span>{children}</span>;
           }
+          const safeHref = sanitizeExternalUrl(href);
+          if (!safeHref) {
+            return <span>{children}</span>;
+          }
 
           // Regular external link
           return (
             <a
-              href={href}
+              href={safeHref}
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 text-accent-400 hover:text-accent-300"

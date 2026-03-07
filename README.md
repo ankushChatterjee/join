@@ -30,7 +30,7 @@ A desktop SQL client with embedded AI assistance.
    Create a `.env` file in the project root with your AI provider API keys:
    ```
    ANTHROPIC_API_KEY=your_key_here
-   GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
+   GEMINI_API_KEY=your_key_here
    OPEN_ROUTER_API_KEY=your_key_here
    ```
 

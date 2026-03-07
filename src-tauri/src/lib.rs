@@ -475,11 +475,48 @@ async fn export_to_csv(file_path: String, data: ExportData) -> Result<(), String
 #[tauri::command]
 fn get_env_var(name: String) -> Result<String, String> {
     // Only allow specific env vars for security
-    let allowed = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY"];
+    let allowed = [
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "OPEN_ROUTER_API_KEY",
+    ];
     if !allowed.contains(&name.as_str()) {
         return Err(format!("Access to environment variable '{}' is not allowed", name));
     }
     std::env::var(&name).map_err(|_| format!("Environment variable '{}' is not set", name))
+}
+
+fn looks_like_placeholder_secret(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || normalized == "your_key_here"
+        || normalized == "changeme"
+        || normalized == "replace_me"
+}
+
+fn warn_api_key_configuration() {
+    let keys = [
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "OPEN_ROUTER_API_KEY",
+        "MOONSHOT_API_KEY",
+    ];
+
+    for key in keys {
+        match std::env::var(key) {
+            Ok(value) if looks_like_placeholder_secret(&value) => {
+                println!(
+                    "[SECURITY] {} appears to be a placeholder value. Use a real API key via local secret management.",
+                    key
+                );
+            }
+            Ok(_) => {}
+            Err(_) => {
+                println!("[SECURITY] {} is not set.", key);
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -521,6 +558,8 @@ fn debug_log(message: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    warn_api_key_configuration();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -621,6 +660,7 @@ mod tests {
                 execute_query,
                 export_to_csv,
                 get_env_var,
+                get_chat_session,
             ])
             .build(mock_context(noop_assets()))
             .expect("build app")
@@ -796,5 +836,26 @@ mod tests {
             }),
         );
         assert!(denied.to_string().contains("not allowed"));
+    }
+
+    #[test]
+    fn tauri_ipc_rejects_invalid_chat_session_id() {
+        let _lock = storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _temp = setup_temp_config();
+        let app = build_test_app();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("webview");
+
+        let denied = invoke_err(
+            &webview,
+            "get_chat_session",
+            json!({
+                "sessionId": "../escape"
+            }),
+        );
+        assert!(denied.to_string().contains("Validation error"));
     }
 }

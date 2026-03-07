@@ -15,6 +15,8 @@ pub enum ConfigError {
     JsonError(#[from] serde_json::Error),
     #[error("Config not found")]
     NotFound,
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 impl Serialize for ConfigError {
