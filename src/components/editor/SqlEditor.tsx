@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect, useState } from "react";
+import { useCallback, useMemo, useRef, useEffect, useState, memo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, PostgreSQL, MySQL, SQLite } from "@codemirror/lang-sql";
 import { EditorView, keymap, Decoration } from "@codemirror/view";
@@ -18,6 +18,7 @@ import {
   type SearchHighlightRange,
 } from "./sqlSearch";
 import { cn } from "@/lib/utils";
+import { recordPerfSample } from "@/lib/perf";
 import { DiffViewer } from "./DiffViewer";
 import { useShallow } from "zustand/react/shallow";
 
@@ -329,6 +330,9 @@ function SqlCell({
         <CodeMirror
           value={cell.sql}
           onChange={onChange}
+          onBlur={() => {
+            void useAppStore.getState().flushScriptNow(scriptId);
+          }}
           onCreateEditor={(view) => {
             viewRef.current = view;
             if (isSelected) {
@@ -370,6 +374,29 @@ function SqlCell({
     </div>
   );
 }
+
+function areSearchRangesEqual(a: SearchHighlightRange[], b: SearchHighlightRange[]) {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i].from !== b[i].from || a[i].to !== b[i].to || a[i].isActive !== b[i].isActive) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const MemoizedSqlCell = memo(SqlCell, (prev, next) => (
+  prev.cell === next.cell &&
+  prev.index === next.index &&
+  prev.isSelected === next.isSelected &&
+  prev.isRunning === next.isRunning &&
+  prev.canRemove === next.canRemove &&
+  prev.isCollapsed === next.isCollapsed &&
+  prev.sqlExtension === next.sqlExtension &&
+  prev.suppressAutoFocus === next.suppressAutoFocus &&
+  areSearchRangesEqual(prev.searchHighlightRanges ?? [], next.searchHighlightRanges ?? [])
+));
 
 export function SqlEditor() {
   const {
@@ -604,7 +631,7 @@ export function SqlEditor() {
             executingCell?.scriptId === activeScript.id && executingCell?.cellId === cell.id;
 
           return (
-            <SqlCell
+            <MemoizedSqlCell
               key={cell.id}
               scriptId={activeScript.id}
               cell={cell}
@@ -618,10 +645,15 @@ export function SqlEditor() {
                 setSelectedScriptCell(activeScript.id, cell.id);
               }}
               onChange={(value) => {
+                const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
                 if (activeScript.selectedCellId !== cell.id) {
                   setSelectedScriptCell(activeScript.id, cell.id);
                 }
                 updateScriptContent(activeScript.id, value);
+                requestAnimationFrame(() => {
+                  const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+                  recordPerfSample("editor.keypress_to_paint_ms", endedAt - startedAt);
+                });
               }}
               onRun={() => executeScriptCell(activeScript.id, cell.id)}
               onRemove={() => removeScriptCell(activeScript.id, cell.id)}

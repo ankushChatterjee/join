@@ -47,6 +47,8 @@ function baseScript() {
     ],
     selectedCellId: "cell-1",
     isDirty: false,
+    pendingSaveRevision: 0,
+    lastFlushedRevision: 0,
   };
 }
 

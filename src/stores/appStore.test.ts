@@ -89,6 +89,8 @@ describe("appStore critical flows", () => {
           cells: [{ id: "cell-1", sql: "SELECT 1", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
           selectedCellId: "cell-1",
           isDirty: false,
+          pendingSaveRevision: 0,
+          lastFlushedRevision: 0,
         },
       ],
       activeScriptId: "script-1",
@@ -136,6 +138,8 @@ describe("appStore critical flows", () => {
           cells: [{ id: "cell-1", sql: "SELECT * FROM missing", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
           selectedCellId: "cell-1",
           isDirty: false,
+          pendingSaveRevision: 0,
+          lastFlushedRevision: 0,
         },
       ],
       activeScriptId: "script-1",
@@ -163,6 +167,8 @@ describe("appStore critical flows", () => {
           cells: [{ id: "cell-1", sql: "SELECT 1", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
           selectedCellId: "cell-1",
           isDirty: false,
+          pendingSaveRevision: 0,
+          lastFlushedRevision: 0,
         },
       ],
       activeScriptId: "script-1",
@@ -266,5 +272,125 @@ describe("appStore critical flows", () => {
     await useAppStore.getState().deleteSavedResult("c1", "sr-1");
     expect(useAppStore.getState().openResultTabs.length).toBe(0);
     expect(useAppStore.getState().savedResultsByConnection.c1.length).toBe(0);
+  });
+});
+
+describe("appStore autosave regressions", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    resetStore();
+  });
+
+  it("queues script updates on edit and flushes after debounce without direct hot-path write", async () => {
+    vi.useFakeTimers();
+    try {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === "queue_script_update") return Promise.resolve({});
+        if (cmd === "flush_script_updates") {
+          return Promise.resolve({
+            scriptId: "script-1",
+            pendingRevision: null,
+            lastFlushedRevision: 1,
+            hasPending: false,
+          });
+        }
+        return Promise.resolve(undefined);
+      });
+
+      useAppStore.setState({
+        openScripts: [
+          {
+            id: "script-1",
+            name: "Script 1",
+            connectionId: "c1",
+            cells: [{ id: "cell-1", sql: "SELECT 1", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
+            selectedCellId: "cell-1",
+            isDirty: false,
+            pendingSaveRevision: 0,
+            lastFlushedRevision: 0,
+          },
+        ],
+        activeScriptId: "script-1",
+        activeEditorTab: { kind: "script", id: "script-1" },
+      });
+
+      useAppStore.getState().updateScriptContent("script-1", "SELECT 2");
+      expect(invokeMock).toHaveBeenCalledWith(
+        "queue_script_update",
+        expect.objectContaining({ scriptId: "script-1" })
+      );
+      expect(
+        invokeMock.mock.calls.some((c: any[]) => c[0] === "update_script_content")
+      ).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(760);
+      await Promise.resolve();
+      expect(invokeMock).toHaveBeenCalledWith(
+        "flush_script_updates",
+        { scriptId: "script-1" }
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("flushes pending script updates before executing a cell", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "flush_script_updates") {
+        return Promise.resolve({
+          scriptId: "script-1",
+          pendingRevision: null,
+          lastFlushedRevision: 1,
+          hasPending: false,
+        });
+      }
+      if (cmd === "execute_query") {
+        return Promise.resolve({
+          columns: [{ name: "id", type_name: "int4" }],
+          rows: [[1]],
+          row_count: 1,
+          execution_time_ms: 2,
+        });
+      }
+      if (cmd === "save_query_history") return Promise.resolve(undefined);
+      return Promise.resolve(undefined);
+    });
+
+    useAppStore.setState({
+      connections: [
+        {
+          id: "c1",
+          name: "Main DB",
+          db_type: "postgresql",
+          host: "localhost",
+          port: 5432,
+          database: "join_test",
+          username: "join",
+          ssl_mode: "disable",
+          is_connected: true,
+        },
+      ],
+      openScripts: [
+        {
+          id: "script-1",
+          name: "Script 1",
+          connectionId: "c1",
+          cells: [{ id: "cell-1", sql: "SELECT 1", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
+          selectedCellId: "cell-1",
+          isDirty: true,
+          pendingSaveRevision: 1,
+          lastFlushedRevision: 0,
+        },
+      ],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    await useAppStore.getState().executeScriptCell("script-1", "cell-1");
+    const flushCallIndex = invokeMock.mock.calls.findIndex((c: any[]) => c[0] === "flush_script_updates");
+    const executeCallIndex = invokeMock.mock.calls.findIndex((c: any[]) => c[0] === "execute_query");
+    expect(flushCallIndex).toBeGreaterThanOrEqual(0);
+    expect(executeCallIndex).toBeGreaterThanOrEqual(0);
+    expect(flushCallIndex).toBeLessThan(executeCallIndex);
   });
 });

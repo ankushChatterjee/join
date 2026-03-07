@@ -22,6 +22,7 @@ import type {
   ResultTabData,
   ConnectionMetadataSnapshot,
 } from "./types";
+import { recordPerfSample } from "@/lib/perf";
 
 export interface Toast {
   id: string;
@@ -37,6 +38,8 @@ interface OpenScript {
   cells: SqlSheetCell[];
   selectedCellId: string | null;
   isDirty: boolean;
+  pendingSaveRevision: number;
+  lastFlushedRevision: number;
 }
 
 type ActiveEditorTab = { kind: "script" | "result"; id: string } | null;
@@ -56,6 +59,13 @@ type QueryContext = {
   previewSource?: string | null;
   capturedAt: number;
 };
+
+interface ScriptSaveQueueStatus {
+  scriptId: string;
+  pendingRevision: number | null;
+  lastFlushedRevision: number;
+  hasPending: boolean;
+}
 
 interface AppState {
   // Connections
@@ -174,6 +184,7 @@ interface AppState {
   rejectScriptCellProposal: (scriptId: string, cellId: string) => void;
   executeScriptCell: (scriptId: string, cellId: string) => Promise<void>;
   updateScriptContent: (scriptId: string, content: string) => void;
+  flushScriptNow: (scriptId: string) => Promise<void>;
   saveScript: (scriptId: string) => Promise<void>;
   renameScript: (scriptId: string, name: string) => Promise<void>;
   deleteScript: (connectionId: string, scriptId: string) => Promise<void>;
@@ -316,6 +327,9 @@ function normalizeEditorTabOrder(
 }
 
 export const useAppStore = create<AppState>((set, get) => {
+  const SCRIPT_AUTOSAVE_IDLE_MS = 750;
+  const scriptSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   const applyConnectionMetadataToLegacyState = (connectionId: string) => {
     const snapshot = get().metadataByConnection[connectionId];
     if (!snapshot) return;
@@ -345,6 +359,32 @@ export const useAppStore = create<AppState>((set, get) => {
         },
       };
     });
+  };
+
+  const queueScriptPersist = async (script: OpenScript) => {
+    try {
+      const sheet = toSheetDocument(script);
+      await invoke<ScriptSaveQueueStatus>("queue_script_update", {
+        connectionId: script.connectionId,
+        scriptId: script.id,
+        sheet,
+        revision: script.pendingSaveRevision,
+      });
+    } catch (error) {
+      console.error("Failed to queue script updates:", error);
+    }
+  };
+
+  const scheduleScriptPersist = (scriptId: string) => {
+    const existing = scriptSaveTimers.get(scriptId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(async () => {
+      scriptSaveTimers.delete(scriptId);
+      await get().flushScriptNow(scriptId);
+    }, SCRIPT_AUTOSAVE_IDLE_MS);
+    scriptSaveTimers.set(scriptId, timer);
   };
 
   return ({
@@ -520,8 +560,10 @@ export const useAppStore = create<AppState>((set, get) => {
         columnLoadPromises.push(get().loadColumns(view.name, schemaName));
       }
     }
-    // Load columns in parallel - await so autocomplete schema is ready
-    await Promise.all(columnLoadPromises);
+    // Load columns/indexes in background so editor becomes interactive faster.
+    Promise.all(columnLoadPromises).catch((error) => {
+      console.error("Background metadata load failed:", error);
+    });
 
     // Auto-create a script if none exists
     const { scriptsByConnection } = get();
@@ -1146,6 +1188,8 @@ export const useAppStore = create<AppState>((set, get) => {
         cells,
         selectedCellId,
         isDirty: false,
+        pendingSaveRevision: 0,
+        lastFlushedRevision: 0,
       };
 
       set((state) => ({
@@ -1188,6 +1232,8 @@ export const useAppStore = create<AppState>((set, get) => {
         cells,
         selectedCellId,
         isDirty: false,
+        pendingSaveRevision: 0,
+        lastFlushedRevision: 0,
       };
 
       set((state) => ({
@@ -1206,6 +1252,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   closeScript: (scriptId: string) => {
     const { openScripts, activeScriptId, activeEditorTab } = get();
+    void get().flushScriptNow(scriptId);
     const scriptIndex = openScripts.findIndex((s) => s.id === scriptId);
     const newOpenScripts = openScripts.filter((s) => s.id !== scriptId);
 
@@ -1234,6 +1281,10 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   setActiveScript: (scriptId: string) => {
+    const currentActive = get().activeEditorTab;
+    if (currentActive?.kind === "script" && currentActive.id !== scriptId) {
+      void get().flushScriptNow(currentActive.id);
+    }
     set({ activeScriptId: scriptId, activeEditorTab: { kind: "script", id: scriptId } });
     get().saveOpenTabs();
   },
@@ -1245,19 +1296,9 @@ export const useAppStore = create<AppState>((set, get) => {
         return {
           ...script,
           selectedCellId: pickSelectedCellId(script.cells, cellId),
-          isDirty: true,
         };
       }),
     }));
-
-    const script = get().openScripts.find((s) => s.id === scriptId);
-    if (!script) return;
-
-    invoke("update_script_content", {
-      connectionId: script.connectionId,
-      scriptId,
-      sheet: toSheetDocument(script),
-    }).catch((e) => console.error("Failed to persist selected cell:", e));
     get().saveOpenTabs();
   },
 
@@ -1282,6 +1323,7 @@ export const useAppStore = create<AppState>((set, get) => {
       cells,
       selectedCellId,
       isDirty: true,
+      pendingSaveRevision: script.pendingSaveRevision + 1,
     };
 
     set((state) => ({
@@ -1290,19 +1332,10 @@ export const useAppStore = create<AppState>((set, get) => {
       ),
     }));
 
-    try {
-      await invoke("update_script_content", {
-        connectionId: script.connectionId,
-        scriptId,
-        sheet: toSheetDocument(updatedScript),
-      });
-      get().saveOpenTabs();
-      return newCell.id;
-    } catch (error) {
-      console.error("Failed to add cell:", error);
-      get().showToast("error", `Failed to add cell: ${error}`);
-      return null;
-    }
+    void queueScriptPersist(updatedScript);
+    scheduleScriptPersist(scriptId);
+    get().saveOpenTabs();
+    return newCell.id;
   },
 
   updateScriptCellProposal: (scriptId: string, cellId: string, proposedSql: string | null) => {
@@ -1353,6 +1386,7 @@ export const useAppStore = create<AppState>((set, get) => {
       cells: normalizedCells,
       selectedCellId,
       isDirty: true,
+      pendingSaveRevision: script.pendingSaveRevision + 1,
     };
 
     set((state) => ({
@@ -1361,17 +1395,9 @@ export const useAppStore = create<AppState>((set, get) => {
       ),
     }));
 
-    try {
-      await invoke("update_script_content", {
-        connectionId: script.connectionId,
-        scriptId,
-        sheet: toSheetDocument(updatedScript),
-      });
-      get().saveOpenTabs();
-    } catch (error) {
-      console.error("Failed to remove cell:", error);
-      get().showToast("error", `Failed to remove cell: ${error}`);
-    }
+    void queueScriptPersist(updatedScript);
+    scheduleScriptPersist(scriptId);
+    get().saveOpenTabs();
   },
 
   updateScriptCellRunMetadata: async (scriptId: string, cellId: string, updates) => {
@@ -1384,6 +1410,7 @@ export const useAppStore = create<AppState>((set, get) => {
         cell.id === cellId ? { ...cell, ...updates } : cell
       ),
       isDirty: true,
+      pendingSaveRevision: script.pendingSaveRevision + 1,
     };
 
     set((state) => ({
@@ -1392,18 +1419,12 @@ export const useAppStore = create<AppState>((set, get) => {
       ),
     }));
 
-    try {
-      await invoke("update_script_content", {
-        connectionId: script.connectionId,
-        scriptId,
-        sheet: toSheetDocument(updatedScript),
-      });
-    } catch (error) {
-      console.error("Failed to persist run metadata:", error);
-    }
+    void queueScriptPersist(updatedScript);
+    await get().flushScriptNow(scriptId);
   },
 
   executeScriptCell: async (scriptId: string, cellId: string) => {
+    await get().flushScriptNow(scriptId);
     const script = get().openScripts.find((s) => s.id === scriptId);
     const cell = script?.cells.find((c) => c.id === cellId);
     if (!script || !cell) return;
@@ -1459,6 +1480,7 @@ export const useAppStore = create<AppState>((set, get) => {
         cell.id === selectedCellId ? { ...cell, sql: content } : cell
       ),
       isDirty: true,
+      pendingSaveRevision: script.pendingSaveRevision + 1,
     };
 
     set((state) => ({
@@ -1467,11 +1489,42 @@ export const useAppStore = create<AppState>((set, get) => {
       ),
     }));
 
-    invoke("update_script_content", {
-      connectionId: updatedScript.connectionId,
-      scriptId,
-      sheet: toSheetDocument(updatedScript),
-    }).catch((e) => console.error("Failed to save script:", e));
+    void queueScriptPersist(updatedScript);
+    scheduleScriptPersist(scriptId);
+  },
+
+  flushScriptNow: async (scriptId: string) => {
+    const timer = scriptSaveTimers.get(scriptId);
+    if (timer) {
+      clearTimeout(timer);
+      scriptSaveTimers.delete(scriptId);
+    }
+    try {
+      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const status = await invoke<ScriptSaveQueueStatus | undefined>("flush_script_updates", { scriptId });
+      const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+      recordPerfSample("script.flush_ms", endedAt - startedAt);
+      const safeStatus: ScriptSaveQueueStatus = status ?? {
+        scriptId,
+        pendingRevision: null,
+        lastFlushedRevision: 0,
+        hasPending: false,
+      };
+      set((state) => ({
+        openScripts: state.openScripts.map((s) =>
+          s.id === scriptId
+            ? {
+                ...s,
+                lastFlushedRevision: Math.max(s.lastFlushedRevision, safeStatus.lastFlushedRevision),
+                isDirty: safeStatus.lastFlushedRevision < s.pendingSaveRevision,
+              }
+            : s
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to flush script updates:", error);
+      get().showToast("error", `Autosave failed: ${error}`);
+    }
   },
 
   saveScript: async (scriptId: string) => {
@@ -1479,15 +1532,13 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!script) return;
 
     try {
-      await invoke("update_script_content", {
-        connectionId: script.connectionId,
-        scriptId,
-        sheet: toSheetDocument(script),
-      });
+      await get().flushScriptNow(scriptId);
 
       set((state) => ({
         openScripts: state.openScripts.map((s) =>
-          s.id === scriptId ? { ...s, isDirty: false } : s
+          s.id === scriptId
+            ? { ...s, isDirty: false, lastFlushedRevision: s.pendingSaveRevision }
+            : s
         ),
       }));
     } catch (error) {
@@ -1588,6 +1639,10 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   setActiveResultTab: (tabId: string) => {
+    const currentActive = get().activeEditorTab;
+    if (currentActive?.kind === "script") {
+      void get().flushScriptNow(currentActive.id);
+    }
     set({ activeEditorTab: { kind: "result", id: tabId } });
     get().saveOpenTabs();
   },
@@ -1618,6 +1673,9 @@ export const useAppStore = create<AppState>((set, get) => {
         nextResultTabs
       ),
     });
+    if (nextActiveEditorTab?.kind === "script") {
+      void get().flushScriptNow(nextActiveEditorTab.id);
+    }
     get().saveOpenTabs();
   },
 
@@ -2078,6 +2136,8 @@ export const useAppStore = create<AppState>((set, get) => {
               selectedCellId,
               connectionId: tab.connection_id,
               isDirty: false,
+              pendingSaveRevision: 0,
+              lastFlushedRevision: 0,
             });
             loadedOrder.push({ kind: "script", id: script.id });
           } catch {
@@ -2089,6 +2149,8 @@ export const useAppStore = create<AppState>((set, get) => {
               selectedCellId: fallbackCell.id,
               connectionId: tab.connection_id,
               isDirty: tab.is_dirty,
+              pendingSaveRevision: tab.is_dirty ? 1 : 0,
+              lastFlushedRevision: 0,
             });
             loadedOrder.push({ kind: "script", id: tab.id });
           }
