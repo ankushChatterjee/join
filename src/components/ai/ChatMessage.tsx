@@ -21,6 +21,7 @@ import { useAiStore } from "@/stores/aiStore";
 import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, PendingQuestion, StreamingPart } from "@/ai/types";
+import { addCodeInNewCell } from "./chatMessageActions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { QuestionCard } from "./QuestionCard";
@@ -191,15 +192,13 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   };
 
   const handleAddInNewCell = async () => {
-    if (!activeScriptId || activeEditorTab?.kind !== "script") {
-      showToast("info", "Open a script tab to add this query in a new cell.");
-      return;
-    }
-
-    const createdCellId = await addScriptCell(activeScriptId, code, true);
-    if (!createdCellId) {
-      showToast("error", "Failed to add a new cell.");
-    }
+    await addCodeInNewCell({
+      activeScriptId,
+      activeEditorTab,
+      code,
+      addScriptCell,
+      showToast,
+    });
   };
 
   return (
