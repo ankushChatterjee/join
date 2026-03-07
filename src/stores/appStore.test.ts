@@ -21,6 +21,7 @@ function resetStore() {
     queryHistory: [],
     previewSource: null,
     querySql: null,
+    lastQueryContext: null,
     openScripts: [],
     activeScriptId: null,
     openResultTabs: [],

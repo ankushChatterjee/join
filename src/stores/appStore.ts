@@ -42,6 +42,20 @@ interface OpenScript {
 type ActiveEditorTab = { kind: "script" | "result"; id: string } | null;
 type EditorTabRef = { kind: "script" | "result"; id: string };
 type SavedResultRecord = SavedResultMetadata & { query_result: QueryResult };
+type QueryContext = {
+  source: "script_cell" | "script" | "result_tab" | "preview";
+  connectionId: string;
+  connectionName: string;
+  sql: string;
+  scriptId?: string;
+  scriptName?: string;
+  cellId?: string;
+  cellIndex?: number;
+  resultTabId?: string;
+  resultTabName?: string;
+  previewSource?: string | null;
+  capturedAt: number;
+};
 
 interface AppState {
   // Connections
@@ -93,6 +107,7 @@ interface AppState {
   queryError: string | null;
   previewSource: string | null; // "schema.table" when previewing a table/view
   querySql: string | null; // SQL that produced current queryResults
+  lastQueryContext: QueryContext | null;
 
   // Query History
   queryHistory: QueryHistoryEntry[];
@@ -194,7 +209,12 @@ interface AppState {
 
   // Actions - Query
   executeQuery: (sql: string) => Promise<void>;
-  executeQueryDirect: (connectionId: string, sql: string, previewSource?: string) => Promise<void>;
+  executeQueryDirect: (
+    connectionId: string,
+    sql: string,
+    previewSource?: string,
+    queryContext?: Omit<QueryContext, "capturedAt">
+  ) => Promise<void>;
   clearResults: () => void;
   loadQueryHistory: () => Promise<void>;
   clearQueryHistory: () => void;
@@ -368,6 +388,7 @@ export const useAppStore = create<AppState>((set, get) => {
   queryError: null,
   previewSource: null,
   querySql: null,
+  lastQueryContext: null,
 
   // Query History
   queryHistory: [],
@@ -444,7 +465,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   connect: async (id: string) => {
     // Clear any previous errors and results when attempting to connect
-    set({ queryError: null, queryResults: null, querySql: null });
+    set({ queryError: null, queryResults: null, querySql: null, lastQueryContext: null });
 
     try {
       await invoke("connect", { connectionId: id });
@@ -1394,7 +1415,23 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ executingCell: { scriptId, cellId } });
 
     try {
-      await get().executeQueryDirect(script.connectionId, sql);
+      const connection = get().connections.find((c) => c.id === script.connectionId);
+      const cellIndex = script.cells.findIndex((c) => c.id === cellId);
+      await get().executeQueryDirect(
+        script.connectionId,
+        sql,
+        undefined,
+        {
+          source: "script_cell",
+          connectionId: script.connectionId,
+          connectionName: connection?.name ?? script.connectionId,
+          sql,
+          scriptId: script.id,
+          scriptName: script.name,
+          cellId,
+          cellIndex: cellIndex >= 0 ? cellIndex + 1 : undefined,
+        }
+      );
       const { queryError, queryResults } = get();
       const elapsedMs = Date.now() - runStartedAt;
 
@@ -1849,7 +1886,20 @@ export const useAppStore = create<AppState>((set, get) => {
     const connection = state.connections.find((c) => c.id === tab.connectionId);
     const now = Date.now();
 
-    set({ isExecuting: true, queryError: null });
+    set({
+      isExecuting: true,
+      queryError: null,
+      lastQueryContext: {
+        source: "result_tab",
+        connectionId: tab.connectionId,
+        connectionName: connection?.name ?? tab.connectionId,
+        sql,
+        resultTabId: tab.id,
+        resultTabName: tab.name,
+        previewSource: tab.previewSource,
+        capturedAt: Date.now(),
+      },
+    });
     try {
       const queryResult = await invoke<QueryResult>("execute_query", {
         connectionId: tab.connectionId,
@@ -2254,7 +2304,31 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
 
-    set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: null });
+    const selectedCell = activeScript?.selectedCellId
+      ? activeScript.cells.find((cell) => cell.id === activeScript.selectedCellId)
+      : null;
+    const selectedCellIndex =
+      selectedCell && activeScript
+        ? activeScript.cells.findIndex((cell) => cell.id === selectedCell.id) + 1
+        : undefined;
+
+    set({
+      isExecuting: true,
+      queryError: null,
+      selectedSchemaObject: null,
+      previewSource: null,
+      lastQueryContext: {
+        source: selectedCell ? "script_cell" : "script",
+        connectionId,
+        connectionName: connection.name,
+        sql,
+        scriptId: activeScript?.id,
+        scriptName: activeScript?.name,
+        cellId: selectedCell?.id,
+        cellIndex: selectedCellIndex && selectedCellIndex > 0 ? selectedCellIndex : undefined,
+        capturedAt: Date.now(),
+      },
+    });
     const startTime = Date.now();
 
     try {
@@ -2311,7 +2385,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   // Execute query directly with a specific connection (for table preview)
-  executeQueryDirect: async (connectionId: string, sql: string, previewSource?: string) => {
+  executeQueryDirect: async (
+    connectionId: string,
+    sql: string,
+    previewSource?: string,
+    queryContext?: Omit<QueryContext, "capturedAt">
+  ) => {
     const { connections } = get();
     const connection = connections.find((c) => c.id === connectionId);
 
@@ -2334,7 +2413,22 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
 
-    set({ isExecuting: true, queryError: null, selectedSchemaObject: null, previewSource: previewSource || null });
+    set({
+      isExecuting: true,
+      queryError: null,
+      selectedSchemaObject: null,
+      previewSource: previewSource || null,
+      lastQueryContext: queryContext
+        ? { ...queryContext, capturedAt: Date.now() }
+        : {
+            source: previewSource ? "preview" : "script",
+            connectionId,
+            connectionName: connection.name,
+            sql,
+            previewSource: previewSource || null,
+            capturedAt: Date.now(),
+          },
+    });
     const startTime = Date.now();
 
     try {
@@ -2390,7 +2484,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   clearResults: () => {
-    set({ queryResults: null, queryError: null, querySql: null });
+    set({ queryResults: null, queryError: null, querySql: null, lastQueryContext: null });
   },
 
   loadQueryHistory: async () => {

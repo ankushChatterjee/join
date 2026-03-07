@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { AlertCircle, Download, X, Tag, Braces, Loader2, Save, Expand, ChevronsDown } from "lucide-react";
+import { AlertCircle, Download, X, Tag, Braces, Loader2, Save, Expand, ChevronsDown, MessageSquare } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
+import { useAiStore } from "@/stores/aiStore";
 import type { TypeDetailInfo, FunctionDetailInfo } from "@/stores/types";
 import { useShallow } from "zustand/react/shallow";
 import { ResultsView } from "./ResultsView";
@@ -316,6 +317,11 @@ export function ResultsPanel() {
     isLoadingSchemaObjectDetails,
     clearSchemaObjectSelection,
     previewSource,
+    querySql,
+    lastQueryContext,
+    activeScriptId,
+    openScripts,
+    openResultTabs,
     popOutResultsToTab,
     saveCurrentResults,
     toggleResultsPanelMinimized,
@@ -332,6 +338,11 @@ export function ResultsPanel() {
       isLoadingSchemaObjectDetails: state.isLoadingSchemaObjectDetails,
       clearSchemaObjectSelection: state.clearSchemaObjectSelection,
       previewSource: state.previewSource,
+      querySql: state.querySql,
+      lastQueryContext: state.lastQueryContext,
+      activeScriptId: state.activeScriptId,
+      openScripts: state.openScripts,
+      openResultTabs: state.openResultTabs,
       popOutResultsToTab: state.popOutResultsToTab,
       saveCurrentResults: state.saveCurrentResults,
       toggleResultsPanelMinimized: state.toggleResultsPanelMinimized,
@@ -341,6 +352,65 @@ export function ResultsPanel() {
   // Get the active connection's database type
   const activeConnection = connections.find(c => c.id === activeConnectionId);
   const dbType = activeConnection?.db_type;
+
+  const handleFixInChat = async () => {
+    if (!queryError) return;
+
+    const aiState = useAiStore.getState();
+    if (aiState.isStreaming) {
+      showToast("info", "Agent is busy. Wait for the current response to finish.");
+      return;
+    }
+
+    const activeScript = openScripts.find((script) => script.id === activeScriptId);
+    const selectedCell = activeScript?.selectedCellId
+      ? activeScript.cells.find((cell) => cell.id === activeScript.selectedCellId)
+      : null;
+    const selectedCellIndex =
+      selectedCell && activeScript
+        ? activeScript.cells.findIndex((cell) => cell.id === selectedCell.id) + 1
+        : null;
+    const activeResultTab = openResultTabs.find((tab) => tab.id === lastQueryContext?.resultTabId);
+
+    const contextLines = [
+      `source: ${lastQueryContext?.source ?? "unknown"}`,
+      `connection: ${lastQueryContext?.connectionName ?? activeConnection?.name ?? "unknown"} (${lastQueryContext?.connectionId ?? activeConnectionId ?? "unknown"})`,
+      `script: ${lastQueryContext?.scriptName ?? activeScript?.name ?? "n/a"} (${lastQueryContext?.scriptId ?? activeScript?.id ?? "n/a"})`,
+      `cell: ${
+        lastQueryContext?.cellId
+          ? `#${lastQueryContext.cellIndex ?? "?"} (${lastQueryContext.cellId})`
+          : selectedCell
+            ? `#${selectedCellIndex ?? "?"} (${selectedCell.id})`
+            : "n/a"
+      }`,
+      `result tab: ${lastQueryContext?.resultTabName ?? activeResultTab?.name ?? "n/a"} (${lastQueryContext?.resultTabId ?? activeResultTab?.id ?? "n/a"})`,
+      `preview source: ${lastQueryContext?.previewSource ?? previewSource ?? "n/a"}`,
+    ];
+
+    const sql = lastQueryContext?.sql ?? querySql ?? selectedCell?.sql ?? "";
+    const message = [
+      "Fix this SQL error.",
+      "",
+      "Error:",
+      queryError,
+      "",
+      "Context:",
+      ...contextLines.map((line) => `- ${line}`),
+      "",
+      "SQL:",
+      "```sql",
+      sql || "-- SQL was not captured",
+      "```",
+      "",
+      "Please identify the root cause and provide a corrected query.",
+    ].join("\n");
+
+    if (!aiState.isPanelOpen) {
+      aiState.togglePanel();
+    }
+
+    await aiState.sendMessage(message);
+  };
 
   const handleExport = async () => {
     if (!queryResults || isExporting) return;
@@ -443,6 +513,18 @@ export function ResultsPanel() {
               <div className="mt-1 text-red-300 text-xs whitespace-pre-wrap">
                 {isConnectionError ? queryError.replace("Connection failed: ", "") : queryError}
               </div>
+              <button
+                onClick={() => {
+                  handleFixInChat().catch((err) => {
+                    showToast("error", `Failed to send error to chat: ${err}`);
+                  });
+                }}
+                className="mt-3 inline-flex items-center gap-1 rounded-sm border border-base-700 px-2 py-1 text-[11px] text-base-200 transition-colors-fast hover:bg-base-800 hover:border-base-600"
+                title="Send this error to chat for help fixing it"
+              >
+                <MessageSquare className="w-3 h-3" />
+                <span>Fix in chat</span>
+              </button>
             </div>
           </div>
         </div>
