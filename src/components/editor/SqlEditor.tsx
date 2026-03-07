@@ -1,18 +1,36 @@
 import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, PostgreSQL, MySQL, SQLite } from "@codemirror/lang-sql";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, Decoration } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
-import { Play, Loader2, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Play, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Search, ChevronUp, X } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import type { SqlSheetCell } from "@/stores/types";
-import { setEditorView } from "./editorUtils";
+import { getEditorView, setEditorView } from "./editorUtils";
 import { buildCompletionSchema } from "./completionSchema";
 import { cn } from "@/lib/utils";
 import { DiffViewer } from "./DiffViewer";
 import { useShallow } from "zustand/react/shallow";
+
+interface SearchHighlightRange {
+  from: number;
+  to: number;
+  isActive: boolean;
+}
+
+const searchHitDecoration = Decoration.mark({ class: "cm-sheet-search-hit" });
+const activeSearchHitDecoration = Decoration.mark({ class: "cm-sheet-search-hit-active" });
+
+function buildSearchDecorations(ranges: SearchHighlightRange[]) {
+  return Decoration.set(
+    ranges.map((range) =>
+      (range.isActive ? activeSearchHitDecoration : searchHitDecoration).range(range.from, range.to)
+    ),
+    true
+  );
+}
 
 // Custom dark theme for CodeMirror - warm retro palette with high contrast
 const customTheme = EditorView.theme(
@@ -34,10 +52,17 @@ const customTheme = EditorView.theme(
       marginLeft: "0",
     },
     ".cm-selectionBackground": {
-      backgroundColor: "rgba(244, 135, 52, 0.14) !important",
+      backgroundColor: "rgba(244, 135, 52, 0.34) !important",
     },
     "&.cm-focused .cm-selectionBackground": {
-      backgroundColor: "rgba(244, 135, 52, 0.2) !important",
+      backgroundColor: "rgba(244, 135, 52, 0.45) !important",
+    },
+    ".cm-sheet-search-hit": {
+      backgroundColor: "rgba(166, 121, 79, 0.22)",
+    },
+    ".cm-sheet-search-hit-active": {
+      backgroundColor: "rgba(244, 135, 52, 0.52) !important",
+      outline: "1px solid rgba(255, 171, 113, 0.95)",
     },
     ".cm-gutters": {
       backgroundColor: "#0a0c10",
@@ -135,6 +160,8 @@ interface SqlCellProps {
   onRun: () => void;
   onRemove: () => void;
   onToggleCollapse: () => void;
+  suppressAutoFocus?: boolean;
+  searchHighlightRanges?: SearchHighlightRange[];
 }
 
 function SqlCell({
@@ -151,15 +178,21 @@ function SqlCell({
   onRun,
   onRemove,
   onToggleCollapse,
+  suppressAutoFocus = false,
+  searchHighlightRanges = [],
 }: SqlCellProps) {
   const viewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
     if (isSelected && viewRef.current) {
+      // Keep global editor reference in sync with the selected cell even when
+      // search mode suppresses editor focus.
       setEditorView(viewRef.current, cell.id);
-      viewRef.current.focus();
+      if (!suppressAutoFocus) {
+        viewRef.current.focus();
+      }
     }
-  }, [isSelected, cell.id]);
+  }, [isSelected, cell.id, suppressAutoFocus]);
 
   const runQueryKeymap = useMemo(
     () =>
@@ -175,6 +208,10 @@ function SqlCell({
         ])
       ),
     [onRun]
+  );
+  const searchHighlightExtension = useMemo(
+    () => EditorView.decorations.of(buildSearchDecorations(searchHighlightRanges)),
+    [searchHighlightRanges]
   );
 
   const preview = useMemo(() => {
@@ -303,6 +340,7 @@ function SqlCell({
             EditorView.lineWrapping,
             syntaxHighlighting(sqlHighlightStyle),
             runQueryKeymap,
+            searchHighlightExtension,
           ]}
           theme={customTheme}
           basicSetup={{
@@ -318,7 +356,7 @@ function SqlCell({
             autocompletion: true,
             rectangularSelection: true,
             crosshairCursor: false,
-            highlightSelectionMatches: true,
+            highlightSelectionMatches: false,
             closeBracketsKeymap: true,
             searchKeymap: true,
             foldKeymap: true,
@@ -363,6 +401,11 @@ export function SqlEditor() {
     }))
   );
   const [collapsedCells, setCollapsedCells] = useState<Record<string, boolean>>({});
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
+  const [pendingMatch, setPendingMatch] = useState<{ cellId: string; from: number; to: number } | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeScript = useMemo(
     () => openScripts.find((s) => s.id === activeScriptId),
@@ -386,17 +429,150 @@ export function SqlEditor() {
     () => sql({ dialect, schema: completionSchema, upperCaseKeywords: true }),
     [dialect, completionSchema]
   );
+  const searchableCells = useMemo(
+    () => {
+      if (!isSearchOpen || !activeScript) return [];
+      return activeScript.cells.map((cell, cellIndex) => ({
+        cellId: cell.id,
+        cellIndex,
+        textLower: cell.sql.toLowerCase(),
+      }));
+    },
+    [activeScript, isSearchOpen]
+  );
+  const searchMatches = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query || searchableCells.length === 0) return [];
 
+    const matches: Array<{ cellId: string; cellIndex: number; from: number; to: number }> = [];
+    const maxMatches = 5000;
+
+    for (const cell of searchableCells) {
+      let fromIndex = 0;
+      while (fromIndex < cell.textLower.length) {
+        const matchFrom = cell.textLower.indexOf(query, fromIndex);
+        if (matchFrom === -1) break;
+
+        matches.push({
+          cellId: cell.cellId,
+          cellIndex: cell.cellIndex,
+          from: matchFrom,
+          to: matchFrom + query.length,
+        });
+
+        if (matches.length >= maxMatches) {
+          return matches;
+        }
+
+        fromIndex = matchFrom + query.length;
+      }
+    }
+
+    return matches;
+  }, [searchQuery, searchableCells]);
+  const searchHighlightRangesByCell = useMemo(() => {
+    const ranges: Record<string, SearchHighlightRange[]> = {};
+    for (let i = 0; i < searchMatches.length; i += 1) {
+      const match = searchMatches[i];
+      const list = ranges[match.cellId] ?? [];
+      list.push({
+        from: match.from,
+        to: match.to,
+        isActive: i === activeMatchIndex,
+      });
+      ranges[match.cellId] = list;
+    }
+    return ranges;
+  }, [searchMatches, activeMatchIndex]);
   useEffect(() => {
     if (!activeScript) {
       setEditorView(null, null);
     }
   }, [activeScript]);
 
+  useEffect(() => {
+    if (!isSearchOpen) return;
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    if (searchMatches.length === 0) {
+      setActiveMatchIndex(-1);
+      return;
+    }
+    setActiveMatchIndex((prev) => {
+      if (prev < 0) return -1;
+      return Math.min(prev, searchMatches.length - 1);
+    });
+  }, [searchMatches]);
+
+  useEffect(() => {
+    setActiveMatchIndex(-1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!pendingMatch || !activeScript) return;
+    if (activeScript.selectedCellId !== pendingMatch.cellId) return;
+
+    const view = getEditorView();
+    if (!view) return;
+
+    const maxLen = view.state.doc.length;
+    const from = Math.min(Math.max(pendingMatch.from, 0), maxLen);
+    const to = Math.min(Math.max(pendingMatch.to, from), maxLen);
+    view.dispatch({
+      selection: { anchor: from, head: to },
+      scrollIntoView: true,
+    });
+    searchInputRef.current?.focus();
+    setPendingMatch(null);
+  }, [activeScript, pendingMatch]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setIsSearchOpen(true);
+        return;
+      }
+
+      if (event.key === "Escape" && isSearchOpen) {
+        setIsSearchOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isSearchOpen]);
+
   const handleAddCell = useCallback(async () => {
     if (!activeScriptId) return;
     await addScriptCell(activeScriptId, "", true);
   }, [activeScriptId, addScriptCell]);
+
+  const jumpToMatch = useCallback(
+    (targetIndex: number) => {
+      if (!activeScript || searchMatches.length === 0) return;
+      const normalizedIndex = ((targetIndex % searchMatches.length) + searchMatches.length) % searchMatches.length;
+      const match = searchMatches[normalizedIndex];
+
+      setActiveMatchIndex(normalizedIndex);
+      setCollapsedCells((prev) => {
+        if (!prev[match.cellId]) return prev;
+        return { ...prev, [match.cellId]: false };
+      });
+
+      if (activeScript.selectedCellId !== match.cellId) {
+        setSelectedScriptCell(activeScript.id, match.cellId);
+      }
+      setPendingMatch({ cellId: match.cellId, from: match.from, to: match.to });
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
+    },
+    [activeScript, searchMatches, setSelectedScriptCell]
+  );
 
   const toggleCellCollapse = useCallback((cellId: string) => {
     setCollapsedCells((prev) => ({
@@ -414,46 +590,100 @@ export function SqlEditor() {
   }
 
   return (
-    <div className="h-full w-full p-1 space-y-1.5 panel-scroll scrollbar-stable">
-      {activeScript.cells.map((cell, index) => {
-        const isSelected = activeScript.selectedCellId === cell.id;
-        const isRunning =
-          executingCell?.scriptId === activeScript.id && executingCell?.cellId === cell.id;
-
-        return (
-          <SqlCell
-            key={cell.id}
-            scriptId={activeScript.id}
-            cell={cell}
-            index={index}
-            isSelected={isSelected}
-            isRunning={isRunning}
-            canRemove={activeScript.cells.length > 1}
-            isCollapsed={Boolean(collapsedCells[cell.id])}
-            sqlExtension={sqlExtension}
-            onSelect={() => {
-              setSelectedScriptCell(activeScript.id, cell.id);
-            }}
-            onChange={(value) => {
-              if (activeScript.selectedCellId !== cell.id) {
-                setSelectedScriptCell(activeScript.id, cell.id);
+    <div className="relative h-full w-full">
+      {isSearchOpen && (
+        <div className="pointer-events-none absolute top-2 right-2 z-20 w-full max-w-[380px]">
+          <div className="pointer-events-auto border border-base-700 bg-base-900/98 backdrop-blur-sm px-1.5 py-1 flex items-center gap-1.5 shadow-[0_0_0_1px_rgba(166,121,79,0.16)]">
+            <Search className="w-3.5 h-3.5 text-accent-300 shrink-0" />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  jumpToMatch((activeMatchIndex < 0 ? -1 : activeMatchIndex) + (e.shiftKey ? -1 : 1));
+                }
+              }}
+              placeholder="Find in SQL sheet"
+              className="min-w-0 flex-1 h-6 bg-base-850 border border-base-700 px-2 text-[12px] text-base-100 outline-none focus:border-accent-500/45"
+            />
+            <span className="text-[11px] text-base-300 tabular-nums min-w-[70px] text-right">
+              {searchMatches.length === 0 ? "0 / 0" : `${activeMatchIndex < 0 ? 0 : activeMatchIndex + 1} / ${searchMatches.length}`}
+            </span>
+            <button
+              onClick={() =>
+                jumpToMatch(activeMatchIndex < 0 ? searchMatches.length - 1 : activeMatchIndex - 1)
               }
-              updateScriptContent(activeScript.id, value);
-            }}
-            onRun={() => executeScriptCell(activeScript.id, cell.id)}
-            onRemove={() => removeScriptCell(activeScript.id, cell.id)}
-            onToggleCollapse={() => toggleCellCollapse(cell.id)}
-          />
-        );
-      })}
+              disabled={searchMatches.length === 0}
+              className="w-6 h-6 flex items-center justify-center text-base-200 hover:text-base-50 hover:bg-base-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors-fast"
+              title="Previous match (Shift+Enter)"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => jumpToMatch(activeMatchIndex < 0 ? 0 : activeMatchIndex + 1)}
+              disabled={searchMatches.length === 0}
+              className="w-6 h-6 flex items-center justify-center text-base-200 hover:text-base-50 hover:bg-base-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors-fast"
+              title="Next match (Enter)"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setIsSearchOpen(false)}
+              className="w-6 h-6 flex items-center justify-center text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+              title="Close search (Esc)"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
-      <button
-        onClick={handleAddCell}
-        className="group mx-auto flex w-fit h-7 px-2.5 rounded-sm border border-base-700 bg-base-900 hover:bg-base-850 text-base-200 transition-colors-fast items-center justify-center gap-1.5"
-      >
-        <Plus className="w-3 h-3 text-accent-300 group-hover:text-accent-200" />
-        <span className="text-[12px] font-medium tracking-[0.02em]">Add cell</span>
-      </button>
+      <div className="h-full w-full p-1 space-y-1.5 panel-scroll scrollbar-stable">
+        {activeScript.cells.map((cell, index) => {
+          const isSelected = activeScript.selectedCellId === cell.id;
+          const isRunning =
+            executingCell?.scriptId === activeScript.id && executingCell?.cellId === cell.id;
+
+          return (
+            <SqlCell
+              key={cell.id}
+              scriptId={activeScript.id}
+              cell={cell}
+              index={index}
+              isSelected={isSelected}
+              isRunning={isRunning}
+              canRemove={activeScript.cells.length > 1}
+              isCollapsed={Boolean(collapsedCells[cell.id])}
+              sqlExtension={sqlExtension}
+              onSelect={() => {
+                setSelectedScriptCell(activeScript.id, cell.id);
+              }}
+              onChange={(value) => {
+                if (activeScript.selectedCellId !== cell.id) {
+                  setSelectedScriptCell(activeScript.id, cell.id);
+                }
+                updateScriptContent(activeScript.id, value);
+              }}
+              onRun={() => executeScriptCell(activeScript.id, cell.id)}
+              onRemove={() => removeScriptCell(activeScript.id, cell.id)}
+              onToggleCollapse={() => toggleCellCollapse(cell.id)}
+              suppressAutoFocus={isSearchOpen}
+              searchHighlightRanges={searchHighlightRangesByCell[cell.id] ?? []}
+            />
+          );
+        })}
+
+        <button
+          onClick={handleAddCell}
+          className="group mx-auto flex w-fit h-7 px-2.5 rounded-sm border border-base-700 bg-base-900 hover:bg-base-850 text-base-200 transition-colors-fast items-center justify-center gap-1.5"
+        >
+          <Plus className="w-3 h-3 text-accent-300 group-hover:text-accent-200" />
+          <span className="text-[12px] font-medium tracking-[0.02em]">Add cell</span>
+        </button>
+      </div>
     </div>
   );
 }
