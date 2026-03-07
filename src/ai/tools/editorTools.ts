@@ -169,7 +169,7 @@ export const replaceEditorContentTool = tool({
 // through the experimental_context from the streamText call.
 export const addCellTool = tool({
   description:
-    "Add a new SQL cell to the active sheet. Use this when no cell is selected or when you want to create a new cell for a separate query. This requires user approval.",
+    "Add a new SQL cell to the active sheet. Use this when  you want to create a new cell for a separate query. This requires user approval. Be sure that the user wants this query before adding it.",
   inputSchema: z.object({
     sql: z
       .string()
