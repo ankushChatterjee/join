@@ -2,7 +2,7 @@
 // Chat Message Component
 // ============================================================================
 
-import { memo, useState, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -25,6 +25,9 @@ import { addCodeInNewCell } from "./chatMessageActions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { QuestionCard } from "./QuestionCard";
+
+const STREAM_SOFT_REVEAL_CPS = 360;
+const STREAM_SOFT_REVEAL_MAX_STEP = 64;
 
 // --- Markdown Renderer ---
 
@@ -377,6 +380,66 @@ interface ChatMessageProps {
   pendingQuestions?: PendingQuestion[];
 }
 
+function useSoftStreamingText(text: string, isStreaming: boolean): string {
+  const [visibleText, setVisibleText] = useState(text);
+  const rafIdRef = useRef<number | null>(null);
+  const lastTickRef = useRef(0);
+  const visibleLengthRef = useRef(text.length);
+
+  useEffect(() => {
+    visibleLengthRef.current = visibleText.length;
+  }, [visibleText]);
+
+  useEffect(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
+    if (!isStreaming) {
+      setVisibleText(text);
+      return;
+    }
+
+    if (text.length <= visibleLengthRef.current) {
+      setVisibleText(text);
+      return;
+    }
+
+    const tick = (ts: number) => {
+      const lastTick = lastTickRef.current || ts;
+      const elapsedMs = Math.max(0, ts - lastTick);
+      lastTickRef.current = ts;
+      setVisibleText((current) => {
+        if (current.length >= text.length) return current;
+        const remaining = text.length - current.length;
+        const timeBudgetStep = Math.max(1, Math.floor((STREAM_SOFT_REVEAL_CPS * elapsedMs) / 1000));
+        const step = Math.min(remaining, Math.max(8, Math.min(STREAM_SOFT_REVEAL_MAX_STEP, timeBudgetStep)));
+        const next = text.slice(0, current.length + step);
+        visibleLengthRef.current = next.length;
+        return next;
+      });
+      if (visibleLengthRef.current < text.length) {
+        rafIdRef.current = requestAnimationFrame(tick);
+      } else {
+        rafIdRef.current = null;
+      }
+    };
+
+    rafIdRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      lastTickRef.current = 0;
+    };
+  }, [text, isStreaming]);
+
+  return visibleText;
+}
+
 const ChatMessageComponentInner = ({
   message,
   isStreaming,
@@ -387,6 +450,20 @@ const ChatMessageComponentInner = ({
   pendingApprovals = [],
   pendingQuestions = [],
 }: ChatMessageProps) => {
+  const isAssistant = message.role === "assistant";
+  const liveContentRaw = isAssistant
+    ? (isStreaming ? streamingTextLive || "" : message.content)
+    : message.content;
+  const liveContent = useSoftStreamingText(liveContentRaw, Boolean(isStreaming && isAssistant));
+  const renderedContent = isAssistant && isStreaming ? streamingTextRendered || "" : message.content;
+  const streamingTail =
+    isAssistant &&
+    isStreaming &&
+    liveContent.startsWith(renderedContent) &&
+    liveContent.length > renderedContent.length
+      ? liveContent.slice(renderedContent.length)
+      : "";
+
   if (message.role === "user") {
     return (
       <div className="py-1.5">
@@ -400,8 +477,6 @@ const ChatMessageComponentInner = ({
   }
 
   // Assistant message
-  const liveContent = isStreaming ? streamingTextLive || "" : message.content;
-  const renderedContent = isStreaming ? streamingTextRendered || "" : message.content;
   const toolCalls = isStreaming
     ? streamingToolCalls || []
     : message.toolCalls || [];
@@ -435,13 +510,14 @@ const ChatMessageComponentInner = ({
             {!hasTextPart && (
               <>
                 {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
-                {isStreaming &&
-                  liveContent.startsWith(renderedContent) &&
-                  liveContent.length > renderedContent.length && (
-                    <p className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200">
-                      {liveContent.slice(renderedContent.length)}
-                    </p>
-                  )}
+                {streamingTail && (
+                  <p
+                    key={`stream-tail-inline-${streamingTail.length}`}
+                    className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
+                  >
+                    {streamingTail}
+                  </p>
+                )}
               </>
             )}
             {parts.map((part, i) => {
@@ -458,7 +534,12 @@ const ChatMessageComponentInner = ({
                   j++;
                 }
                 return (
-                  <MarkdownContent key={`text-${part.index}`} content={textContent} />
+                  <div
+                    key={isStreaming ? `text-${part.index}-${textContent.length}` : `text-${part.index}`}
+                    className={isStreaming ? "animate-streaming-tail-in" : undefined}
+                  >
+                    <MarkdownContent content={textContent} />
+                  </div>
                 );
               } else {
                 // Tool call - skip if it has a pending approval
@@ -507,9 +588,12 @@ const ChatMessageComponentInner = ({
 
             {/* Message content */}
             {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
-            {isStreaming && liveContent.startsWith(renderedContent) && liveContent.length > renderedContent.length && (
-              <p className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200">
-                {liveContent.slice(renderedContent.length)}
+            {streamingTail && (
+              <p
+                key={`stream-tail-legacy-${streamingTail.length}`}
+                className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
+              >
+                {streamingTail}
               </p>
             )}
 
