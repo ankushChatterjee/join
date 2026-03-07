@@ -97,6 +97,27 @@ fn get_chat_session_path(session_id: &str) -> Result<PathBuf, ConfigError> {
     safe_join(&get_chats_dir(), &format!("{session_id}.json"))
 }
 
+fn get_chat_index_path() -> PathBuf {
+    get_chats_dir().join("index.json")
+}
+
+fn load_chat_index() -> Result<Vec<ChatSessionMeta>, ConfigError> {
+    let index_path = get_chat_index_path();
+    if !index_path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(index_path)?;
+    let metas: Vec<ChatSessionMeta> = serde_json::from_str(&content)?;
+    Ok(metas)
+}
+
+fn save_chat_index(metas: &[ChatSessionMeta]) -> Result<(), ConfigError> {
+    let index_path = get_chat_index_path();
+    let content = serde_json::to_string(metas)?;
+    fs::write(index_path, content)?;
+    Ok(())
+}
+
 /// List all chat sessions (metadata only)
 pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
     let chats_dir = get_chats_dir();
@@ -105,7 +126,20 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
         return Ok(Vec::new());
     }
 
-    let mut sessions = Vec::new();
+    let mut sessions = load_chat_index()?;
+
+    if !sessions.is_empty() {
+        sessions.retain(|meta| {
+            get_chat_session_path(&meta.id)
+                .map(|path| path.exists())
+                .unwrap_or(false)
+        });
+        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        save_chat_index(&sessions)?;
+        return Ok(sessions);
+    }
+
+    sessions = Vec::new();
 
     for entry in fs::read_dir(&chats_dir)? {
         let entry = entry?;
@@ -135,6 +169,7 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
 
     // Sort by updated_at descending (most recent first)
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    save_chat_index(&sessions)?;
 
     Ok(sessions)
 }
@@ -163,6 +198,21 @@ pub fn save_chat_session(session: &ChatSession) -> Result<(), ConfigError> {
     let content = serde_json::to_string_pretty(session)?;
     fs::write(&path, content)?;
 
+    let mut metas = load_chat_index().unwrap_or_default();
+    let next_meta = ChatSessionMeta {
+        id: session.id.clone(),
+        title: session.title.clone(),
+        model_id: session.model_id.clone(),
+        connection_id: session.connection_id.clone(),
+        forked_from: session.forked_from.clone(),
+        created_at: session.created_at,
+        updated_at: session.updated_at,
+    };
+    metas.retain(|m| m.id != session.id);
+    metas.push(next_meta);
+    metas.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    save_chat_index(&metas)?;
+
     Ok(())
 }
 
@@ -173,6 +223,10 @@ pub fn delete_chat_session(session_id: &str) -> Result<(), ConfigError> {
     if path.exists() {
         fs::remove_file(&path)?;
     }
+
+    let mut metas = load_chat_index().unwrap_or_default();
+    metas.retain(|m| m.id != session_id);
+    save_chat_index(&metas)?;
 
     Ok(())
 }

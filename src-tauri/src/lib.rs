@@ -398,6 +398,27 @@ fn update_script_content(
 }
 
 #[tauri::command]
+fn queue_script_update(
+    connection_id: String,
+    script_id: String,
+    sheet: storage::SqlSheetDocument,
+    revision: i64,
+) -> Result<storage::ScriptSaveQueueStatus, String> {
+    storage::scripts::queue_script_update(&connection_id, &script_id, &sheet, revision)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn flush_script_updates(script_id: String) -> Result<storage::ScriptSaveQueueStatus, String> {
+    storage::scripts::flush_script_updates(&script_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_script_update_status(script_id: String) -> Result<storage::ScriptSaveQueueStatus, String> {
+    storage::scripts::get_script_update_status(&script_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn rename_script(connection_id: String, script_id: String, new_name: String) -> Result<storage::ScriptMetadata, String> {
     storage::scripts::rename_script(&connection_id, &script_id, &new_name).map_err(|e| e.to_string())
 }
@@ -602,6 +623,9 @@ pub fn run() {
             create_script,
             get_script,
             update_script_content,
+            queue_script_update,
+            flush_script_updates,
+            get_script_update_status,
             rename_script,
             delete_script,
             // Query History

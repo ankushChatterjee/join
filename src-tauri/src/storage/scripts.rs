@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
 use super::ConfigError;
 use super::path_safety::{safe_join, validate_id};
@@ -52,6 +55,26 @@ pub struct Script {
     #[serde(flatten)]
     pub sheet: SqlSheetDocument,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptSaveQueueStatus {
+    pub script_id: String,
+    pub pending_revision: Option<i64>,
+    pub last_flushed_revision: i64,
+    pub has_pending: bool,
+}
+
+#[derive(Debug, Clone)]
+struct PendingScriptUpdate {
+    connection_id: String,
+    script_id: String,
+    revision: i64,
+    sheet: SqlSheetDocument,
+}
+
+static SCRIPT_SAVE_QUEUE: Lazy<Mutex<HashMap<String, PendingScriptUpdate>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Get the base directory for all scripts
 fn get_scripts_base_dir() -> PathBuf {
@@ -188,7 +211,7 @@ fn save_script_sheet(
 ) -> Result<(), ConfigError> {
     let sheet_path = get_script_sheet_path(connection_id, script_id)?;
     let normalized = normalize_sheet(sheet.clone());
-    let content = serde_json::to_string_pretty(&normalized)?;
+    let content = serde_json::to_string(&normalized)?;
     fs::write(sheet_path, content)?;
     Ok(())
 }
@@ -274,6 +297,103 @@ pub fn update_script_content(
     save_script_metadata(&metadata)?;
 
     Ok(())
+}
+
+pub fn queue_script_update(
+    connection_id: &str,
+    script_id: &str,
+    sheet: &SqlSheetDocument,
+    revision: i64,
+) -> Result<ScriptSaveQueueStatus, ConfigError> {
+    validate_id(connection_id)?;
+    validate_id(script_id)?;
+    let key = format!("{connection_id}:{script_id}");
+    let mut queue = SCRIPT_SAVE_QUEUE
+        .lock()
+        .map_err(|_| ConfigError::ValidationError("script save queue lock poisoned".to_string()))?;
+
+    let last_flushed_revision = queue
+        .get(&key)
+        .map(|u| u.revision)
+        .unwrap_or(0);
+    queue.insert(
+        key,
+        PendingScriptUpdate {
+            connection_id: connection_id.to_string(),
+            script_id: script_id.to_string(),
+            revision,
+            sheet: normalize_sheet(sheet.clone()),
+        },
+    );
+
+    Ok(ScriptSaveQueueStatus {
+        script_id: script_id.to_string(),
+        pending_revision: Some(revision),
+        last_flushed_revision,
+        has_pending: true,
+    })
+}
+
+pub fn flush_script_updates(script_id: &str) -> Result<ScriptSaveQueueStatus, ConfigError> {
+    validate_id(script_id)?;
+    let mut queue = SCRIPT_SAVE_QUEUE
+        .lock()
+        .map_err(|_| ConfigError::ValidationError("script save queue lock poisoned".to_string()))?;
+    let key = queue
+        .keys()
+        .find(|k| k.rsplit(':').next() == Some(script_id))
+        .cloned();
+
+    let Some(queue_key) = key else {
+        return Ok(ScriptSaveQueueStatus {
+            script_id: script_id.to_string(),
+            pending_revision: None,
+            last_flushed_revision: 0,
+            has_pending: false,
+        });
+    };
+    let pending = queue.remove(&queue_key);
+    drop(queue);
+
+    let Some(update) = pending else {
+        return Ok(ScriptSaveQueueStatus {
+            script_id: script_id.to_string(),
+            pending_revision: None,
+            last_flushed_revision: 0,
+            has_pending: false,
+        });
+    };
+
+    update_script_content(
+        &update.connection_id,
+        &update.script_id,
+        &update.sheet,
+    )?;
+
+    Ok(ScriptSaveQueueStatus {
+        script_id: update.script_id,
+        pending_revision: None,
+        last_flushed_revision: update.revision,
+        has_pending: false,
+    })
+}
+
+pub fn get_script_update_status(script_id: &str) -> Result<ScriptSaveQueueStatus, ConfigError> {
+    validate_id(script_id)?;
+    let queue = SCRIPT_SAVE_QUEUE
+        .lock()
+        .map_err(|_| ConfigError::ValidationError("script save queue lock poisoned".to_string()))?;
+    let maybe_pending = queue
+        .iter()
+        .find(|(k, _)| k.rsplit(':').next() == Some(script_id))
+        .map(|(_, v)| v.revision);
+
+    Ok(ScriptSaveQueueStatus {
+        script_id: script_id.to_string(),
+        pending_revision: maybe_pending,
+        last_flushed_revision: 0,
+        has_pending: maybe_pending.is_some(),
+    })
 }
 
 /// Rename a script
@@ -379,5 +499,46 @@ mod tests {
         assert!(get_script_sheet_path("conn-legacy", &script.metadata.id)
             .expect("sheet path")
             .exists());
+    }
+
+    #[test]
+    fn queue_coalesces_and_flushes_latest_revision() {
+        let _lock = crate::storage::config::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = setup_temp_config();
+        let script = create_script("conn-q", "Queue Script").expect("create script");
+
+        let first_sheet = SqlSheetDocument {
+            version: SHEET_FORMAT_VERSION,
+            selected_cell_id: Some("cell-1".into()),
+            cells: vec![SqlSheetCell {
+                id: "cell-1".into(),
+                sql: "SELECT 1".into(),
+                last_run_at: None,
+                last_run_duration_ms: None,
+                last_run_successful: None,
+                proposed_sql: None,
+            }],
+        };
+        let second_sheet = SqlSheetDocument {
+            version: SHEET_FORMAT_VERSION,
+            selected_cell_id: Some("cell-1".into()),
+            cells: vec![SqlSheetCell {
+                id: "cell-1".into(),
+                sql: "SELECT 2".into(),
+                last_run_at: None,
+                last_run_duration_ms: None,
+                last_run_successful: None,
+                proposed_sql: None,
+            }],
+        };
+
+        queue_script_update("conn-q", &script.metadata.id, &first_sheet, 1).expect("queue first");
+        queue_script_update("conn-q", &script.metadata.id, &second_sheet, 2).expect("queue second");
+        let status = flush_script_updates(&script.metadata.id).expect("flush");
+        assert_eq!(status.last_flushed_revision, 2);
+        let loaded = get_script("conn-q", &script.metadata.id).expect("load");
+        assert_eq!(loaded.sheet.cells[0].sql, "SELECT 2");
     }
 }

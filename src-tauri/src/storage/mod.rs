@@ -11,5 +11,5 @@ pub use config::*;
 pub use credentials::*;
 pub use history::{QueryHistory, QueryHistoryEntry};
 pub use saved_results::{SaveSavedResultRequest, SavedResult, SavedResultMetadata};
-pub use scripts::{Script, ScriptMetadata, SqlSheetDocument};
+pub use scripts::{Script, ScriptMetadata, ScriptSaveQueueStatus, SqlSheetDocument};
 pub use tabs::TabsState;
