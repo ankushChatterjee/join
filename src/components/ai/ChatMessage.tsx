@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { sanitizeExternalUrl } from "@/lib/urlSafety";
 import { useAiStore } from "@/stores/aiStore";
+import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, PendingQuestion, StreamingPart } from "@/ai/types";
 import ReactMarkdown from "react-markdown";
@@ -171,6 +172,10 @@ function MarkdownContent({
 
 function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
+  const activeEditorTab = useAppStore((state) => state.activeEditorTab);
+  const activeScriptId = useAppStore((state) => state.activeScriptId);
+  const addScriptCell = useAppStore((state) => state.addScriptCell);
+  const showToast = useAppStore((state) => state.showToast);
   const isSql =
     language.toLowerCase() === "sql" ||
     (!language && code.match(/select|insert|update|delete|create|alter|drop/i));
@@ -185,6 +190,18 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
     insertTextAtCursor(code);
   };
 
+  const handleAddInNewCell = async () => {
+    if (!activeScriptId || activeEditorTab?.kind !== "script") {
+      showToast("info", "Open a script tab to add this query in a new cell.");
+      return;
+    }
+
+    const createdCellId = await addScriptCell(activeScriptId, code, true);
+    if (!createdCellId) {
+      showToast("error", "Failed to add a new cell.");
+    }
+  };
+
   return (
     <div className="my-2 overflow-hidden rounded-sm border border-base-700 bg-base-900">
       <div className="flex items-center justify-between border-b border-base-700 bg-base-850 px-2.5 py-1">
@@ -193,14 +210,24 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
         </span>
         <div className="flex items-center gap-1">
           {isSql && (
-            <button
-              onClick={handleInsert}
-              className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
-              title="Insert to editor"
-            >
-              <ArrowDownToLine className="w-3 h-3" />
-              Insert
-            </button>
+            <>
+              <button
+                onClick={handleAddInNewCell}
+                className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
+                title="Add in a new cell"
+              >
+                <ArrowDownToLine className="w-3 h-3" />
+                Add in a new cell
+              </button>
+              <button
+                onClick={handleInsert}
+                className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
+                title="Insert to editor"
+              >
+                <ArrowDownToLine className="w-3 h-3" />
+                Insert
+              </button>
+            </>
           )}
           <button
             onClick={handleCopy}
