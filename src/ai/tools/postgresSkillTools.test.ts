@@ -5,7 +5,7 @@
 // Verifies get_postgres_best_practice tool behavior for different dialects
 // and rule_id inputs.
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { getPostgresBestPractice } from "./postgresSkillTools";
 import { listRuleIds } from "@/ai/skills/postgresBestPractices";
 

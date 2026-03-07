@@ -1,12 +1,12 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockGetFullEditorContent = mock(() => "");
-const mockGetSelectedText = mock(() => null);
-const mockGetCursorPosition = mock(() => null);
-const mockGetEditorView = mock(() => null);
-const mockInsertTextAtCursor = mock(() => {});
+const mockGetFullEditorContent = vi.fn(() => "");
+const mockGetSelectedText = vi.fn(() => null);
+const mockGetCursorPosition = vi.fn(() => null);
+const mockGetEditorView = vi.fn(() => null);
+const mockInsertTextAtCursor = vi.fn(() => {});
 
-mock.module("@/components/editor/editorUtils", () => ({
+vi.mock("@/components/editor/editorUtils", () => ({
   getFullEditorContent: () => mockGetFullEditorContent(),
   getSelectedText: () => mockGetSelectedText(),
   getCursorPosition: () => mockGetCursorPosition(),
@@ -129,7 +129,7 @@ describe("editor tools", () => {
     });
 
     it("appends sql to selected cell when editor view is not available", async () => {
-      const updateScriptContent = mock(() => {});
+      const updateScriptContent = vi.fn(() => {});
       useAppStore.setState({
         openScripts: [baseScript()],
         updateScriptContent: updateScriptContent as any,
@@ -142,7 +142,7 @@ describe("editor tools", () => {
     });
 
     it("appends sql to result tab when result tab is active", async () => {
-      const updateResultTabSql = mock(() => {});
+      const updateResultTabSql = vi.fn(() => {});
       useAppStore.setState({
         activeEditorTab: { kind: "result", id: "result-1" },
         openResultTabs: [
@@ -202,7 +202,7 @@ describe("editor tools", () => {
     });
 
     it("proposes changes to script cell", async () => {
-      const updateScriptCellProposal = mock(() => {});
+      const updateScriptCellProposal = vi.fn(() => {});
       useAppStore.setState({
         updateScriptCellProposal: updateScriptCellProposal as any,
       });
@@ -221,7 +221,7 @@ describe("editor tools", () => {
     });
 
     it("proposes changes to result tab", async () => {
-      const updateResultTabProposal = mock(() => {});
+      const updateResultTabProposal = vi.fn(() => {});
       useAppStore.setState({
         activeEditorTab: { kind: "result", id: "result-1" },
         openResultTabs: [
@@ -311,7 +311,7 @@ describe("editor tools", () => {
     });
 
     it("adds cell when approved and addScriptCell succeeds", async () => {
-      const addScriptCell = mock(() => Promise.resolve("cell-2"));
+      const addScriptCell = vi.fn(() => Promise.resolve("cell-2"));
       useAppStore.setState({
         addScriptCell: addScriptCell as any,
       });

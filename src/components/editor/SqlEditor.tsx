@@ -10,15 +10,16 @@ import { useAppStore } from "@/stores/appStore";
 import type { SqlSheetCell } from "@/stores/types";
 import { getEditorView, setEditorView } from "./editorUtils";
 import { buildCompletionSchema } from "./completionSchema";
+import {
+  buildHighlightRangesByCell,
+  buildSearchableCells,
+  findSheetMatches,
+  normalizeMatchIndex,
+  type SearchHighlightRange,
+} from "./sqlSearch";
 import { cn } from "@/lib/utils";
 import { DiffViewer } from "./DiffViewer";
 import { useShallow } from "zustand/react/shallow";
-
-interface SearchHighlightRange {
-  from: number;
-  to: number;
-  isActive: boolean;
-}
 
 const searchHitDecoration = Decoration.mark({ class: "cm-sheet-search-hit" });
 const activeSearchHitDecoration = Decoration.mark({ class: "cm-sheet-search-hit-active" });
@@ -430,60 +431,14 @@ export function SqlEditor() {
     [dialect, completionSchema]
   );
   const searchableCells = useMemo(
-    () => {
-      if (!isSearchOpen || !activeScript) return [];
-      return activeScript.cells.map((cell, cellIndex) => ({
-        cellId: cell.id,
-        cellIndex,
-        textLower: cell.sql.toLowerCase(),
-      }));
-    },
-    [activeScript, isSearchOpen]
+    () => buildSearchableCells(activeScript?.cells, isSearchOpen),
+    [activeScript?.cells, isSearchOpen]
   );
-  const searchMatches = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query || searchableCells.length === 0) return [];
-
-    const matches: Array<{ cellId: string; cellIndex: number; from: number; to: number }> = [];
-    const maxMatches = 5000;
-
-    for (const cell of searchableCells) {
-      let fromIndex = 0;
-      while (fromIndex < cell.textLower.length) {
-        const matchFrom = cell.textLower.indexOf(query, fromIndex);
-        if (matchFrom === -1) break;
-
-        matches.push({
-          cellId: cell.cellId,
-          cellIndex: cell.cellIndex,
-          from: matchFrom,
-          to: matchFrom + query.length,
-        });
-
-        if (matches.length >= maxMatches) {
-          return matches;
-        }
-
-        fromIndex = matchFrom + query.length;
-      }
-    }
-
-    return matches;
-  }, [searchQuery, searchableCells]);
-  const searchHighlightRangesByCell = useMemo(() => {
-    const ranges: Record<string, SearchHighlightRange[]> = {};
-    for (let i = 0; i < searchMatches.length; i += 1) {
-      const match = searchMatches[i];
-      const list = ranges[match.cellId] ?? [];
-      list.push({
-        from: match.from,
-        to: match.to,
-        isActive: i === activeMatchIndex,
-      });
-      ranges[match.cellId] = list;
-    }
-    return ranges;
-  }, [searchMatches, activeMatchIndex]);
+  const searchMatches = useMemo(() => findSheetMatches(searchableCells, searchQuery, 5000), [searchableCells, searchQuery]);
+  const searchHighlightRangesByCell = useMemo(
+    () => buildHighlightRangesByCell(searchMatches, activeMatchIndex),
+    [searchMatches, activeMatchIndex]
+  );
   useEffect(() => {
     if (!activeScript) {
       setEditorView(null, null);
@@ -554,7 +509,8 @@ export function SqlEditor() {
   const jumpToMatch = useCallback(
     (targetIndex: number) => {
       if (!activeScript || searchMatches.length === 0) return;
-      const normalizedIndex = ((targetIndex % searchMatches.length) + searchMatches.length) % searchMatches.length;
+      const normalizedIndex = normalizeMatchIndex(targetIndex, searchMatches.length);
+      if (normalizedIndex < 0) return;
       const match = searchMatches[normalizedIndex];
 
       setActiveMatchIndex(normalizedIndex);

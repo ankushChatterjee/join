@@ -5,7 +5,7 @@
 // Verifies that all markdown rules load correctly and the skill module
 // functions (getRule, getCatalog, listRuleIds, getRulesByCategory) work as expected.
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
   getRule,
   getCatalog,

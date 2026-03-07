@@ -1,7 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const invokeMock: any = mock((..._args: any[]) => undefined);
-mock.module("@tauri-apps/api/core", () => ({
+const invokeMock: any = vi.fn((..._args: any[]) => undefined);
+vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 

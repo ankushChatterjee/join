@@ -5,7 +5,7 @@
 // Verifies that every tool in allTools has valid structure (description,
 // inputSchema, execute) and that input schemas accept valid inputs.
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { allTools } from "./index";
 
 const TOOL_NAMES = Object.keys(allTools) as (keyof typeof allTools)[];

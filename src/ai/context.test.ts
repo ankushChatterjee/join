@@ -5,7 +5,7 @@
 // Verifies buildSystemPrompt behavior, especially Postgres Best Practices
 // catalog injection based on dialect.
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useAppStore } from "@/stores/appStore";
 import { buildSystemPrompt } from "./context";
 import { getCatalog } from "./skills/postgresBestPractices";

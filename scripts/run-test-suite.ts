@@ -318,11 +318,12 @@ function addResult(result: SuiteResult) {
 
 function runQuickSuites() {
   const frontend = runCommand("frontend", [
-    "bun",
-    "test",
+    "bunx",
+    "vitest",
+    "run",
     "src",
     "--reporter=junit",
-    "--reporter-outfile",
+    "--outputFile",
     join(junitDir, "frontend.xml"),
   ]);
   frontend.junitPath = join(junitDir, "frontend.xml");
