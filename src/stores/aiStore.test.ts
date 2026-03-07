@@ -1,8 +1,25 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock: any = vi.fn((..._args: any[]) => undefined);
+const runAgentMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+vi.mock("@/ai/agent", () => ({
+  runAgent: (...args: unknown[]) => runAgentMock(...args),
+}));
+vi.mock("@/ai/contextResolver", () => ({
+  resolveAgentTarget: () => ({
+    connectionId: null,
+    dialect: null,
+    activeEditorKind: "script",
+    activeScriptId: null,
+    activeResultTabId: null,
+    savedResultId: null,
+    resultVersion: null,
+    stale: false,
+    blockingReason: null,
+  }),
 }));
 
 let useAiStore: (typeof import("./aiStore"))["useAiStore"];
@@ -19,7 +36,8 @@ function resetStore() {
     activeSessionId: null,
     activeSession: null,
     isStreaming: false,
-    streamingText: "",
+    streamingTextLive: "",
+    streamingTextRendered: "",
     streamingToolCalls: [],
     streamingParts: [],
     abortController: null,
@@ -34,6 +52,7 @@ function resetStore() {
 describe("aiStore session management", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    runAgentMock.mockReset();
     resetStore();
   });
 
@@ -316,6 +335,66 @@ describe("aiStore session management", () => {
         index: 1,
       });
     });
+  });
+});
+
+describe("aiStore streaming regressions", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    runAgentMock.mockReset();
+    resetStore();
+  });
+
+  it("preserves inline text/tool ordering in final assistant message", async () => {
+    const now = Date.now();
+    useAiStore.setState({
+      activeSessionId: "s1",
+      activeSession: {
+        id: "s1",
+        title: "Test",
+        modelId: "claude-sonnet-4-5-20250929",
+        connectionId: null,
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+      },
+      calculateTokenUsage: async () => {},
+      saveActiveSession: async () => {},
+    });
+
+    runAgentMock.mockImplementation(
+      async (
+        _modelId: string,
+        _history: unknown[],
+        _text: string,
+        _ctx: unknown,
+        callbacks: any
+      ) => {
+        callbacks.onToken("Before tool ");
+        callbacks.onToolCallStart({
+          id: "tool-1",
+          name: "run_query",
+          input: { sql: "select 1" },
+        });
+        callbacks.onToken("after tool");
+        callbacks.onToolCallEnd("tool-1", "ok", false);
+        callbacks.onComplete({
+          id: "assistant-1",
+          role: "assistant",
+          content: "Before tool after tool",
+          timestamp: Date.now(),
+        });
+      }
+    );
+
+    await useAiStore.getState().sendMessage("hello");
+    const messages = useAiStore.getState().activeSession?.messages ?? [];
+    const assistant = messages[messages.length - 1];
+    expect(assistant.role).toBe("assistant");
+    expect(assistant.parts?.map((p: any) => p.type)).toEqual(["text", "tool", "text"]);
+    expect(assistant.parts?.[0]).toMatchObject({ type: "text", text: "Before tool " });
+    expect((assistant.parts?.[1] as any).toolCall.id).toBe("tool-1");
+    expect(assistant.parts?.[2]).toMatchObject({ type: "text", text: "after tool" });
   });
 });
 

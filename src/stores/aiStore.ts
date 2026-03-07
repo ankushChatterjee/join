@@ -20,8 +20,11 @@ import { compactConversation } from "@/ai/compaction";
 import type { AgentExecutionContext } from "@/ai/executionContext";
 import { resolveAgentTarget } from "@/ai/contextResolver";
 import { useAppStore } from "@/stores/appStore";
+import { recordPerfSample } from "@/lib/perf";
 
 const STREAM_TEXT_FLUSH_MS = 40;
+const STREAM_MARKDOWN_MIN_COMMIT_MS = 300;
+const STREAM_MARKDOWN_MAX_COMMIT_MS = 800;
 
 const debugLog = async (message: string) => {
   try {
@@ -85,7 +88,8 @@ interface AiState {
 
   // Streaming state
   isStreaming: boolean;
-  streamingText: string;
+  streamingTextLive: string;
+  streamingTextRendered: string;
   streamingToolCalls: ToolCallDisplay[];
   streamingParts: StreamingPart[];
   abortController: AbortController | null;
@@ -131,19 +135,82 @@ interface AiState {
 export const useAiStore = create<AiState>((set, get) => {
   let pendingStreamingText = "";
   let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let markdownCommitTimer: ReturnType<typeof setTimeout> | null = null;
   let nextPartIndex = 0;
+  let lastMarkdownCommitAt = 0;
+  let pendingTokenReceivedAt = 0;
+
+  const getAdaptiveMarkdownCommitMs = (length: number): number => {
+    if (length < 1200) return STREAM_MARKDOWN_MIN_COMMIT_MS;
+    if (length < 4000) return 500;
+    return STREAM_MARKDOWN_MAX_COMMIT_MS;
+  };
+
+  const commitRenderedStreamingText = (force = false) => {
+    const state = get();
+    if (!state.isStreaming) return;
+    const now = Date.now();
+    const interval = getAdaptiveMarkdownCommitMs(state.streamingTextLive.length);
+    if (!force && now - lastMarkdownCommitAt < interval) return;
+    if (state.streamingTextRendered === state.streamingTextLive) return;
+    lastMarkdownCommitAt = now;
+    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    set({ streamingTextRendered: state.streamingTextLive });
+    const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    recordPerfSample("chat.markdown_commit_ms", endedAt - startedAt);
+  };
+
+  const scheduleMarkdownCommit = () => {
+    if (markdownCommitTimer) return;
+    const wait = getAdaptiveMarkdownCommitMs(get().streamingTextLive.length);
+    markdownCommitTimer = setTimeout(() => {
+      markdownCommitTimer = null;
+      commitRenderedStreamingText(false);
+      if (get().isStreaming && get().streamingTextRendered !== get().streamingTextLive) {
+        scheduleMarkdownCommit();
+      }
+    }, wait);
+  };
 
   const flushPendingStreamingText = () => {
     if (!pendingStreamingText) return;
     const chunk = pendingStreamingText;
-    const index = nextPartIndex++;
     pendingStreamingText = "";
     const state = get();
     if (!state.isStreaming) return;
-    set({ 
-      streamingText: state.streamingText + chunk,
-      streamingParts: [...state.streamingParts, { type: "text", text: chunk, index }],
+    if (pendingTokenReceivedAt > 0) {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      recordPerfSample("chat.token_to_paint_ms", now - pendingTokenReceivedAt);
+      pendingTokenReceivedAt = 0;
+    }
+    const nextLive = state.streamingTextLive + chunk;
+    const textPartIndex = nextPartIndex;
+    set((current) => {
+      const parts = current.streamingParts;
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.type === "text") {
+        const merged = { ...lastPart, text: lastPart.text + chunk };
+        return {
+          streamingTextLive: nextLive,
+          streamingParts: [...parts.slice(0, -1), merged],
+        };
+      }
+      nextPartIndex += 1;
+      return {
+        streamingTextLive: nextLive,
+        streamingParts: [...parts, { type: "text", text: chunk, index: textPartIndex }],
+      };
     });
+    const isBoundaryChunk =
+      chunk.includes("```") ||
+      chunk.endsWith("\n\n") ||
+      /\n[-*]\s$/.test(nextLive) ||
+      /\n\d+\.\s$/.test(nextLive);
+    if (isBoundaryChunk) {
+      commitRenderedStreamingText(true);
+    } else {
+      scheduleMarkdownCommit();
+    }
   };
 
   const scheduleStreamingFlush = () => {
@@ -157,9 +224,15 @@ export const useAiStore = create<AiState>((set, get) => {
   const resetStreamingBuffer = () => {
     pendingStreamingText = "";
     nextPartIndex = 0;
+    lastMarkdownCommitAt = 0;
+    pendingTokenReceivedAt = 0;
     if (streamFlushTimer) {
       clearTimeout(streamFlushTimer);
       streamFlushTimer = null;
+    }
+    if (markdownCommitTimer) {
+      clearTimeout(markdownCommitTimer);
+      markdownCommitTimer = null;
     }
   };
 
@@ -171,7 +244,8 @@ export const useAiStore = create<AiState>((set, get) => {
   activeSessionId: null,
   activeSession: null,
   isStreaming: false,
-  streamingText: "",
+  streamingTextLive: "",
+  streamingTextRendered: "",
   streamingToolCalls: [],
   streamingParts: [],
   abortController: null,
@@ -458,7 +532,8 @@ export const useAiStore = create<AiState>((set, get) => {
     set({
       activeSession: updatedSession,
       isStreaming: true,
-      streamingText: "",
+      streamingTextLive: "",
+      streamingTextRendered: "",
       streamingToolCalls: [],
       streamingParts: [],
     });
@@ -493,10 +568,14 @@ export const useAiStore = create<AiState>((set, get) => {
         executionContext,
         {
           onToken: (token: string) => {
+            if (pendingStreamingText.length === 0) {
+              pendingTokenReceivedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+            }
             pendingStreamingText += token;
             scheduleStreamingFlush();
           },
           onToolCallStart: (toolCall) => {
+            flushPendingStreamingText();
             const index = nextPartIndex++;
             const toolCallDisplay: ToolCallDisplay = {
               id: toolCall.id,
@@ -548,11 +627,14 @@ export const useAiStore = create<AiState>((set, get) => {
           },
           onComplete: (assistantMessage: ChatMessage) => {
             flushPendingStreamingText();
+            commitRenderedStreamingText(true);
             // Include tool calls from streaming state
             const toolCalls = get().streamingToolCalls;
             const parts = get().streamingParts;
+            const finalContent = get().streamingTextLive || assistantMessage.content;
             const finalMessage: ChatMessage = {
               ...assistantMessage,
+              content: finalContent,
               toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
               parts: parts.length > 0 ? parts : undefined,
               metadata: {
@@ -578,7 +660,8 @@ export const useAiStore = create<AiState>((set, get) => {
               return {
                 activeSession: newSession,
                 isStreaming: false,
-                streamingText: "",
+                streamingTextLive: "",
+                streamingTextRendered: "",
                 streamingToolCalls: [],
                 streamingParts: [],
                 abortController: null,
@@ -623,7 +706,8 @@ export const useAiStore = create<AiState>((set, get) => {
                   updatedAt: Date.now(),
                 },
                 isStreaming: false,
-                streamingText: "",
+                streamingTextLive: "",
+                streamingTextRendered: "",
                 streamingToolCalls: [],
                 streamingParts: [],
                 abortController: null,
@@ -665,7 +749,8 @@ export const useAiStore = create<AiState>((set, get) => {
               updatedAt: Date.now(),
             },
             isStreaming: false,
-            streamingText: "",
+            streamingTextLive: "",
+            streamingTextRendered: "",
             streamingToolCalls: [],
             streamingParts: [],
             abortController: null,
@@ -687,7 +772,8 @@ export const useAiStore = create<AiState>((set, get) => {
         }
         set({
           isStreaming: false,
-          streamingText: "",
+          streamingTextLive: "",
+          streamingTextRendered: "",
           streamingToolCalls: [],
           streamingParts: [],
           abortController: null,
@@ -711,6 +797,8 @@ export const useAiStore = create<AiState>((set, get) => {
     abortController?.abort();
     set({
       isStreaming: false,
+      streamingTextLive: "",
+      streamingTextRendered: "",
       abortController: null,
       pendingApprovals: [],
       pendingQuestions: [],

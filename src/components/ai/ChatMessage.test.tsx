@@ -1,5 +1,9 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { addCodeInNewCell } from "./chatMessageActions";
+import { ChatMessageComponent } from "./ChatMessage";
 
 describe("addCodeInNewCell", () => {
   it("adds SQL to a newly created cell when an active script tab is open", async () => {
@@ -87,5 +91,47 @@ describe("addCodeInNewCell", () => {
     expect(addScriptCell).toHaveBeenCalledTimes(1);
     expect(showToast).toHaveBeenCalledTimes(1);
     expect(showToast).toHaveBeenCalledWith("error", "Failed to add a new cell.");
+  });
+});
+
+describe("ChatMessageComponent streaming", () => {
+  it("keeps streaming text visible when tool parts are present without text parts", () => {
+    render(
+      <ChatMessageComponent
+        message={{
+          id: "streaming",
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+        }}
+        isStreaming={true}
+        streamingTextLive={"Running analysis...\nFound issue."}
+        streamingTextRendered={"Running analysis..."}
+        streamingParts={[
+          {
+            type: "tool",
+            index: 0,
+            toolCall: {
+              id: "tool-1",
+              name: "run_query",
+              input: { sql: "select 1" },
+              status: "running",
+            },
+          },
+        ]}
+        streamingToolCalls={[
+          {
+            id: "tool-1",
+            name: "run_query",
+            input: { sql: "select 1" },
+            status: "running",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText("Running analysis...")).toBeTruthy();
+    expect(screen.getByText("Found issue.")).toBeTruthy();
+    expect(screen.getByText("run_query")).toBeTruthy();
   });
 });

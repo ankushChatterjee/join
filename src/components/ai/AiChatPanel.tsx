@@ -280,7 +280,8 @@ function AiChatPanel() {
     activeSession,
     sessions,
     isStreaming,
-    streamingText,
+    streamingTextLive,
+    streamingTextRendered,
     streamingToolCalls,
     streamingParts,
     pendingApprovals,
@@ -295,7 +296,8 @@ function AiChatPanel() {
       activeSession: state.activeSession,
       sessions: state.sessions,
       isStreaming: state.isStreaming,
-      streamingText: state.streamingText,
+      streamingTextLive: state.streamingTextLive,
+      streamingTextRendered: state.streamingTextRendered,
       streamingToolCalls: state.streamingToolCalls,
       streamingParts: state.streamingParts,
       pendingApprovals: state.pendingApprovals,
@@ -382,7 +384,7 @@ function AiChatPanel() {
 
   const wasStreamingRef = useRef(false);
 
-  const messageSignature = `${messages.length}:${messages[messages.length - 1]?.id ?? ""}:${isStreaming ? 1 : 0}:${streamingText.length}:${streamingToolCalls.length}:${streamingParts.length}`;
+  const messageSignature = `${messages.length}:${messages[messages.length - 1]?.id ?? ""}:${isStreaming ? 1 : 0}:${streamingTextLive.length}:${streamingTextRendered.length}:${streamingToolCalls.length}:${streamingParts.length}`;
 
   // Auto-scroll only on chat events (new messages/stream updates), never on editor-only re-renders.
   useEffect(() => {
@@ -562,7 +564,8 @@ function AiChatPanel() {
                   timestamp: Date.now(),
                 }}
                 isStreaming={true}
-                streamingText={streamingText}
+                streamingTextLive={streamingTextLive}
+                streamingTextRendered={streamingTextRendered}
                 streamingToolCalls={streamingToolCalls}
                 streamingParts={streamingParts}
                 pendingApprovals={pendingApprovals}

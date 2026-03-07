@@ -169,6 +169,8 @@ function MarkdownContent({
   );
 }
 
+const MemoizedMarkdownContent = memo(MarkdownContent);
+
 // --- Code Block Component ---
 
 function CodeBlock({ code, language }: { code: string; language: string }) {
@@ -367,7 +369,8 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
 interface ChatMessageProps {
   message: ChatMessageType;
   isStreaming?: boolean;
-  streamingText?: string;
+  streamingTextLive?: string;
+  streamingTextRendered?: string;
   streamingToolCalls?: ToolCallDisplay[];
   streamingParts?: StreamingPart[];
   pendingApprovals?: PendingApproval[];
@@ -377,7 +380,8 @@ interface ChatMessageProps {
 const ChatMessageComponentInner = ({
   message,
   isStreaming,
-  streamingText,
+  streamingTextLive,
+  streamingTextRendered,
   streamingToolCalls,
   streamingParts,
   pendingApprovals = [],
@@ -396,26 +400,26 @@ const ChatMessageComponentInner = ({
   }
 
   // Assistant message
-  const content = isStreaming
-    ? streamingText || ""
-    : message.content;
+  const liveContent = isStreaming ? streamingTextLive || "" : message.content;
+  const renderedContent = isStreaming ? streamingTextRendered || "" : message.content;
   const toolCalls = isStreaming
     ? streamingToolCalls || []
     : message.toolCalls || [];
   const parts = isStreaming
     ? streamingParts || []
     : message.parts || [];
+  const hasTextPart = parts.some((part) => part.type === "text");
   const isError = message.isError;
 
   // Error message UI
-  if (isError && content) {
+  if (isError && liveContent) {
     return (
       <div className="py-1.5">
         <div className="flex items-start gap-2 rounded-sm border border-red-500/20 bg-red-500/8 px-2.5 py-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="mb-0.5 text-xs font-medium text-red-300">Something went wrong</p>
-            <p className="break-words text-xs leading-relaxed text-red-300">{content}</p>
+            <p className="break-words text-xs leading-relaxed text-red-300">{liveContent}</p>
           </div>
         </div>
       </div>
@@ -428,6 +432,18 @@ const ChatMessageComponentInner = ({
         {parts.length > 0 ? (
           // Inline parts - render in order
           <>
+            {!hasTextPart && (
+              <>
+                {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
+                {isStreaming &&
+                  liveContent.startsWith(renderedContent) &&
+                  liveContent.length > renderedContent.length && (
+                    <p className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200">
+                      {liveContent.slice(renderedContent.length)}
+                    </p>
+                  )}
+              </>
+            )}
             {parts.map((part, i) => {
               if (part.type === "text") {
                 // Group consecutive text parts
@@ -457,7 +473,7 @@ const ChatMessageComponentInner = ({
               }
             })}
             {/* Streaming cursor - only when streaming */}
-            {isStreaming && content && (
+            {isStreaming && liveContent && (
               <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
             )}
             {/* Pending questions */}
@@ -490,12 +506,15 @@ const ChatMessageComponentInner = ({
             ))}
 
             {/* Message content */}
-            {content && (
-              <MarkdownContent content={content} />
+            {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
+            {isStreaming && liveContent.startsWith(renderedContent) && liveContent.length > renderedContent.length && (
+              <p className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200">
+                {liveContent.slice(renderedContent.length)}
+              </p>
             )}
 
             {/* Streaming indicator */}
-            {isStreaming && !content && toolCalls.length === 0 && (
+            {isStreaming && !liveContent && toolCalls.length === 0 && (
               <div className="flex items-center gap-2 py-0.5 text-xs text-base-300">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Thinking...</span>
@@ -503,7 +522,7 @@ const ChatMessageComponentInner = ({
             )}
 
             {/* Streaming cursor */}
-            {isStreaming && content && (
+            {isStreaming && liveContent && (
               <span className="inline-block w-1.5 h-4 bg-accent-400 animate-pulse ml-0.5 align-text-bottom" />
             )}
           </>
