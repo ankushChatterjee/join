@@ -2,7 +2,7 @@
 // Chat Message Component
 // ============================================================================
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -512,7 +512,7 @@ const ChatMessageComponentInner = ({
                 {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
                 {streamingTail && (
                   <p
-                    key={`stream-tail-inline-${streamingTail.length}`}
+                    key="streaming-tail"
                     className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
                   >
                     {streamingTail}
@@ -533,12 +533,37 @@ const ChatMessageComponentInner = ({
                   textContent += (parts[j] as { type: "text"; text: string; index: number }).text;
                   j++;
                 }
+                // For the last active text group while streaming, use the committed +
+                // streaming-tail pattern so that soft reveal and fade-in work correctly.
+                const hasMoreTextParts = parts.slice(j).some((p) => p.type === "text");
+                if (isStreaming && !hasMoreTextParts) {
+                  let prevTextLength = 0;
+                  for (let k = 0; k < i; k++) {
+                    if (parts[k].type === "text") {
+                      prevTextLength += (parts[k] as { type: "text"; text: string; index: number }).text.length;
+                    }
+                  }
+                  const committedSlice =
+                    prevTextLength < renderedContent.length
+                      ? renderedContent.slice(prevTextLength)
+                      : "";
+                  return (
+                    <Fragment key={`text-${part.index}`}>
+                      {committedSlice && <MemoizedMarkdownContent content={committedSlice} />}
+                      {streamingTail && (
+                        <p
+                          key="streaming-tail"
+                          className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
+                        >
+                          {streamingTail}
+                        </p>
+                      )}
+                    </Fragment>
+                  );
+                }
                 return (
-                  <div
-                    key={isStreaming ? `text-${part.index}-${textContent.length}` : `text-${part.index}`}
-                    className={isStreaming ? "animate-streaming-tail-in" : undefined}
-                  >
-                    <MarkdownContent content={textContent} />
+                  <div key={`text-${part.index}`}>
+                    <MemoizedMarkdownContent content={textContent} />
                   </div>
                 );
               } else {
@@ -590,7 +615,7 @@ const ChatMessageComponentInner = ({
             {renderedContent && <MemoizedMarkdownContent content={renderedContent} />}
             {streamingTail && (
               <p
-                key={`stream-tail-legacy-${streamingTail.length}`}
+                key="streaming-tail"
                 className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
               >
                 {streamingTail}

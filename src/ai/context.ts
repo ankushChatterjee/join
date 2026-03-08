@@ -260,7 +260,7 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- Focus on the \`schema-*\` and \`lock-*\` rules. These rules define the exact patterns ` +
     `(PK strategy, constraint style, index coverage) you must apply in the DDL.`
   );
-  parts.push(
+  parts.push( // TODO: This needs to be better
     `\n**Step 3 — WRITE**: Draft full DDL using plan_ddl output as ground truth.\n` +
     `- CREATE: use the exact PK type from \`referenced_existing_tables\` for every FK column. ` +
     `Reuse existing ENUMs from \`reusable_types\`. Always include: IDENTITY PK, ` +
@@ -276,28 +276,6 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- One cell per migration phase. Never combine an expand phase with a contract phase.\n` +
     `- Briefly explain each cell: what it does, what lock risk it carries, and whether application ` +
     `code must be updated before running it.`
-  );
-
-  parts.push(`\n### Canonical Postgres Table Pattern`);
-  parts.push(
-    `When designing a new table, this is the target anatomy (adapt to requirements):\n` +
-    "```sql\n" +
-    "CREATE TABLE public.example (\n" +
-    "  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n" +
-    "  owner_id    BIGINT NOT NULL REFERENCES public.users (id),\n" +
-    "  status      public.example_status NOT NULL DEFAULT 'active',\n" +
-    "  name        TEXT NOT NULL,\n" +
-    "  metadata    JSONB,\n" +
-    "  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),\n" +
-    "  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n" +
-    ");\n" +
-    "\n" +
-    "-- Index every FK column\n" +
-    "CREATE INDEX ON public.example (owner_id);\n" +
-    "\n" +
-    "COMMENT ON TABLE public.example IS 'Brief description of what this table stores.';\n" +
-    "COMMENT ON COLUMN public.example.metadata IS 'Arbitrary JSON attributes; schema documented in app.';\n" +
-    "```"
   );
 
   // --- General Instructions ---
