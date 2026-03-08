@@ -237,6 +237,69 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- After passing verification, write the SQL with \`insert_sql\` or \`replace_editor_content\`.`
   );
 
+  // --- DDL & Schema Design Workflow ---
+  parts.push(`\n## DDL & Schema Design Workflow`);
+  parts.push(
+    `Follow this 4-step sequence whenever you write DDL — designing new tables, ` +
+    `creating schemas, or evolving existing ones. Do not skip steps.`
+  );
+  parts.push(
+    `\n**Step 1 — PLAN**: Call \`plan_ddl\` with your goal and the table names involved.\n` +
+    `- For CREATE tasks: pass the proposed new table names in \`entities\` and any existing tables ` +
+    `they will reference via FK in \`references\`. plan_ddl validates naming conflicts, fetches the ` +
+    `PK column name + type of each referenced table (so your FK columns match exactly — do NOT guess), ` +
+    `and surfaces reusable ENUMs/custom types already in the schema.\n` +
+    `- For ALTER/EVOLVE tasks: pass the existing table names in \`entities\`. plan_ddl fetches their ` +
+    `full current state (columns, indexes, FKs) and returns a \`ddl_risk_guide\` with the ` +
+    `expand-and-contract risk classification you must follow.\n` +
+    `- Do not draft any DDL before this step completes.`
+  );
+  parts.push(
+    `\n**Step 2 — CONSULT**: Call \`get_postgres_best_practice\` for each rule_id in ` +
+    `\`recommended_best_practice_rules\` returned by plan_ddl.\n` +
+    `- Focus on the \`schema-*\` and \`lock-*\` rules. These rules define the exact patterns ` +
+    `(PK strategy, constraint style, index coverage) you must apply in the DDL.`
+  );
+  parts.push(
+    `\n**Step 3 — WRITE**: Draft full DDL using plan_ddl output as ground truth.\n` +
+    `- CREATE: use the exact PK type from \`referenced_existing_tables\` for every FK column. ` +
+    `Reuse existing ENUMs from \`reusable_types\`. Always include: IDENTITY PK, ` +
+    `\`CREATE INDEX\` for every FK column, \`NOT NULL\` where appropriate, ` +
+    `\`TIMESTAMPTZ\` for timestamps, and \`COMMENT ON COLUMN\` for non-obvious columns.\n` +
+    `- ALTER: follow \`migration_phases\` order (expand → migrate_data → contract). ` +
+    `Never mix dangerous operations (DROP COLUMN, RENAME) with safe ones in the same DDL block. ` +
+    `Use \`CREATE INDEX CONCURRENTLY\` and \`ADD CONSTRAINT … NOT VALID\` to avoid table locks.\n` +
+    `- Call \`validate_ddl\` on the draft. Resolve all HIGH-severity issues before continuing.`
+  );
+  parts.push(
+    `\n**Step 4 — PROPOSE**: Write each DDL block into a separate cell with \`add_cell\` (requires approval).\n` +
+    `- One cell per migration phase. Never combine an expand phase with a contract phase.\n` +
+    `- Briefly explain each cell: what it does, what lock risk it carries, and whether application ` +
+    `code must be updated before running it.`
+  );
+
+  parts.push(`\n### Canonical Postgres Table Pattern`);
+  parts.push(
+    `When designing a new table, this is the target anatomy (adapt to requirements):\n` +
+    "```sql\n" +
+    "CREATE TABLE public.example (\n" +
+    "  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n" +
+    "  owner_id    BIGINT NOT NULL REFERENCES public.users (id),\n" +
+    "  status      public.example_status NOT NULL DEFAULT 'active',\n" +
+    "  name        TEXT NOT NULL,\n" +
+    "  metadata    JSONB,\n" +
+    "  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),\n" +
+    "  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n" +
+    ");\n" +
+    "\n" +
+    "-- Index every FK column\n" +
+    "CREATE INDEX ON public.example (owner_id);\n" +
+    "\n" +
+    "COMMENT ON TABLE public.example IS 'Brief description of what this table stores.';\n" +
+    "COMMENT ON COLUMN public.example.metadata IS 'Arbitrary JSON attributes; schema documented in app.';\n" +
+    "```"
+  );
+
   // --- General Instructions ---
   parts.push(`\n## Instructions`);
   parts.push(

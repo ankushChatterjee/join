@@ -21,11 +21,15 @@ import {
 import { askQuestion } from "./questionTool";
 import { planSqlQuery, explainSql } from "./planTools";
 import { getPostgresBestPractice } from "./postgresSkillTools";
+import { planDdl } from "./planDdlTool";
+import { validateDdl } from "./ddlTools";
 
 /** All tools available to the AI agent, keyed by tool name */
 export const allTools = {
   plan_sql_query: planSqlQuery,
+  plan_ddl: planDdl,
   explain_sql: explainSql,
+  validate_ddl: validateDdl,
   get_postgres_best_practice: getPostgresBestPractice,
   list_schemas: listSchemas,
   list_tables: listTables,

@@ -14,7 +14,9 @@ describe("allTools aggregate validation", () => {
   it("exports all expected tools", () => {
     const expected: (keyof typeof allTools)[] = [
       "plan_sql_query",
+      "plan_ddl",
       "explain_sql",
+      "validate_ddl",
       "get_postgres_best_practice",
       "list_schemas",
       "list_tables",
