@@ -565,6 +565,20 @@ fn delete_chat_session(session_id: String) -> Result<(), String> {
 }
 
 // ============================================================================
+// Tauri Commands - AI Preferences
+// ============================================================================
+
+#[tauri::command]
+fn get_selected_model_id() -> Result<Option<String>, String> {
+    storage::preferences::get_selected_model_id().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_selected_model_id(model_id: String) -> Result<(), String> {
+    storage::preferences::set_selected_model_id(model_id).map_err(|e| e.to_string())
+}
+
+// ============================================================================
 // Tauri Commands - Debug
 // ============================================================================
 
@@ -641,6 +655,9 @@ pub fn run() {
             get_chat_session,
             save_chat_session,
             delete_chat_session,
+            // AI Preferences
+            get_selected_model_id,
+            set_selected_model_id,
             // Debug
             debug_log,
         ])

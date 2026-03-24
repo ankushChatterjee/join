@@ -14,10 +14,12 @@ import {
   ArrowDownToLine,
   Wrench,
   AlertCircle,
+  Repeat2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sanitizeExternalUrl } from "@/lib/urlSafety";
 import { useAiStore } from "@/stores/aiStore";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { insertTextAtCursor } from "@/components/editor/editorUtils";
 import type { ChatMessage as ChatMessageType, ToolCallDisplay, PendingApproval, PendingQuestion, StreamingPart } from "@/ai/types";
@@ -380,6 +382,43 @@ interface ChatMessageProps {
   pendingQuestions?: PendingQuestion[];
 }
 
+function UserMessageBubble({ message }: { message: ChatMessageType }) {
+  const { sendMessage, isStreaming } = useAiStore(
+    useShallow((state) => ({
+      sendMessage: state.sendMessage,
+      isStreaming: state.isStreaming,
+    }))
+  );
+
+  return (
+    <div className="group relative py-1.5">
+      <div className="px-0.5">
+        <p className="whitespace-pre-wrap text-[13px] leading-6 text-base-100">
+          {message.content}
+        </p>
+      </div>
+      {!isStreaming && (
+        <button
+          type="button"
+          onClick={() => void sendMessage(message.content)}
+          aria-label="Resend message"
+          title="Resend"
+          className={cn(
+            "absolute right-0 top-0 z-10 flex h-7 w-7 items-center justify-center rounded-sm",
+            "border border-base-700/80 bg-base-900/95 text-base-300 shadow-sm backdrop-blur-sm",
+            "outline-none transition-[opacity,colors] duration-150 ease-out",
+            "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+            "hover:border-base-600 hover:bg-base-850 hover:text-base-100",
+            "focus-visible:opacity-100 focus-visible:pointer-events-auto focus-visible:ring-1 focus-visible:ring-accent-500/50"
+          )}
+        >
+          <Repeat2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function useSoftStreamingText(text: string, isStreaming: boolean): string {
   const [visibleText, setVisibleText] = useState(text);
   const rafIdRef = useRef<number | null>(null);
@@ -465,15 +504,7 @@ const ChatMessageComponentInner = ({
       : "";
 
   if (message.role === "user") {
-    return (
-      <div className="py-1.5">
-        <div className="px-0.5">
-          <p className="whitespace-pre-wrap text-[13px] leading-6 text-base-100">
-            {message.content}
-          </p>
-        </div>
-      </div>
-    );
+    return <UserMessageBubble message={message} />;
   }
 
   // Assistant message

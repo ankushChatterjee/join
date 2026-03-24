@@ -3,6 +3,7 @@ pub mod config;
 pub mod credentials;
 pub mod history;
 pub mod path_safety;
+pub mod preferences;
 pub mod saved_results;
 pub mod scripts;
 pub mod tabs;

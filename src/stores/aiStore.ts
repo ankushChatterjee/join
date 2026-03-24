@@ -19,6 +19,7 @@ import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 import { compactConversation } from "@/ai/compaction";
 import type { AgentExecutionContext } from "@/ai/executionContext";
 import { resolveAgentTarget } from "@/ai/contextResolver";
+import { getModelConfig } from "@/ai/providers";
 import { useAppStore } from "@/stores/appStore";
 import { recordPerfSample } from "@/lib/perf";
 
@@ -270,11 +271,19 @@ export const useAiStore = create<AiState>((set, get) => {
 
   setSelectedModel: (modelId: string) => {
     set({ selectedModelId: modelId });
+    void invoke("set_selected_model_id", { modelId }).catch((err) =>
+      console.warn("Failed to persist selected model:", err)
+    );
   },
 
   // Session management
   loadSessions: async () => {
     try {
+      const savedModelId = await invoke<string | null>("get_selected_model_id");
+      if (savedModelId && getModelConfig(savedModelId)) {
+        set({ selectedModelId: savedModelId });
+      }
+
       const sessions = await invoke<ChatSessionMeta[]>("list_chat_sessions");
       set({ sessions });
 
