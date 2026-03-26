@@ -32,6 +32,37 @@ function resetStore() {
   });
 }
 
+function makeOpenScript(overrides?: Partial<any>) {
+  return {
+    id: "script-1",
+    name: "Script 1",
+    connectionId: "c1",
+    cells: [
+      {
+        id: "cell-1",
+        sql: "SELECT 1",
+        last_run_at: null,
+        last_run_duration_ms: null,
+        last_run_successful: null,
+        proposed_sql: null,
+      },
+      {
+        id: "cell-2",
+        sql: "SELECT 2",
+        last_run_at: null,
+        last_run_duration_ms: null,
+        last_run_successful: null,
+        proposed_sql: null,
+      },
+    ],
+    selectedCellId: "cell-1",
+    isDirty: false,
+    pendingSaveRevision: 0,
+    lastFlushedRevision: 0,
+    ...overrides,
+  };
+}
+
 describe("appStore critical flows", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -315,6 +346,7 @@ describe("appStore autosave regressions", () => {
       });
 
       useAppStore.getState().updateScriptContent("script-1", "SELECT 2");
+      await Promise.resolve();
       expect(invokeMock).toHaveBeenCalledWith(
         "queue_script_update",
         expect.objectContaining({ scriptId: "script-1" })
@@ -392,5 +424,113 @@ describe("appStore autosave regressions", () => {
     expect(flushCallIndex).toBeGreaterThanOrEqual(0);
     expect(executeCallIndex).toBeGreaterThanOrEqual(0);
     expect(flushCallIndex).toBeLessThan(executeCallIndex);
+  });
+});
+
+describe("appStore updateScriptContent behavior lock", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    resetStore();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "queue_script_update") return Promise.resolve({});
+      return Promise.resolve(undefined);
+    });
+  });
+
+  it("updates only selected cell while preserving other references", () => {
+    const script1 = makeOpenScript();
+    const script2 = makeOpenScript({ id: "script-2", name: "Script 2", selectedCellId: "cell-2" });
+    useAppStore.setState({
+      openScripts: [script1, script2],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    const before = useAppStore.getState();
+    const beforeScript1 = before.openScripts[0];
+    const beforeScript2 = before.openScripts[1];
+    const beforeCell1 = beforeScript1.cells[0];
+    const beforeCell2 = beforeScript1.cells[1];
+
+    useAppStore.getState().updateScriptContent("script-1", "SELECT 42");
+
+    const after = useAppStore.getState();
+    const afterScript1 = after.openScripts[0];
+    const afterScript2 = after.openScripts[1];
+    const afterCell1 = afterScript1.cells[0];
+    const afterCell2 = afterScript1.cells[1];
+
+    expect(afterCell1.sql).toBe("SELECT 42");
+    expect(afterCell2.sql).toBe("SELECT 2");
+    expect(afterScript1.isDirty).toBe(true);
+    expect(afterScript1.pendingSaveRevision).toBe(1);
+    expect(afterScript1.selectedCellId).toBe("cell-1");
+
+    // Updated script/cell should get new references
+    expect(afterScript1).not.toBe(beforeScript1);
+    expect(afterCell1).not.toBe(beforeCell1);
+    // Unchanged cell/script should preserve references
+    expect(afterCell2).toBe(beforeCell2);
+    expect(afterScript2).toBe(beforeScript2);
+    expect(after.activeEditorTab).toEqual({ kind: "script", id: "script-1" });
+  });
+
+  it("increments revision once per call and queues persist updates", async () => {
+    useAppStore.setState({
+      openScripts: [makeOpenScript()],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    useAppStore.getState().updateScriptContent("script-1", "SELECT 100");
+    useAppStore.getState().updateScriptContent("script-1", "SELECT 101");
+    await Promise.resolve();
+
+    const script = useAppStore.getState().openScripts[0];
+    expect(script.pendingSaveRevision).toBe(2);
+    expect(script.isDirty).toBe(true);
+    expect(script.cells[0].sql).toBe("SELECT 101");
+
+    const queueCalls = invokeMock.mock.calls.filter((c: any[]) => c[0] === "queue_script_update");
+    expect(queueCalls.length).toBe(2);
+    expect(queueCalls[0][1]).toEqual(expect.objectContaining({ scriptId: "script-1", revision: 1 }));
+    expect(queueCalls[1][1]).toEqual(expect.objectContaining({ scriptId: "script-1", revision: 2 }));
+  });
+
+  it("is a no-op when script does not exist", () => {
+    useAppStore.setState({
+      openScripts: [makeOpenScript()],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    const before = useAppStore.getState();
+    const beforeScript = before.openScripts[0];
+
+    useAppStore.getState().updateScriptContent("missing-script", "SELECT fail");
+
+    const after = useAppStore.getState();
+    expect(after.openScripts[0]).toBe(beforeScript);
+    expect(invokeMock.mock.calls.some((c: any[]) => c[0] === "queue_script_update")).toBe(false);
+  });
+
+  it("falls back to first cell when selectedCellId is null or invalid", () => {
+    useAppStore.setState({
+      openScripts: [
+        makeOpenScript({ selectedCellId: null }),
+        makeOpenScript({ id: "script-2", name: "Script 2", selectedCellId: "missing-cell" }),
+      ],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    useAppStore.getState().updateScriptContent("script-1", "SELECT from-null");
+    useAppStore.getState().updateScriptContent("script-2", "SELECT from-invalid");
+
+    const [script1, script2] = useAppStore.getState().openScripts;
+    expect(script1.selectedCellId).toBe("cell-1");
+    expect(script1.cells[0].sql).toBe("SELECT from-null");
+    expect(script2.selectedCellId).toBe("cell-1");
+    expect(script2.cells[0].sql).toBe("SELECT from-invalid");
   });
 });

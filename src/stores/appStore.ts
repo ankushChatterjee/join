@@ -266,6 +266,50 @@ function pickSelectedCellId(cells: SqlSheetCell[], selectedCellId: string | null
   return cells[0].id;
 }
 
+function findOpenScriptIndexById(openScripts: OpenScript[], scriptId: string): number {
+  return openScripts.findIndex((script) => script.id === scriptId);
+}
+
+function resolveSelectedCell(
+  cells: SqlSheetCell[],
+  selectedCellId: string | null
+): { id: string; index: number } | null {
+  if (cells.length === 0) return null;
+
+  if (selectedCellId) {
+    for (let i = 0; i < cells.length; i += 1) {
+      if (cells[i].id === selectedCellId) {
+        return { id: selectedCellId, index: i };
+      }
+    }
+  }
+
+  return { id: cells[0].id, index: 0 };
+}
+
+function updateSelectedCellSql(
+  script: OpenScript,
+  selectedCellId: string,
+  selectedCellIndex: number,
+  content: string
+): OpenScript {
+  if (selectedCellIndex < 0 || selectedCellIndex >= script.cells.length) {
+    return script;
+  }
+
+  const nextCells = [...script.cells];
+  const selectedCell = nextCells[selectedCellIndex];
+  nextCells[selectedCellIndex] = { ...selectedCell, sql: content };
+
+  return {
+    ...script,
+    selectedCellId,
+    cells: nextCells,
+    isDirty: true,
+    pendingSaveRevision: script.pendingSaveRevision + 1,
+  };
+}
+
 function toSheetDocument(openScript: OpenScript): SqlSheetDocument {
   return {
     version: SHEET_FORMAT_VERSION,
@@ -329,6 +373,8 @@ function normalizeEditorTabOrder(
 export const useAppStore = create<AppState>((set, get) => {
   const SCRIPT_AUTOSAVE_IDLE_MS = 750;
   const scriptSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const openScriptIndexCache = new Map<string, number>();
+  const selectedCellIndexCache = new Map<string, { id: string; index: number }>();
 
   const applyConnectionMetadataToLegacyState = (connectionId: string) => {
     const snapshot = get().metadataByConnection[connectionId];
@@ -361,9 +407,9 @@ export const useAppStore = create<AppState>((set, get) => {
     });
   };
 
-  const queueScriptPersist = async (script: OpenScript) => {
+  const queueScriptPersist = async (script: OpenScript, sheetOverride?: SqlSheetDocument) => {
     try {
-      const sheet = toSheetDocument(script);
+      const sheet = sheetOverride ?? toSheetDocument(script);
       await invoke<ScriptSaveQueueStatus>("queue_script_update", {
         connectionId: script.connectionId,
         scriptId: script.id,
@@ -1467,30 +1513,65 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   updateScriptContent: (scriptId: string, content: string) => {
-    const script = get().openScripts.find((s) => s.id === scriptId);
-    if (!script) return;
+    const { openScripts } = get();
+    let scriptIndex = openScriptIndexCache.get(scriptId) ?? -1;
+    if (
+      scriptIndex < 0 ||
+      scriptIndex >= openScripts.length ||
+      openScripts[scriptIndex].id !== scriptId
+    ) {
+      scriptIndex = findOpenScriptIndexById(openScripts, scriptId);
+      if (scriptIndex >= 0) {
+        openScriptIndexCache.set(scriptId, scriptIndex);
+      } else {
+        openScriptIndexCache.delete(scriptId);
+      }
+    }
+    if (scriptIndex < 0) return;
+    const script = openScripts[scriptIndex];
 
-    const selectedCellId = pickSelectedCellId(script.cells, script.selectedCellId);
-    if (!selectedCellId) return;
+    let selectedCell = selectedCellIndexCache.get(script.id) ?? null;
+    if (selectedCell) {
+      const { index, id } = selectedCell;
+      if (
+        index < 0 ||
+        index >= script.cells.length ||
+        script.cells[index]?.id !== id ||
+        (script.selectedCellId && script.selectedCellId !== id)
+      ) {
+        selectedCell = null;
+      }
+    }
 
-    const updatedScript: OpenScript = {
-      ...script,
-      selectedCellId,
-      cells: script.cells.map((cell) =>
-        cell.id === selectedCellId ? { ...cell, sql: content } : cell
-      ),
-      isDirty: true,
-      pendingSaveRevision: script.pendingSaveRevision + 1,
+    if (!selectedCell) {
+      selectedCell = resolveSelectedCell(script.cells, script.selectedCellId);
+      if (!selectedCell) return;
+      selectedCellIndexCache.set(script.id, selectedCell);
+    }
+
+    if (!selectedCell) return;
+
+    const updatedScript = updateSelectedCellSql(
+      script,
+      selectedCell.id,
+      selectedCell.index,
+      content
+    );
+    if (updatedScript === script) return;
+
+    const nextOpenScripts = [...openScripts];
+    nextOpenScripts[scriptIndex] = updatedScript;
+    set({ openScripts: nextOpenScripts });
+
+    const sheetForQueue: SqlSheetDocument = {
+      version: SHEET_FORMAT_VERSION,
+      selected_cell_id: updatedScript.selectedCellId,
+      cells: updatedScript.cells,
     };
-
-    set((state) => ({
-      openScripts: state.openScripts.map((s) =>
-        s.id === scriptId ? updatedScript : s
-      ),
-    }));
-
-    void queueScriptPersist(updatedScript);
-    scheduleScriptPersist(scriptId);
+    queueMicrotask(() => {
+      void queueScriptPersist(updatedScript, sheetForQueue);
+      scheduleScriptPersist(scriptId);
+    });
   },
 
   flushScriptNow: async (scriptId: string) => {
