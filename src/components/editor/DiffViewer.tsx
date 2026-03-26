@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { diffLines, type Change } from 'diff';
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,9 +51,8 @@ export function DiffViewer({ oldValue, newValue, onAccept, onReject }: DiffViewe
     const [hunks, setHunks] = useState<Hunk[]>(() => buildHunks(rawDiff));
 
     // Reset hunks when the diff changes
-    useMemo(() => {
+    useEffect(() => {
         setHunks(buildHunks(rawDiff));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rawDiff]);
 
     const pending = hunks.filter((h) => h.accepted === null);

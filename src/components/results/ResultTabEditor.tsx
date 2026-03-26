@@ -129,16 +129,10 @@ export function ResultTabEditor() {
     return openResultTabs.find((tab) => tab.id === activeEditorTab.id) ?? null;
   }, [activeEditorTab, openResultTabs]);
 
-  if (!activeTab) {
-    return (
-      <div className="h-full w-full flex items-center justify-center text-sm text-base-300">
-        Open a result tab to continue
-      </div>
-    );
-  }
-
-  const connection = connections.find((c) => c.id === activeTab.connectionId);
+  const connection = connections.find((c) => c.id === activeTab?.connectionId);
   const dbType = connection?.db_type;
+  const activeTabId = activeTab?.id ?? null;
+  const proposedSql = activeTab?.sqlCell.proposed_sql ?? null;
   const dialect =
     dbType === "mysql" ? MySQL : dbType === "sqlite" ? SQLite : PostgreSQL;
   const completionSchema = useMemo(
@@ -156,18 +150,20 @@ export function ResultTabEditor() {
           {
             key: "Mod-Enter",
             run: () => {
-              refreshResultTab(activeTab.id);
+              if (activeTabId) {
+                refreshResultTab(activeTabId);
+              }
               return true;
             },
           },
         ])
       ),
-    [activeTab.id, refreshResultTab]
+    [activeTabId, refreshResultTab]
   );
-  const preview = activeTab.sqlCell.sql.replace(/\s+/g, " ").trim();
+  const preview = activeTab?.sqlCell.sql.replace(/\s+/g, " ").trim() ?? "";
 
   const handleExport = async () => {
-    if (!activeTab.queryResults || isExporting) return;
+    if (!activeTab || !activeTab.queryResults || isExporting) return;
     try {
       setIsExporting(true);
       const filePath = await save({
@@ -202,10 +198,18 @@ export function ResultTabEditor() {
   }, [saveCurrentResults]);
 
   useEffect(() => {
-    if (activeTab.sqlCell.proposed_sql) {
+    if (proposedSql) {
       setEditorView(null, null);
     }
-  }, [activeTab.sqlCell.proposed_sql]);
+  }, [proposedSql]);
+
+  if (!activeTab) {
+    return (
+      <div className="h-full w-full flex items-center justify-center text-sm text-base-300">
+        Open a result tab to continue
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-surface">

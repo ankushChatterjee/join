@@ -2,7 +2,7 @@
 // Chat Message Component
 // ============================================================================
 
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -38,13 +38,18 @@ function MarkdownContent({
 }: {
   content: string;
 }) {
+  type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & {
+    node?: unknown;
+    inline?: boolean;
+  };
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
         // Code blocks
-        code(props) {
-          const { node, className, children, ...rest } = props as any;
+        code(props: MarkdownCodeProps) {
+          const { node: _node, className, children, ...rest } = props;
           const match = /language-(\w+)/.exec(className || "");
           const language = match ? match[1] : "";
           const codeString = String(children).replace(/\n$/, "");

@@ -9,6 +9,14 @@ import { Parser } from "node-sql-parser";
 import { useAppStore } from "@/stores/appStore";
 import type { AgentContext } from "../agent";
 
+type SqlAstNode = {
+  type?: unknown;
+  having?: unknown;
+  groupby?: unknown;
+  name?: unknown;
+  [key: string]: unknown;
+};
+
 function resolveConnection(
   ctx: AgentContext | undefined,
   requestedConnectionId?: string
@@ -481,7 +489,9 @@ export const lintSqlSafety = tool({
       };
       // Use "postgresql" as fallback for parser database type
       const ast = parser.astify(text, { database: dbMap[dialect] || "postgresql" });
-      const astArray = Array.isArray(ast) ? (ast as any[]) : [ast as any];
+      const astArray = ((Array.isArray(ast) ? ast : [ast]).filter(
+        (node) => typeof node === "object" && node !== null
+      ) as unknown) as SqlAstNode[];
 
       for (const node of astArray) {
         if (node.type === "select") {
@@ -498,16 +508,22 @@ export const lintSqlSafety = tool({
           // Check for aggregate functions in WHERE (more precise than regex)
           // We can't easily traverse the WHERE tree here without a recursive visitor,
           // but we can check if window functions are used without OVER
-          const checkNode = (obj: any) => {
+          const checkNode = (obj: unknown): void => {
             if (!obj || typeof obj !== "object") return;
+            const nodeObject = obj as SqlAstNode;
             // When parsed as a regular function (missing OVER), it might be a window function used incorrectly
-            if (obj.type === "function") {
+            if (nodeObject.type === "function") {
               let funcName = "";
-              if (typeof obj.name === "string") {
-                funcName = obj.name;
-              } else if (obj.name && Array.isArray(obj.name.name)) {
+              if (typeof nodeObject.name === "string") {
+                funcName = nodeObject.name;
+              } else if (
+                nodeObject.name &&
+                typeof nodeObject.name === "object" &&
+                Array.isArray((nodeObject.name as { name?: unknown }).name)
+              ) {
                 // node-sql-parser nests names like { name: [{ value: 'row_number' }] }
-                funcName = obj.name.name[0]?.value || "";
+                const nestedNames = (nodeObject.name as { name: Array<{ value?: string }> }).name;
+                funcName = nestedNames[0]?.value || "";
               }
 
               if (
@@ -523,12 +539,12 @@ export const lintSqlSafety = tool({
                 );
               }
             }
-            Object.values(obj).forEach(checkNode);
+            Object.values(nodeObject).forEach(checkNode);
           };
           checkNode(node);
         }
       }
-    } catch (e) {
+    } catch {
       // Fallback: Parser might fail on complex or dialect-specific syntax
       // We've already run regex checks which are more resilient
     }

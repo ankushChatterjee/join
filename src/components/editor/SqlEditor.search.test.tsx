@@ -44,23 +44,25 @@ vi.mock("@uiw/react-codemirror", () => {
     onCreateEditor?: (view: MockView) => void;
     onFocus?: () => void;
   }) => {
+    const { value, onCreateEditor, onFocus } = props;
+
     useEffect(() => {
       const view: MockView = {
         state: {
           doc: {
-            length: props.value.length,
+            length: value.length,
           },
         },
         dispatch: vi.fn(),
         focus: vi.fn(),
       };
       mockViews.push(view);
-      props.onCreateEditor?.(view);
+      onCreateEditor?.(view);
     }, []);
 
     return (
-      <div data-testid="mock-cm-editor" tabIndex={0} onFocus={props.onFocus}>
-        {props.value}
+      <div data-testid="mock-cm-editor" tabIndex={0} onFocus={onFocus}>
+        {value}
       </div>
     );
   };
