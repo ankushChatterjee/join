@@ -59,12 +59,12 @@ pub struct NewConnectionRequest {
 #[tauri::command]
 async fn list_connections() -> Result<Vec<ConnectionInfo>, String> {
     let configs = storage::list_connections().map_err(|e| e.to_string())?;
-    
+
     let mut connections = Vec::new();
     for config in configs {
         connections.push(ConnectionInfo::from_config(config).await);
     }
-    
+
     Ok(connections)
 }
 
@@ -79,17 +79,17 @@ async fn add_connection(request: NewConnectionRequest) -> Result<ConnectionInfo,
         request.username,
         request.ssl_mode,
     );
-    
+
     // Store password in keychain if provided
     if let Some(password) = &request.password {
         if !password.is_empty() {
             storage::store_password(&config.id, password).map_err(|e| e.to_string())?;
         }
     }
-    
+
     // Save connection config
     storage::add_connection(config.clone()).map_err(|e| e.to_string())?;
-    
+
     Ok(ConnectionInfo::from_config(config).await)
 }
 
@@ -100,7 +100,7 @@ async fn update_connection(
 ) -> Result<ConnectionInfo, String> {
     // Get existing config to preserve the ID
     let mut config = storage::get_connection(&connection_id).map_err(|e| e.to_string())?;
-    
+
     config.name = request.name;
     config.db_type = request.db_type;
     config.host = request.host;
@@ -108,17 +108,17 @@ async fn update_connection(
     config.database = request.database;
     config.username = request.username;
     config.ssl_mode = request.ssl_mode;
-    
+
     // Update password if provided
     if let Some(password) = &request.password {
         if !password.is_empty() {
             storage::store_password(&config.id, password).map_err(|e| e.to_string())?;
         }
     }
-    
+
     // Save updated config
     storage::add_connection(config.clone()).map_err(|e| e.to_string())?;
-    
+
     Ok(ConnectionInfo::from_config(config).await)
 }
 
@@ -126,17 +126,17 @@ async fn update_connection(
 async fn delete_connection(connection_id: String) -> Result<(), String> {
     // Disconnect if connected
     let _ = db::disconnect(&connection_id).await;
-    
+
     // Delete password from keychain
     let _ = storage::delete_password(&connection_id);
-    
+
     // Remove any scripts stored for this connection
     let _ = storage::scripts::delete_connection_scripts(&connection_id);
     let _ = storage::saved_results::delete_connection_saved_results(&connection_id);
-    
+
     // Remove from config
     storage::remove_connection(&connection_id).map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -151,7 +151,7 @@ async fn test_connection(request: NewConnectionRequest) -> Result<(), String> {
         request.username,
         request.ssl_mode,
     );
-    
+
     db::test_connection(&config, request.password.as_deref())
         .await
         .map_err(|e| e.to_string())
@@ -160,19 +160,22 @@ async fn test_connection(request: NewConnectionRequest) -> Result<(), String> {
 #[tauri::command]
 async fn connect(connection_id: String) -> Result<(), String> {
     let config = storage::get_connection(&connection_id).map_err(|e| e.to_string())?;
-    
+
     // Get password from keychain
     let password = match storage::get_password(&connection_id) {
         Ok(pwd) => Some(pwd),
         Err(_) => {
             // If password is required but not found, return a helpful error
             if config.username.is_some() && config.db_type != db::DatabaseType::Sqlite {
-                return Err("Password not found. Please edit the connection and re-enter your password.".to_string());
+                return Err(
+                    "Password not found. Please edit the connection and re-enter your password."
+                        .to_string(),
+                );
             }
             None
         }
     };
-    
+
     db::connect(&config, password.as_deref())
         .await
         .map_err(|e| format!("Connection failed: {}", e))
@@ -202,7 +205,10 @@ async fn get_schemas(connection_id: String) -> Result<Vec<db::SchemaInfo>, Strin
 }
 
 #[tauri::command]
-async fn get_tables(connection_id: String, schema: Option<String>) -> Result<Vec<db::TableInfo>, String> {
+async fn get_tables(
+    connection_id: String,
+    schema: Option<String>,
+) -> Result<Vec<db::TableInfo>, String> {
     db::get_tables(&connection_id, schema.as_deref())
         .await
         .map_err(|e| e.to_string())
@@ -220,7 +226,10 @@ async fn get_columns(
 }
 
 #[tauri::command]
-async fn get_views(connection_id: String, schema: Option<String>) -> Result<Vec<db::ViewInfo>, String> {
+async fn get_views(
+    connection_id: String,
+    schema: Option<String>,
+) -> Result<Vec<db::ViewInfo>, String> {
     db::get_views(&connection_id, schema.as_deref())
         .await
         .map_err(|e| e.to_string())
@@ -249,14 +258,20 @@ async fn get_foreign_keys(
 }
 
 #[tauri::command]
-async fn get_functions(connection_id: String, schema: Option<String>) -> Result<Vec<db::FunctionInfo>, String> {
+async fn get_functions(
+    connection_id: String,
+    schema: Option<String>,
+) -> Result<Vec<db::FunctionInfo>, String> {
     db::get_functions(&connection_id, schema.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_custom_types(connection_id: String, schema: Option<String>) -> Result<Vec<db::CustomTypeInfo>, String> {
+async fn get_custom_types(
+    connection_id: String,
+    schema: Option<String>,
+) -> Result<Vec<db::CustomTypeInfo>, String> {
     db::get_custom_types(&connection_id, schema.as_deref())
         .await
         .map_err(|e| e.to_string())
@@ -313,8 +328,12 @@ fn save_saved_result(
 }
 
 #[tauri::command]
-fn get_saved_result(connection_id: String, saved_result_id: String) -> Result<storage::SavedResult, String> {
-    storage::saved_results::get_saved_result(&connection_id, &saved_result_id).map_err(|e| e.to_string())
+fn get_saved_result(
+    connection_id: String,
+    saved_result_id: String,
+) -> Result<storage::SavedResult, String> {
+    storage::saved_results::get_saved_result(&connection_id, &saved_result_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -341,7 +360,8 @@ async fn refresh_saved_result(
 
 #[tauri::command]
 fn delete_saved_result(connection_id: String, saved_result_id: String) -> Result<(), String> {
-    storage::saved_results::delete_saved_result(&connection_id, &saved_result_id).map_err(|e| e.to_string())
+    storage::saved_results::delete_saved_result(&connection_id, &saved_result_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -419,8 +439,13 @@ fn get_script_update_status(script_id: String) -> Result<storage::ScriptSaveQueu
 }
 
 #[tauri::command]
-fn rename_script(connection_id: String, script_id: String, new_name: String) -> Result<storage::ScriptMetadata, String> {
-    storage::scripts::rename_script(&connection_id, &script_id, &new_name).map_err(|e| e.to_string())
+fn rename_script(
+    connection_id: String,
+    script_id: String,
+    new_name: String,
+) -> Result<storage::ScriptMetadata, String> {
+    storage::scripts::rename_script(&connection_id, &script_id, &new_name)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -475,17 +500,21 @@ fn escape_csv(value: &serde_json::Value) -> String {
 #[tauri::command]
 async fn export_to_csv(file_path: String, data: ExportData) -> Result<(), String> {
     let mut file = File::create(&file_path).map_err(|e| e.to_string())?;
-    
+
     // Write headers
-    let headers: Vec<String> = data.columns.iter().map(|c| escape_csv(&serde_json::Value::String(c.clone()))).collect();
+    let headers: Vec<String> = data
+        .columns
+        .iter()
+        .map(|c| escape_csv(&serde_json::Value::String(c.clone())))
+        .collect();
     writeln!(file, "{}", headers.join(",")).map_err(|e| e.to_string())?;
-    
+
     // Write rows
     for row in data.rows {
-        let escaped: Vec<String> = row.iter().map(|v| escape_csv(v)).collect();
+        let escaped: Vec<String> = row.iter().map(escape_csv).collect();
         writeln!(file, "{}", escaped.join(",")).map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -503,7 +532,10 @@ fn get_env_var(name: String) -> Result<String, String> {
         "OPEN_ROUTER_API_KEY",
     ];
     if !allowed.contains(&name.as_str()) {
-        return Err(format!("Access to environment variable '{}' is not allowed", name));
+        return Err(format!(
+            "Access to environment variable '{}' is not allowed",
+            name
+        ));
     }
     std::env::var(&name).map_err(|_| format!("Environment variable '{}' is not set", name))
 }
@@ -721,8 +753,11 @@ mod tests {
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.to_string(),
         };
-        let response = tauri::test::get_ipc_response(webview, request).expect("invoke should succeed");
-        response.deserialize::<T>().expect("response should deserialize")
+        let response =
+            tauri::test::get_ipc_response(webview, request).expect("invoke should succeed");
+        response
+            .deserialize::<T>()
+            .expect("response should deserialize")
     }
 
     fn invoke_err<W>(webview: &W, cmd: &str, payload: Value) -> Value
@@ -754,7 +789,10 @@ mod tests {
         unsafe {
             std::env::set_var("ANTHROPIC_API_KEY", "token-123");
         }
-        assert_eq!(get_env_var("ANTHROPIC_API_KEY".into()).expect("allowed"), "token-123");
+        assert_eq!(
+            get_env_var("ANTHROPIC_API_KEY".into()).expect("allowed"),
+            "token-123"
+        );
         let err = get_env_var("PATH".into()).expect_err("path should be blocked");
         assert!(err.contains("not allowed"));
     }

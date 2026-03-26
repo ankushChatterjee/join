@@ -58,13 +58,13 @@ pub fn save_history(history: &QueryHistory) -> Result<(), ConfigError> {
 /// Add an entry to the history (keeps last 50 entries)
 pub fn add_history_entry(entry: QueryHistoryEntry) -> Result<(), ConfigError> {
     let mut history = load_history()?;
-    
+
     // Add new entry at the beginning
     history.entries.insert(0, entry);
-    
+
     // Keep only last 50 entries
     history.entries.truncate(50);
-    
+
     save_history(&history)
 }
 

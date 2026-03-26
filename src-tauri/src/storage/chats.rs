@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use super::ConfigError;
 use super::path_safety::{safe_join, validate_id};
+use super::ConfigError;
 
 /// A single chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,7 +145,7 @@ pub fn list_chat_sessions() -> Result<Vec<ChatSessionMeta>, ConfigError> {
         let entry = entry?;
         let path = entry.path();
 
-        if path.extension().map_or(false, |ext| ext == "json") {
+        if path.extension().is_some_and(|ext| ext == "json") {
             match fs::read_to_string(&path) {
                 Ok(content) => {
                     if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {

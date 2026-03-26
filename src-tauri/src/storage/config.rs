@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::db::ConnectionConfig;
@@ -60,14 +60,14 @@ fn get_config_path() -> PathBuf {
 
 pub fn load_config() -> Result<AppConfig, ConfigError> {
     let path = get_config_path();
-    
+
     if !path.exists() {
         return Ok(AppConfig::default());
     }
-    
+
     let content = fs::read_to_string(&path)?;
     let config: AppConfig = serde_json::from_str(&content)?;
-    
+
     Ok(config)
 }
 
@@ -75,17 +75,17 @@ pub fn save_config(config: &AppConfig) -> Result<(), ConfigError> {
     let path = get_config_path();
     let content = serde_json::to_string_pretty(config)?;
     fs::write(&path, content)?;
-    
+
     Ok(())
 }
 
 pub fn add_connection(connection: ConnectionConfig) -> Result<(), ConfigError> {
     let mut config = load_config()?;
-    
+
     // Remove existing connection with same ID if it exists
     config.connections.retain(|c| c.id != connection.id);
     config.connections.push(connection);
-    
+
     save_config(&config)
 }
 
@@ -97,7 +97,7 @@ pub fn remove_connection(connection_id: &str) -> Result<(), ConfigError> {
 
 pub fn get_connection(connection_id: &str) -> Result<ConnectionConfig, ConfigError> {
     let config = load_config()?;
-    
+
     config
         .connections
         .into_iter()

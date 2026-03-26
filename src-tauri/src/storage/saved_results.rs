@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use crate::db::{ColumnDef, QueryResult};
 
-use super::ConfigError;
 use super::path_safety::{safe_join, validate_id};
+use super::ConfigError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedResultMetadata {
@@ -48,7 +48,10 @@ fn get_connection_saved_results_dir(connection_id: &str) -> Result<PathBuf, Conf
     safe_join(&get_saved_results_base_dir(), connection_id)
 }
 
-fn get_saved_result_meta_path(connection_id: &str, saved_result_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_saved_result_meta_path(
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
         &get_connection_saved_results_dir(connection_id)?,
@@ -56,7 +59,10 @@ fn get_saved_result_meta_path(connection_id: &str, saved_result_id: &str) -> Res
     )
 }
 
-fn get_saved_result_csv_path(connection_id: &str, saved_result_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_saved_result_csv_path(
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
         &get_connection_saved_results_dir(connection_id)?,
@@ -64,7 +70,10 @@ fn get_saved_result_csv_path(connection_id: &str, saved_result_id: &str) -> Resu
     )
 }
 
-fn get_saved_result_data_path(connection_id: &str, saved_result_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_saved_result_data_path(
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
         &get_connection_saved_results_dir(connection_id)?,
@@ -72,7 +81,10 @@ fn get_saved_result_data_path(connection_id: &str, saved_result_id: &str) -> Res
     )
 }
 
-fn load_metadata(connection_id: &str, saved_result_id: &str) -> Result<SavedResultMetadata, ConfigError> {
+fn load_metadata(
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<SavedResultMetadata, ConfigError> {
     let path = get_saved_result_meta_path(connection_id, saved_result_id)?;
     let content = fs::read_to_string(path)?;
     let metadata: SavedResultMetadata = serde_json::from_str(&content)?;
@@ -94,7 +106,11 @@ fn to_csv_cell(value: &JsonValue) -> String {
     }
 }
 
-fn write_result_data(connection_id: &str, saved_result_id: &str, result: &QueryResult) -> Result<(), ConfigError> {
+fn write_result_data(
+    connection_id: &str,
+    saved_result_id: &str,
+    result: &QueryResult,
+) -> Result<(), ConfigError> {
     // Write JSON file preserving full type information (column types and value types).
     let data_path = get_saved_result_data_path(connection_id, saved_result_id)?;
     let content = serde_json::to_string(result)?;
@@ -102,8 +118,8 @@ fn write_result_data(connection_id: &str, saved_result_id: &str, result: &QueryR
 
     // Also write CSV as a human-readable export fallback.
     let csv_path = get_saved_result_csv_path(connection_id, saved_result_id)?;
-    let mut writer = csv::Writer::from_path(csv_path)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let mut writer =
+        csv::Writer::from_path(csv_path).map_err(|e| std::io::Error::other(e.to_string()))?;
     let headers: Vec<String> = result.columns.iter().map(|c| c.name.clone()).collect();
     writer
         .write_record(headers)
@@ -114,11 +130,17 @@ fn write_result_data(connection_id: &str, saved_result_id: &str, result: &QueryR
             .write_record(values)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
     }
-    writer.flush().map_err(|e| std::io::Error::other(e.to_string()))?;
+    writer
+        .flush()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     Ok(())
 }
 
-fn read_result_data(connection_id: &str, saved_result_id: &str, execution_time_ms: i64) -> Result<QueryResult, ConfigError> {
+fn read_result_data(
+    connection_id: &str,
+    saved_result_id: &str,
+    execution_time_ms: i64,
+) -> Result<QueryResult, ConfigError> {
     // Prefer the JSON file which preserves column types and value types.
     let data_path = get_saved_result_data_path(connection_id, saved_result_id)?;
     if data_path.exists() {
@@ -129,8 +151,8 @@ fn read_result_data(connection_id: &str, saved_result_id: &str, execution_time_m
 
     // Fall back to CSV for results saved before the JSON format was introduced.
     let csv_path = get_saved_result_csv_path(connection_id, saved_result_id)?;
-    let mut reader = csv::Reader::from_path(csv_path)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let mut reader =
+        csv::Reader::from_path(csv_path).map_err(|e| std::io::Error::other(e.to_string()))?;
     let headers = reader
         .headers()
         .map_err(|e| std::io::Error::other(e.to_string()))?
@@ -189,7 +211,10 @@ pub fn list_saved_results(connection_id: &str) -> Result<Vec<SavedResultMetadata
     Ok(results)
 }
 
-pub fn save_saved_result(connection_id: &str, request: &SaveSavedResultRequest) -> Result<SavedResult, ConfigError> {
+pub fn save_saved_result(
+    connection_id: &str,
+    request: &SaveSavedResultRequest,
+) -> Result<SavedResult, ConfigError> {
     validate_id(connection_id)?;
     let now = Utc::now().timestamp_millis();
     let id = request
@@ -227,12 +252,19 @@ pub fn save_saved_result(connection_id: &str, request: &SaveSavedResultRequest) 
     })
 }
 
-pub fn get_saved_result(connection_id: &str, saved_result_id: &str) -> Result<SavedResult, ConfigError> {
+pub fn get_saved_result(
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<SavedResult, ConfigError> {
     validate_id(connection_id)?;
     validate_id(saved_result_id)?;
     let metadata = load_metadata(connection_id, saved_result_id)?;
-    let query_result = read_result_data(connection_id, saved_result_id, metadata.execution_time_ms)?;
-    Ok(SavedResult { metadata, query_result })
+    let query_result =
+        read_result_data(connection_id, saved_result_id, metadata.execution_time_ms)?;
+    Ok(SavedResult {
+        metadata,
+        query_result,
+    })
 }
 
 pub fn delete_saved_result(connection_id: &str, saved_result_id: &str) -> Result<(), ConfigError> {
@@ -353,8 +385,14 @@ mod tests {
         assert_eq!(loaded.query_result.columns[2].type_name, "_text");
 
         // Array values must be preserved as arrays, not flattened to strings.
-        assert!(loaded.query_result.rows[0][2].is_array(), "array value should round-trip as array");
-        assert_eq!(loaded.query_result.rows[0][2], JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")]));
+        assert!(
+            loaded.query_result.rows[0][2].is_array(),
+            "array value should round-trip as array"
+        );
+        assert_eq!(
+            loaded.query_result.rows[0][2],
+            JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")])
+        );
 
         let renamed = rename_saved_result("conn-1", &saved.metadata.id, "Renamed").expect("rename");
         assert_eq!(renamed.name, "Renamed");

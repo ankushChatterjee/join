@@ -99,9 +99,15 @@ async fn sqlite_schema_and_metadata_integration() {
     let order_columns = get_columns(&connection_id, "orders", Some("main"))
         .await
         .expect("columns");
-    assert!(order_columns.iter().any(|c| c.name == "id" && c.is_primary_key));
-    assert!(order_columns.iter().any(|c| c.name == "customer_id" && !c.is_nullable));
-    assert!(order_columns.iter().any(|c| c.name == "status" && c.data_type.eq_ignore_ascii_case("TEXT")));
+    assert!(order_columns
+        .iter()
+        .any(|c| c.name == "id" && c.is_primary_key));
+    assert!(order_columns
+        .iter()
+        .any(|c| c.name == "customer_id" && !c.is_nullable));
+    assert!(order_columns
+        .iter()
+        .any(|c| c.name == "status" && c.data_type.eq_ignore_ascii_case("TEXT")));
 
     let indexes = get_indexes(&connection_id, "orders", Some("main"))
         .await
@@ -199,9 +205,7 @@ async fn sqlite_file_database_persists_between_connections() {
         .await
         .expect("disconnect first session");
 
-    connect(&config, None)
-        .await
-        .expect("reconnect sqlite file");
+    connect(&config, None).await.expect("reconnect sqlite file");
     let persisted = execute_query(&connection_id, "SELECT id, name FROM items")
         .await
         .expect("query persisted rows");

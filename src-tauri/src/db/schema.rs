@@ -102,7 +102,9 @@ pub struct FunctionDetailInfo {
 fn ensure_sqlite_identifier(identifier: &str, kind: &str) -> Result<(), DbError> {
     let mut chars = identifier.chars();
     let Some(first) = chars.next() else {
-        return Err(DbError::QueryFailed(format!("Invalid SQLite {kind}: empty")));
+        return Err(DbError::QueryFailed(format!(
+            "Invalid SQLite {kind}: empty"
+        )));
     };
     if !(first.is_ascii_alphabetic() || first == '_') {
         return Err(DbError::QueryFailed(format!(
@@ -119,21 +121,24 @@ fn ensure_sqlite_identifier(identifier: &str, kind: &str) -> Result<(), DbError>
 
 pub async fn get_schemas(connection_id: &str) -> Result<Vec<SchemaInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let rows = sqlx::query(
                 "SELECT schema_name as name FROM information_schema.schemata 
                  WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-                 ORDER BY schema_name"
+                 ORDER BY schema_name",
             )
             .fetch_all(&pool)
             .await
             .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| SchemaInfo {
-                name: row.get("name"),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| SchemaInfo {
+                    name: row.get("name"),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = sqlx::query(
@@ -144,14 +149,19 @@ pub async fn get_schemas(connection_id: &str) -> Result<Vec<SchemaInfo>, DbError
             .fetch_all(&pool)
             .await
             .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| SchemaInfo {
-                name: row.get("name"),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| SchemaInfo {
+                    name: row.get("name"),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(_) => {
             // SQLite doesn't have schemas, return a default one
-            Ok(vec![SchemaInfo { name: "main".to_string() }])
+            Ok(vec![SchemaInfo {
+                name: "main".to_string(),
+            }])
         }
     }
 }
@@ -161,7 +171,7 @@ pub async fn get_tables(
     schema: Option<&str>,
 ) -> Result<Vec<TableInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let schema_name = schema.unwrap_or("public");
@@ -169,17 +179,20 @@ pub async fn get_tables(
                 "SELECT table_name as name, table_schema as schema
                  FROM information_schema.tables
                  WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-                 ORDER BY table_name"
+                 ORDER BY table_name",
             )
-                .bind(schema_name)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| TableInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+            .bind(schema_name)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows
+                .iter()
+                .map(|row| TableInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
@@ -207,26 +220,32 @@ pub async fn get_tables(
                     .map_err(|e| DbError::QueryFailed(e.to_string()))?
                 }
             };
-            
-            Ok(rows.iter().map(|row| TableInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| TableInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(pool) => {
             let rows = sqlx::query(
                 "SELECT name, 'main' as schema FROM sqlite_master 
                  WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                 ORDER BY name"
+                 ORDER BY name",
             )
             .fetch_all(&pool)
             .await
             .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| TableInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| TableInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
     }
 }
@@ -237,7 +256,7 @@ pub async fn get_columns(
     schema: Option<&str>,
 ) -> Result<Vec<ColumnInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let schema_name = schema.unwrap_or("public");
@@ -274,59 +293,61 @@ pub async fn get_columns(
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| ColumnInfo {
-                name: row.get("name"),
-                data_type: row.get("data_type"),
-                is_nullable: row.try_get("is_nullable").unwrap_or(true),
-                is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
-                comment: row.try_get("comment").ok(),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| ColumnInfo {
+                    name: row.get("name"),
+                    data_type: row.get("data_type"),
+                    is_nullable: row.try_get("is_nullable").unwrap_or(true),
+                    is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
+                    comment: row.try_get("comment").ok(),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
-                Some(s) if !s.is_empty() => {
-                    sqlx::query(
-                        "SELECT
+                Some(s) if !s.is_empty() => sqlx::query(
+                    "SELECT
                             CAST(COLUMN_NAME AS CHAR) as name,
                             CAST(DATA_TYPE AS CHAR) as data_type,
                             (IS_NULLABLE = 'YES') as is_nullable,
                             (COLUMN_KEY = 'PRI') as is_primary_key
                         FROM information_schema.COLUMNS
                         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-                        ORDER BY ORDINAL_POSITION"
-                    )
-                    .bind(s)
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
-                _ => {
-                    sqlx::query(
-                        "SELECT
+                        ORDER BY ORDINAL_POSITION",
+                )
+                .bind(s)
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
+                _ => sqlx::query(
+                    "SELECT
                             CAST(COLUMN_NAME AS CHAR) as name,
                             CAST(DATA_TYPE AS CHAR) as data_type,
                             (IS_NULLABLE = 'YES') as is_nullable,
                             (COLUMN_KEY = 'PRI') as is_primary_key
                         FROM information_schema.COLUMNS
                         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-                        ORDER BY ORDINAL_POSITION"
-                    )
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
+                        ORDER BY ORDINAL_POSITION",
+                )
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
             };
-            
-            Ok(rows.iter().map(|row| ColumnInfo {
-                name: row.get("name"),
-                data_type: row.get("data_type"),
-                is_nullable: row.try_get("is_nullable").unwrap_or(true),
-                is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
-                comment: None,
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| ColumnInfo {
+                    name: row.get("name"),
+                    data_type: row.get("data_type"),
+                    is_nullable: row.try_get("is_nullable").unwrap_or(true),
+                    is_primary_key: row.try_get("is_primary_key").unwrap_or(false),
+                    comment: None,
+                })
+                .collect())
         }
         DatabasePool::Sqlite(pool) => {
             ensure_sqlite_identifier(table, "table name")?;
@@ -335,14 +356,17 @@ pub async fn get_columns(
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| ColumnInfo {
-                name: row.get("name"),
-                data_type: row.get("type"),
-                is_nullable: row.get::<i32, _>("notnull") == 0,
-                is_primary_key: row.get::<i32, _>("pk") == 1,
-                comment: None,
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| ColumnInfo {
+                    name: row.get("name"),
+                    data_type: row.get("type"),
+                    is_nullable: row.get::<i32, _>("notnull") == 0,
+                    is_primary_key: row.get::<i32, _>("pk") == 1,
+                    comment: None,
+                })
+                .collect())
         }
     }
 }
@@ -352,7 +376,7 @@ pub async fn get_views(
     schema: Option<&str>,
 ) -> Result<Vec<ViewInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let schema_name = schema.unwrap_or("public");
@@ -360,17 +384,20 @@ pub async fn get_views(
                 "SELECT table_name as name, table_schema as schema
                  FROM information_schema.tables
                  WHERE table_schema = $1 AND table_type = 'VIEW'
-                 ORDER BY table_name"
+                 ORDER BY table_name",
             )
-                .bind(schema_name)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| ViewInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+            .bind(schema_name)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows
+                .iter()
+                .map(|row| ViewInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
@@ -398,26 +425,32 @@ pub async fn get_views(
                     .map_err(|e| DbError::QueryFailed(e.to_string()))?
                 }
             };
-            
-            Ok(rows.iter().map(|row| ViewInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| ViewInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(pool) => {
             let rows = sqlx::query(
                 "SELECT name, 'main' as schema FROM sqlite_master 
                  WHERE type = 'view' AND name NOT LIKE 'sqlite_%'
-                 ORDER BY name"
+                 ORDER BY name",
             )
             .fetch_all(&pool)
             .await
             .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| ViewInfo {
-                name: row.get("name"),
-                schema: row.try_get("schema").ok(),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| ViewInfo {
+                    name: row.get("name"),
+                    schema: row.try_get("schema").ok(),
+                })
+                .collect())
         }
     }
 }
@@ -428,7 +461,7 @@ pub async fn get_indexes(
     schema: Option<&str>,
 ) -> Result<Vec<IndexInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let schema_name = schema.unwrap_or("public");
@@ -442,62 +475,64 @@ pub async fn get_indexes(
                 JOIN pg_class i ON i.oid = ix.indexrelid
                 JOIN pg_namespace n ON n.oid = t.relnamespace
                 WHERE t.relname = $1 AND n.nspname = $2
-                ORDER BY i.relname"
+                ORDER BY i.relname",
             )
-                .bind(table)
-                .bind(schema_name)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| IndexInfo {
-                name: row.get("name"),
-                is_unique: row.try_get("is_unique").unwrap_or(false),
-                is_primary: row.try_get("is_primary").unwrap_or(false),
-            }).collect())
+            .bind(table)
+            .bind(schema_name)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+
+            Ok(rows
+                .iter()
+                .map(|row| IndexInfo {
+                    name: row.get("name"),
+                    is_unique: row.try_get("is_unique").unwrap_or(false),
+                    is_primary: row.try_get("is_primary").unwrap_or(false),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
-                Some(s) if !s.is_empty() => {
-                    sqlx::query(
-                        "SELECT
+                Some(s) if !s.is_empty() => sqlx::query(
+                    "SELECT
                             CAST(INDEX_NAME AS CHAR) as name,
                             (NON_UNIQUE = 0) as is_unique,
                             (INDEX_NAME = 'PRIMARY') as is_primary
                         FROM information_schema.STATISTICS
                         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
                         GROUP BY INDEX_NAME, NON_UNIQUE
-                        ORDER BY INDEX_NAME"
-                    )
-                    .bind(s)
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
-                _ => {
-                    sqlx::query(
-                        "SELECT
+                        ORDER BY INDEX_NAME",
+                )
+                .bind(s)
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
+                _ => sqlx::query(
+                    "SELECT
                             CAST(INDEX_NAME AS CHAR) as name,
                             (NON_UNIQUE = 0) as is_unique,
                             (INDEX_NAME = 'PRIMARY') as is_primary
                         FROM information_schema.STATISTICS
                         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
                         GROUP BY INDEX_NAME, NON_UNIQUE
-                        ORDER BY INDEX_NAME"
-                    )
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
+                        ORDER BY INDEX_NAME",
+                )
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
             };
-            
-            Ok(rows.iter().map(|row| IndexInfo {
-                name: row.get("name"),
-                is_unique: row.try_get("is_unique").unwrap_or(false),
-                is_primary: row.try_get("is_primary").unwrap_or(false),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| IndexInfo {
+                    name: row.get("name"),
+                    is_unique: row.try_get("is_unique").unwrap_or(false),
+                    is_primary: row.try_get("is_primary").unwrap_or(false),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(pool) => {
             ensure_sqlite_identifier(table, "table name")?;
@@ -506,17 +541,20 @@ pub async fn get_indexes(
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| {
-                let name: String = row.get("name");
-                let unique: i32 = row.get("unique");
-                let origin: String = row.try_get("origin").unwrap_or_default();
-                IndexInfo {
-                    name,
-                    is_unique: unique == 1,
-                    is_primary: origin == "pk",
-                }
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| {
+                    let name: String = row.get("name");
+                    let unique: i32 = row.get("unique");
+                    let origin: String = row.try_get("origin").unwrap_or_default();
+                    IndexInfo {
+                        name,
+                        is_unique: unique == 1,
+                        is_primary: origin == "pk",
+                    }
+                })
+                .collect())
         }
     }
 }
@@ -546,27 +584,29 @@ pub async fn get_foreign_keys(
                     ON ccu.constraint_name = rc.unique_constraint_name
                     AND ccu.table_schema = rc.unique_constraint_schema
                 WHERE kcu.table_schema = $1 AND kcu.table_name = $2
-                ORDER BY rc.constraint_name, kcu.ordinal_position"
+                ORDER BY rc.constraint_name, kcu.ordinal_position",
             )
-                .bind(schema_name)
-                .bind(table)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+            .bind(schema_name)
+            .bind(table)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
-            Ok(rows.iter().map(|row| ForeignKeyInfo {
-                constraint_name: row.get("constraint_name"),
-                column_name: row.get("column_name"),
-                foreign_table_schema: row.get("foreign_table_schema"),
-                foreign_table_name: row.get("foreign_table_name"),
-                foreign_column_name: row.get("foreign_column_name"),
-            }).collect())
+            Ok(rows
+                .iter()
+                .map(|row| ForeignKeyInfo {
+                    constraint_name: row.get("constraint_name"),
+                    column_name: row.get("column_name"),
+                    foreign_table_schema: row.get("foreign_table_schema"),
+                    foreign_table_name: row.get("foreign_table_name"),
+                    foreign_column_name: row.get("foreign_column_name"),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
-                Some(s) if !s.is_empty() => {
-                    sqlx::query(
-                        "SELECT
+                Some(s) if !s.is_empty() => sqlx::query(
+                    "SELECT
                             CAST(CONSTRAINT_NAME AS CHAR) as constraint_name,
                             CAST(COLUMN_NAME AS CHAR) as column_name,
                             CAST(REFERENCED_TABLE_SCHEMA AS CHAR) as foreign_table_schema,
@@ -575,17 +615,15 @@ pub async fn get_foreign_keys(
                         FROM information_schema.KEY_COLUMN_USAGE
                         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
                           AND REFERENCED_TABLE_NAME IS NOT NULL
-                        ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION"
-                    )
-                    .bind(s)
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
-                _ => {
-                    sqlx::query(
-                        "SELECT
+                        ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION",
+                )
+                .bind(s)
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
+                _ => sqlx::query(
+                    "SELECT
                             CAST(CONSTRAINT_NAME AS CHAR) as constraint_name,
                             CAST(COLUMN_NAME AS CHAR) as column_name,
                             CAST(REFERENCED_TABLE_SCHEMA AS CHAR) as foreign_table_schema,
@@ -594,22 +632,24 @@ pub async fn get_foreign_keys(
                         FROM information_schema.KEY_COLUMN_USAGE
                         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
                           AND REFERENCED_TABLE_NAME IS NOT NULL
-                        ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION"
-                    )
-                    .bind(table)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
+                        ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION",
+                )
+                .bind(table)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
             };
 
-            Ok(rows.iter().map(|row| ForeignKeyInfo {
-                constraint_name: row.get("constraint_name"),
-                column_name: row.get("column_name"),
-                foreign_table_schema: row.get("foreign_table_schema"),
-                foreign_table_name: row.get("foreign_table_name"),
-                foreign_column_name: row.get("foreign_column_name"),
-            }).collect())
+            Ok(rows
+                .iter()
+                .map(|row| ForeignKeyInfo {
+                    constraint_name: row.get("constraint_name"),
+                    column_name: row.get("column_name"),
+                    foreign_table_schema: row.get("foreign_table_schema"),
+                    foreign_table_name: row.get("foreign_table_name"),
+                    foreign_column_name: row.get("foreign_column_name"),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(pool) => {
             // PRAGMA foreign_key_list returns: id, seq, table, from, to, on_update, on_delete, match
@@ -621,18 +661,22 @@ pub async fn get_foreign_keys(
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
-            Ok(rows.iter().enumerate().map(|(i, row)| {
-                let foreign_table: String = row.get("table");
-                let from_col: String = row.get("from");
-                let to_col: String = row.get("to");
-                ForeignKeyInfo {
-                    constraint_name: format!("fk_{}_{}", table, i),
-                    column_name: from_col,
-                    foreign_table_schema: "main".to_string(),
-                    foreign_table_name: foreign_table,
-                    foreign_column_name: to_col,
-                }
-            }).collect())
+            Ok(rows
+                .iter()
+                .enumerate()
+                .map(|(i, row)| {
+                    let foreign_table: String = row.get("table");
+                    let from_col: String = row.get("from");
+                    let to_col: String = row.get("to");
+                    ForeignKeyInfo {
+                        constraint_name: format!("fk_{}_{}", table, i),
+                        column_name: from_col,
+                        foreign_table_schema: "main".to_string(),
+                        foreign_table_name: foreign_table,
+                        foreign_column_name: to_col,
+                    }
+                })
+                .collect())
         }
     }
 }
@@ -642,7 +686,7 @@ pub async fn get_functions(
     schema: Option<&str>,
 ) -> Result<Vec<FunctionInfo>, DbError> {
     let pool = get_pool(connection_id).await?;
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             let schema_name = schema.unwrap_or("public");
@@ -662,55 +706,57 @@ pub async fn get_functions(
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
-            Ok(rows.iter().map(|row| FunctionInfo {
-                name: row.get("name"),
-                return_type: row.try_get("return_type").ok(),
-                schema: row.try_get("schema").ok(),
-                specific_name: row.get("specific_name"),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| FunctionInfo {
+                    name: row.get("name"),
+                    return_type: row.try_get("return_type").ok(),
+                    schema: row.try_get("schema").ok(),
+                    specific_name: row.get("specific_name"),
+                })
+                .collect())
         }
         DatabasePool::MySql(pool) => {
             let rows = match schema {
-                Some(s) if !s.is_empty() => {
-                    sqlx::query(
-                        "SELECT
+                Some(s) if !s.is_empty() => sqlx::query(
+                    "SELECT
                             CAST(ROUTINE_NAME AS CHAR) as name,
                             CAST(DATA_TYPE AS CHAR) as return_type,
                             CAST(ROUTINE_SCHEMA AS CHAR) as `schema`,
                             CAST(SPECIFIC_NAME AS CHAR) as specific_name
                         FROM information_schema.ROUTINES
                         WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'FUNCTION'
-                        ORDER BY ROUTINE_NAME"
-                    )
-                    .bind(s)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
-                _ => {
-                    sqlx::query(
-                        "SELECT
+                        ORDER BY ROUTINE_NAME",
+                )
+                .bind(s)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
+                _ => sqlx::query(
+                    "SELECT
                             CAST(ROUTINE_NAME AS CHAR) as name,
                             CAST(DATA_TYPE AS CHAR) as return_type,
                             CAST(ROUTINE_SCHEMA AS CHAR) as `schema`,
                             CAST(SPECIFIC_NAME AS CHAR) as specific_name
                         FROM information_schema.ROUTINES
                         WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'FUNCTION'
-                        ORDER BY ROUTINE_NAME"
-                    )
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
+                        ORDER BY ROUTINE_NAME",
+                )
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
             };
-            
-            Ok(rows.iter().map(|row| FunctionInfo {
-                name: row.get("name"),
-                return_type: row.try_get("return_type").ok(),
-                schema: row.try_get("schema").ok(),
-                specific_name: row.get("specific_name"),
-            }).collect())
+
+            Ok(rows
+                .iter()
+                .map(|row| FunctionInfo {
+                    name: row.get("name"),
+                    return_type: row.try_get("return_type").ok(),
+                    schema: row.try_get("schema").ok(),
+                    specific_name: row.get("specific_name"),
+                })
+                .collect())
         }
         DatabasePool::Sqlite(_) => {
             // SQLite doesn't expose user-defined functions through SQL queries
@@ -745,12 +791,12 @@ pub async fn get_custom_types(
                   AND NOT EXISTS (
                       SELECT 1 FROM pg_class c WHERE c.reltype = t.oid AND c.relkind = 'r'
                   )
-                ORDER BY t.typname"
+                ORDER BY t.typname",
             )
-                .bind(schema_name)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+            .bind(schema_name)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
             Ok(rows
                 .iter()
@@ -764,37 +810,33 @@ pub async fn get_custom_types(
         DatabasePool::MySql(pool) => {
             // MySQL doesn't have standalone types, but we can extract ENUM/SET definitions from columns
             let rows = match schema {
-                Some(s) if !s.is_empty() => {
-                    sqlx::query(
-                        "SELECT DISTINCT
+                Some(s) if !s.is_empty() => sqlx::query(
+                    "SELECT DISTINCT
                             CAST(COLUMN_TYPE AS CHAR) as column_type,
                             CAST(DATA_TYPE AS CHAR) as data_type,
                             CAST(TABLE_SCHEMA AS CHAR) as `schema`
                         FROM information_schema.COLUMNS
                         WHERE TABLE_SCHEMA = ?
                           AND DATA_TYPE IN ('enum', 'set')
-                        ORDER BY COLUMN_TYPE"
-                    )
-                    .bind(s)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
-                _ => {
-                    sqlx::query(
-                        "SELECT DISTINCT
+                        ORDER BY COLUMN_TYPE",
+                )
+                .bind(s)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
+                _ => sqlx::query(
+                    "SELECT DISTINCT
                             CAST(COLUMN_TYPE AS CHAR) as column_type,
                             CAST(DATA_TYPE AS CHAR) as data_type,
                             CAST(TABLE_SCHEMA AS CHAR) as `schema`
                         FROM information_schema.COLUMNS
                         WHERE TABLE_SCHEMA = DATABASE()
                           AND DATA_TYPE IN ('enum', 'set')
-                        ORDER BY COLUMN_TYPE"
-                    )
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                }
+                        ORDER BY COLUMN_TYPE",
+                )
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DbError::QueryFailed(e.to_string()))?,
             };
 
             Ok(rows
@@ -838,14 +880,14 @@ pub async fn get_type_details(
                     pg_catalog.format_type(t.typbasetype, t.typtypmod) as base_type_name
                 FROM pg_type t
                 JOIN pg_namespace n ON n.oid = t.typnamespace
-                WHERE n.nspname = $1 AND t.typname = $2"
+                WHERE n.nspname = $1 AND t.typname = $2",
             )
-                .bind(schema_name)
-                .bind(type_name)
-                .fetch_optional(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?
-                .ok_or_else(|| DbError::QueryFailed(format!("Type '{}' not found", type_name)))?;
+            .bind(schema_name)
+            .bind(type_name)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| DbError::QueryFailed(e.to_string()))?
+            .ok_or_else(|| DbError::QueryFailed(format!("Type '{}' not found", type_name)))?;
 
             let typtype: String = type_row.get("typtype");
 
@@ -858,16 +900,15 @@ pub async fn get_type_details(
                         JOIN pg_type t ON t.oid = e.enumtypid
                         JOIN pg_namespace n ON n.oid = t.typnamespace
                         WHERE n.nspname = $1 AND t.typname = $2
-                        ORDER BY e.enumsortorder"
+                        ORDER BY e.enumsortorder",
                     )
-                        .bind(schema_name)
-                        .bind(type_name)
-                        .fetch_all(&pool)
-                        .await
-                        .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+                    .bind(schema_name)
+                    .bind(type_name)
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
-                    let values: Vec<String> =
-                        value_rows.iter().map(|r| r.get("value")).collect();
+                    let values: Vec<String> = value_rows.iter().map(|r| r.get("value")).collect();
 
                     Ok(TypeDetailInfo {
                         name: type_name.to_string(),
@@ -889,13 +930,13 @@ pub async fn get_type_details(
                         JOIN pg_type t ON t.typrelid = a.attrelid
                         JOIN pg_namespace n ON n.oid = t.typnamespace
                         WHERE n.nspname = $1 AND t.typname = $2 AND a.attnum > 0
-                        ORDER BY a.attnum"
+                        ORDER BY a.attnum",
                     )
-                        .bind(schema_name)
-                        .bind(type_name)
-                        .fetch_all(&pool)
-                        .await
-                        .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+                    .bind(schema_name)
+                    .bind(type_name)
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
                     let fields: Vec<TypeFieldInfo> = field_rows
                         .iter()
@@ -925,13 +966,13 @@ pub async fn get_type_details(
                         FROM pg_constraint c
                         JOIN pg_type t ON t.oid = c.contypid
                         JOIN pg_namespace n ON n.oid = t.typnamespace
-                        WHERE n.nspname = $1 AND t.typname = $2"
+                        WHERE n.nspname = $1 AND t.typname = $2",
                     )
-                        .bind(schema_name)
-                        .bind(type_name)
-                        .fetch_optional(&pool)
-                        .await
-                        .map_err(|e| DbError::QueryFailed(e.to_string()))?;
+                    .bind(schema_name)
+                    .bind(type_name)
+                    .fetch_optional(&pool)
+                    .await
+                    .map_err(|e| DbError::QueryFailed(e.to_string()))?;
 
                     let constraint: Option<String> =
                         constraint_row.and_then(|r| r.try_get("constraint_def").ok());

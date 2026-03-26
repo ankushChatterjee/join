@@ -48,26 +48,51 @@ async fn postgres_metadata_and_query_integration() {
     let columns = get_columns(&connection_id, "orders", Some("public"))
         .await
         .expect("columns");
-    assert!(columns.iter().any(|c| c.name == "status" && c.data_type.contains("order_status")));
+    assert!(columns
+        .iter()
+        .any(|c| c.name == "status" && c.data_type.contains("order_status")));
     assert!(columns.iter().any(|c| c.name == "tags"));
-    
+
     // Test column comments
-    let status_col = columns.iter().find(|c| c.name == "status").expect("status column");
-    assert_eq!(status_col.comment, Some("Order status: pending, paid, or shipped".to_string()));
-    
-    let total_col = columns.iter().find(|c| c.name == "total").expect("total column");
-    assert_eq!(total_col.comment, Some("Total order amount in currency".to_string()));
-    
-    let tags_col = columns.iter().find(|c| c.name == "tags").expect("tags column");
-    assert_eq!(tags_col.comment, Some("Tags associated with this order".to_string()));
-    
+    let status_col = columns
+        .iter()
+        .find(|c| c.name == "status")
+        .expect("status column");
+    assert_eq!(
+        status_col.comment,
+        Some("Order status: pending, paid, or shipped".to_string())
+    );
+
+    let total_col = columns
+        .iter()
+        .find(|c| c.name == "total")
+        .expect("total column");
+    assert_eq!(
+        total_col.comment,
+        Some("Total order amount in currency".to_string())
+    );
+
+    let tags_col = columns
+        .iter()
+        .find(|c| c.name == "tags")
+        .expect("tags column");
+    assert_eq!(
+        tags_col.comment,
+        Some("Tags associated with this order".to_string())
+    );
+
     let id_col = columns.iter().find(|c| c.name == "id").expect("id column");
-    assert_eq!(id_col.comment, None, "Column without comment should be None");
+    assert_eq!(
+        id_col.comment, None,
+        "Column without comment should be None"
+    );
 
     let indexes = get_indexes(&connection_id, "orders", Some("public"))
         .await
         .expect("indexes");
-    assert!(indexes.iter().any(|i| i.name.contains("idx_orders_customer_id")));
+    assert!(indexes
+        .iter()
+        .any(|i| i.name.contains("idx_orders_customer_id")));
 
     let fks = get_foreign_keys(&connection_id, "orders", Some("public"))
         .await
@@ -79,17 +104,23 @@ async fn postgres_metadata_and_query_integration() {
         .expect("functions");
     assert!(functions.iter().any(|f| f.name == "calculate_discount"));
 
-    let function_detail = get_function_details(&connection_id, "calculate_discount", Some("public"))
-        .await
-        .expect("function detail");
+    let function_detail =
+        get_function_details(&connection_id, "calculate_discount", Some("public"))
+            .await
+            .expect("function detail");
     assert_eq!(function_detail.name, "calculate_discount");
-    assert!(function_detail.return_type.unwrap_or_default().contains("numeric"));
+    assert!(function_detail
+        .return_type
+        .unwrap_or_default()
+        .contains("numeric"));
 
     let custom_types = get_custom_types(&connection_id, Some("public"))
         .await
         .expect("custom types");
     assert!(custom_types.iter().any(|t| t.name == "order_status"));
-    assert!(custom_types.iter().any(|t| t.name == "shipping_address_type"));
+    assert!(custom_types
+        .iter()
+        .any(|t| t.name == "shipping_address_type"));
     assert!(custom_types.iter().any(|t| t.name == "positive_int"));
 
     let enum_detail = get_type_details(&connection_id, "order_status", Some("public"))
@@ -101,9 +132,10 @@ async fn postgres_metadata_and_query_integration() {
         vec!["pending", "paid", "shipped"]
     );
 
-    let composite_detail = get_type_details(&connection_id, "shipping_address_type", Some("public"))
-        .await
-        .expect("composite detail");
+    let composite_detail =
+        get_type_details(&connection_id, "shipping_address_type", Some("public"))
+            .await
+            .expect("composite detail");
     assert_eq!(composite_detail.type_kind, "composite");
     assert_eq!(composite_detail.fields.unwrap_or_default().len(), 2);
 
@@ -111,7 +143,10 @@ async fn postgres_metadata_and_query_integration() {
         .await
         .expect("domain detail");
     assert_eq!(domain_detail.type_kind, "domain");
-    assert!(domain_detail.base_type.unwrap_or_default().contains("integer"));
+    assert!(domain_detail
+        .base_type
+        .unwrap_or_default()
+        .contains("integer"));
 
     let result = execute_query(
         &connection_id,
@@ -131,7 +166,10 @@ async fn postgres_metadata_and_query_integration() {
     assert!(matches!(&row[1], Value::Array(_)));
     assert!(matches!(&row[3], Value::Object(_)));
     if let Value::Object(obj) = &row[2] {
-        assert_eq!(obj.get("_display"), Some(&Value::String("composite".into())));
+        assert_eq!(
+            obj.get("_display"),
+            Some(&Value::String("composite".into()))
+        );
     } else {
         panic!("expected composite type object");
     }
@@ -182,17 +220,23 @@ async fn postgres_metadata_and_query_integration() {
     assert_eq!(r[1].as_i64(), Some(42));
     assert_eq!(r[2].as_i64(), Some(900719925474099));
     assert!((r[3].as_f64().expect("real as f64") - 3.25).abs() < 1e-6);
-    assert!((r[4].as_f64().expect("double as f64") - 6.283185307).abs() < 1e-9);
+    assert!((r[4].as_f64().expect("double as f64") - std::f64::consts::TAU).abs() < 1e-9);
     assert_eq!(r[5].as_str(), Some("1234567890.123456"));
     assert_eq!(r[6].as_bool(), Some(true));
     assert_eq!(r[7].as_str(), Some("123e4567-e89b-12d3-a456-426614174000"));
     assert_eq!(r[8].as_str(), Some("2026-01-02 03:04:05"));
-    assert!(r[9].as_str().unwrap_or_default().contains("2026-01-02 03:04:05"));
+    assert!(r[9]
+        .as_str()
+        .unwrap_or_default()
+        .contains("2026-01-02 03:04:05"));
     assert_eq!(r[10].as_str(), Some("2026-01-02"));
     assert_eq!(r[11].as_str(), Some("03:04:05"));
 
     let json_obj = r[12].as_object().expect("jsonb object");
-    assert_eq!(json_obj.get("name"), Some(&Value::String("types-row".into())));
+    assert_eq!(
+        json_obj.get("name"),
+        Some(&Value::String("types-row".into()))
+    );
     assert_eq!(json_obj.get("ok"), Some(&Value::Bool(true)));
     assert_eq!(json_obj.get("count"), Some(&Value::Number(3.into())));
 
@@ -211,7 +255,10 @@ async fn postgres_metadata_and_query_integration() {
 
     assert_eq!(r[25].as_str(), Some("shipped"));
     if let Value::Object(obj) = &r[26] {
-        assert_eq!(obj.get("_display"), Some(&Value::String("composite".into())));
+        assert_eq!(
+            obj.get("_display"),
+            Some(&Value::String("composite".into()))
+        );
         assert!(obj
             .get("_raw")
             .and_then(Value::as_str)

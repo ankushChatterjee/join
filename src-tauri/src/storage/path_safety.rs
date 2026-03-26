@@ -5,10 +5,14 @@ use super::ConfigError;
 
 pub fn validate_id(id: &str) -> Result<(), ConfigError> {
     if id.is_empty() {
-        return Err(ConfigError::ValidationError("identifier cannot be empty".to_string()));
+        return Err(ConfigError::ValidationError(
+            "identifier cannot be empty".to_string(),
+        ));
     }
     if id.len() > 128 {
-        return Err(ConfigError::ValidationError("identifier is too long".to_string()));
+        return Err(ConfigError::ValidationError(
+            "identifier is too long".to_string(),
+        ));
     }
     if id.contains("..")
         || id.contains('/')

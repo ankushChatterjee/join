@@ -1,12 +1,12 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 
-use super::ConfigError;
 use super::path_safety::{safe_join, validate_id};
+use super::ConfigError;
 
 const SHEET_FORMAT_VERSION: i64 = 1;
 
@@ -197,8 +197,8 @@ fn load_script_sheet(
     }
 
     // Legacy migration path: if there is only a .sql file, convert it to one sheet cell.
-    let legacy_content = fs::read_to_string(get_script_sql_path(connection_id, script_id)?)
-        .unwrap_or_default();
+    let legacy_content =
+        fs::read_to_string(get_script_sql_path(connection_id, script_id)?).unwrap_or_default();
     let sheet = create_default_sheet(legacy_content);
     save_script_sheet(connection_id, script_id, &sheet)?;
     Ok(sheet)
@@ -312,10 +312,7 @@ pub fn queue_script_update(
         .lock()
         .map_err(|_| ConfigError::ValidationError("script save queue lock poisoned".to_string()))?;
 
-    let last_flushed_revision = queue
-        .get(&key)
-        .map(|u| u.revision)
-        .unwrap_or(0);
+    let last_flushed_revision = queue.get(&key).map(|u| u.revision).unwrap_or(0);
     queue.insert(
         key,
         PendingScriptUpdate {
@@ -364,11 +361,7 @@ pub fn flush_script_updates(script_id: &str) -> Result<ScriptSaveQueueStatus, Co
         });
     };
 
-    update_script_content(
-        &update.connection_id,
-        &update.script_id,
-        &update.sheet,
-    )?;
+    update_script_content(&update.connection_id, &update.script_id, &update.sheet)?;
 
     Ok(ScriptSaveQueueStatus {
         script_id: update.script_id,
@@ -488,10 +481,13 @@ mod tests {
         let script = create_script("conn-legacy", "Legacy Script").expect("create script");
 
         let legacy_sql = "SELECT * FROM customers;";
-        let legacy_path = get_script_sql_path("conn-legacy", &script.metadata.id).expect("legacy path");
+        let legacy_path =
+            get_script_sql_path("conn-legacy", &script.metadata.id).expect("legacy path");
         fs::write(&legacy_path, legacy_sql).expect("write legacy sql");
-        fs::remove_file(get_script_sheet_path("conn-legacy", &script.metadata.id).expect("sheet path"))
-            .expect("remove sheet");
+        fs::remove_file(
+            get_script_sheet_path("conn-legacy", &script.metadata.id).expect("sheet path"),
+        )
+        .expect("remove sheet");
 
         let loaded = get_script("conn-legacy", &script.metadata.id).expect("load script");
         assert_eq!(loaded.sheet.cells.len(), 1);

@@ -27,7 +27,7 @@ pub struct ColumnDef {
 pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult, DbError> {
     let pool = get_pool(connection_id).await?;
     let start = Instant::now();
-    
+
     match pool {
         DatabasePool::Postgres(pool) => {
             // Detect multi-statement SQL (contains ';' not just as a trailing terminator).
@@ -51,9 +51,9 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     .await
                     .map_err(|e| DbError::QueryFailed(e.to_string()))?
             };
-            
+
             let execution_time_ms = start.elapsed().as_millis() as u64;
-            
+
             if rows.is_empty() {
                 return Ok(QueryResult {
                     columns: vec![],
@@ -62,7 +62,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     execution_time_ms,
                 });
             }
-            
+
             let columns: Vec<ColumnDef> = rows[0]
                 .columns()
                 .iter()
@@ -76,14 +76,11 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     is_indexed: None,
                 })
                 .collect();
-            
-            let result_rows: Vec<Vec<JsonValue>> = rows
-                .iter()
-                .map(|row| convert_pg_row(row))
-                .collect();
-            
+
+            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_pg_row).collect();
+
             let row_count = result_rows.len();
-            
+
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
@@ -96,9 +93,9 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
+
             let execution_time_ms = start.elapsed().as_millis() as u64;
-            
+
             if rows.is_empty() {
                 return Ok(QueryResult {
                     columns: vec![],
@@ -107,7 +104,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     execution_time_ms,
                 });
             }
-            
+
             let columns: Vec<ColumnDef> = rows[0]
                 .columns()
                 .iter()
@@ -118,14 +115,11 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     is_indexed: None,
                 })
                 .collect();
-            
-            let result_rows: Vec<Vec<JsonValue>> = rows
-                .iter()
-                .map(|row| convert_mysql_row(row))
-                .collect();
-            
+
+            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_mysql_row).collect();
+
             let row_count = result_rows.len();
-            
+
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
@@ -138,9 +132,9 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                 .fetch_all(&pool)
                 .await
                 .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-            
+
             let execution_time_ms = start.elapsed().as_millis() as u64;
-            
+
             if rows.is_empty() {
                 return Ok(QueryResult {
                     columns: vec![],
@@ -149,7 +143,7 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     execution_time_ms,
                 });
             }
-            
+
             let columns: Vec<ColumnDef> = rows[0]
                 .columns()
                 .iter()
@@ -160,14 +154,11 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                     is_indexed: None,
                 })
                 .collect();
-            
-            let result_rows: Vec<Vec<JsonValue>> = rows
-                .iter()
-                .map(|row| convert_sqlite_row(row))
-                .collect();
-            
+
+            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_sqlite_row).collect();
+
             let row_count = result_rows.len();
-            
+
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
@@ -190,14 +181,14 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
             }))
             .unwrap_or_else(|_| "UNKNOWN".to_string());
             let is_array_like = type_name.ends_with("[]") || type_name.starts_with('_');
-            
+
             // Handle NULL
             if let Ok(raw) = row.try_get_raw(i) {
                 if raw.is_null() {
                     return JsonValue::Null;
                 }
             }
-            
+
             // Try common types
             if let Ok(v) = row.try_get::<i64, _>(i) {
                 return json!(v);
@@ -250,7 +241,7 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                     return v;
                 }
             }
-            
+
             // PostgreSQL arrays - try common array types (only on array-like OIDs)
             if is_array_like {
                 // Integer arrays
@@ -298,20 +289,20 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                     return json!(v.iter().map(|t| t.to_string()).collect::<Vec<_>>());
                 }
             }
-            
+
             // For custom types (enums, composite types, domains), try to get raw bytes as text
             // PostgreSQL sends custom types in text format when using the simple query protocol
             if let Ok(raw) = row.try_get_raw(i) {
                 // Try to decode as UTF-8 text from the raw value
                 if let Ok(bytes) = raw.as_bytes() {
                     // Check if this is binary composite format (contains null bytes)
-                    if bytes.len() >= 4 && bytes[0..4].iter().any(|&b| b == 0) {
+                    if bytes.len() >= 4 && bytes[0..4].contains(&0) {
                         // Binary composite format: parse it
                         if let Some(parsed) = parse_binary_composite(bytes, &type_name) {
                             return parsed;
                         }
                     }
-                    
+
                     if let Ok(text) = std::str::from_utf8(bytes) {
                         // For composite types, normalize both raw "(...)" and quoted "\"(...)\"" forms.
                         if let Some(raw_composite) = normalize_composite_raw(text) {
@@ -340,7 +331,7 @@ fn convert_pg_row(row: &sqlx::postgres::PgRow) -> Vec<JsonValue> {
                 }
                 return json!(v);
             }
-            
+
             // Fallback
             json!(format!("[{}]", type_name))
         })
@@ -370,26 +361,31 @@ fn parse_binary_composite(bytes: &[u8], type_name: &str) -> Option<JsonValue> {
     if bytes.len() < 4 {
         return None;
     }
-    
+
     // Read field count (big-endian u32)
     let field_count = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-    
+
     let mut fields = Vec::with_capacity(field_count);
     let mut offset = 4;
-    
+
     for _ in 0..field_count {
         // Need at least 8 more bytes (OID + length)
         if offset + 8 > bytes.len() {
             return None;
         }
-        
+
         // Skip 4-byte type OID
         offset += 4;
-        
+
         // Read 4-byte length (big-endian i32, -1 means NULL)
-        let length = i32::from_be_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]]);
+        let length = i32::from_be_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ]);
         offset += 4;
-        
+
         if length < 0 {
             // NULL field
             fields.push("NULL".to_string());
@@ -398,7 +394,7 @@ fn parse_binary_composite(bytes: &[u8], type_name: &str) -> Option<JsonValue> {
             if offset + len > bytes.len() {
                 return None;
             }
-            
+
             // Try to decode as UTF-8 text
             let field_data = &bytes[offset..offset + len];
             let field_str = std::str::from_utf8(field_data).unwrap_or("[binary]");
@@ -406,10 +402,10 @@ fn parse_binary_composite(bytes: &[u8], type_name: &str) -> Option<JsonValue> {
             offset += len;
         }
     }
-    
+
     // Build text representation: (field1,field2,...)
     let text_repr = format!("({})", fields.join(","));
-    
+
     Some(json!({
         "_type": type_name.to_lowercase(),
         "_raw": text_repr,
@@ -423,14 +419,14 @@ fn convert_mysql_row(row: &sqlx::mysql::MySqlRow) -> Vec<JsonValue> {
         .enumerate()
         .map(|(i, col)| {
             let type_name = col.type_info().name().to_uppercase();
-            
+
             // Handle NULL
             if let Ok(raw) = row.try_get_raw(i) {
                 if raw.is_null() {
                     return JsonValue::Null;
                 }
             }
-            
+
             // Try common types
             if let Ok(v) = row.try_get::<i64, _>(i) {
                 return json!(v);
@@ -469,7 +465,7 @@ fn convert_mysql_row(row: &sqlx::mysql::MySqlRow) -> Vec<JsonValue> {
             if let Ok(v) = row.try_get::<chrono::NaiveTime, _>(i) {
                 return json!(v.to_string());
             }
-            
+
             // Fallback
             json!(format!("[{}]", type_name))
         })
@@ -482,14 +478,14 @@ fn convert_sqlite_row(row: &sqlx::sqlite::SqliteRow) -> Vec<JsonValue> {
         .enumerate()
         .map(|(i, col)| {
             let type_name = col.type_info().name().to_uppercase();
-            
+
             // Handle NULL
             if let Ok(raw) = row.try_get_raw(i) {
                 if raw.is_null() {
                     return JsonValue::Null;
                 }
             }
-            
+
             // SQLite has dynamic typing, try common types
             if let Ok(v) = row.try_get::<i64, _>(i) {
                 return json!(v);
@@ -514,9 +510,12 @@ fn convert_sqlite_row(row: &sqlx::sqlite::SqliteRow) -> Vec<JsonValue> {
             }
             if let Ok(v) = row.try_get::<Vec<u8>, _>(i) {
                 // Return blob as base64
-                return json!(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &v));
+                return json!(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    &v
+                ));
             }
-            
+
             // Fallback
             json!(format!("[{}]", type_name))
         })

@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, MySqlPool, SqlitePool, postgres::PgPoolOptions, mysql::MySqlPoolOptions, sqlite::SqlitePoolOptions};
+use sqlx::{
+    mysql::MySqlPoolOptions, postgres::PgPoolOptions, sqlite::SqlitePoolOptions, MySqlPool, PgPool,
+    SqlitePool,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -126,9 +129,12 @@ impl DatabasePool {
 pub static CONNECTION_POOLS: Lazy<Arc<RwLock<HashMap<String, DatabasePool>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-pub async fn create_pool(config: &ConnectionConfig, password: Option<&str>) -> Result<DatabasePool, DbError> {
+pub async fn create_pool(
+    config: &ConnectionConfig,
+    password: Option<&str>,
+) -> Result<DatabasePool, DbError> {
     let connection_string = config.build_connection_string(password);
-    
+
     let pool = match config.db_type {
         DatabaseType::Postgresql => {
             let pool = PgPoolOptions::new()
@@ -155,32 +161,32 @@ pub async fn create_pool(config: &ConnectionConfig, password: Option<&str>) -> R
             DatabasePool::Sqlite(pool)
         }
     };
-    
+
     Ok(pool)
 }
 
 pub async fn connect(config: &ConnectionConfig, password: Option<&str>) -> Result<(), DbError> {
     let pool = create_pool(config, password).await?;
-    
+
     let mut pools = CONNECTION_POOLS.write().await;
     pools.insert(config.id.clone(), pool);
-    
+
     Ok(())
 }
 
 pub async fn disconnect(connection_id: &str) -> Result<(), DbError> {
     let mut pools = CONNECTION_POOLS.write().await;
-    
+
     if let Some(pool) = pools.remove(connection_id) {
         pool.close().await;
     }
-    
+
     Ok(())
 }
 
 pub async fn get_pool(connection_id: &str) -> Result<DatabasePool, DbError> {
     let pools = CONNECTION_POOLS.read().await;
-    
+
     pools
         .get(connection_id)
         .cloned()
@@ -192,25 +198,34 @@ pub async fn is_connected(connection_id: &str) -> bool {
     pools.contains_key(connection_id)
 }
 
-pub async fn test_connection(config: &ConnectionConfig, password: Option<&str>) -> Result<(), DbError> {
+pub async fn test_connection(
+    config: &ConnectionConfig,
+    password: Option<&str>,
+) -> Result<(), DbError> {
     let pool = create_pool(config, password).await?;
-    
+
     // Test the connection with a simple query
     match &pool {
         DatabasePool::Postgres(p) => {
-            sqlx::query("SELECT 1").execute(p).await
+            sqlx::query("SELECT 1")
+                .execute(p)
+                .await
                 .map_err(|e| DbError::ConnectionFailed(e.to_string()))?;
         }
         DatabasePool::MySql(p) => {
-            sqlx::query("SELECT 1").execute(p).await
+            sqlx::query("SELECT 1")
+                .execute(p)
+                .await
                 .map_err(|e| DbError::ConnectionFailed(e.to_string()))?;
         }
         DatabasePool::Sqlite(p) => {
-            sqlx::query("SELECT 1").execute(p).await
+            sqlx::query("SELECT 1")
+                .execute(p)
+                .await
                 .map_err(|e| DbError::ConnectionFailed(e.to_string()))?;
         }
     }
-    
+
     pool.close().await;
     Ok(())
 }
