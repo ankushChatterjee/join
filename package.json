@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "preinstall": "case \"$npm_config_user_agent\" in bun/*) ;; *) echo \"Use Bun only: run 'bun install'\"; exit 1;; esac",
+    "hooks:install": "git config core.hooksPath .githooks",
     "dev": "vite",
     "typecheck": "tsc --noEmit --pretty false",
     "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
@@ -19,7 +20,9 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:integration": "bun run scripts/run-test-suite.ts integration",
     "test:all": "bun run scripts/run-test-suite.ts full",
-    "test:report": "bun run scripts/run-test-suite.ts report"
+    "test:report": "bun run scripts/run-test-suite.ts report",
+    "sec:gitleaks": "bash scripts/security-gitleaks.sh",
+    "sec:all": "bun run sec:gitleaks"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.49",

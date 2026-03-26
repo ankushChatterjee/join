@@ -51,6 +51,47 @@ bun run tauri build
 
 The built application will be in `src-tauri/target/release/bundle/`.
 
+## Security Scanning
+
+This repository includes Gitleaks integration for local runs.
+
+### Local scans
+
+Install the CLIs (example with Homebrew):
+
+```bash
+brew install gitleaks
+```
+
+Run scans:
+
+```bash
+bun run sec:gitleaks
+bun run sec:all
+```
+
+### Pre-commit hook
+
+Install hooks for this clone:
+
+```bash
+bun run hooks:install
+```
+
+Current pre-commit checks:
+
+- `bun run sec:gitleaks`
+- `bun run typecheck`
+
+### Exact checks currently configured
+
+- `bun run sec:gitleaks` executes:
+  - `gitleaks git --redact --verbose --no-banner`
+  - Check scope: git history in this repository
+  - Rule source: Gitleaks default built-in ruleset, with path allowlist overrides from `.gitleaks.toml` for `dist/`, `reports/`, `node_modules/`, and `src-tauri/target/`
+
+Note: no CI workflow is currently committed for these scans.
+
 ## Key Shortcuts
 
 | Shortcut | Action |

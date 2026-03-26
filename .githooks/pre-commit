@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running gitleaks..."
+bun run sec:gitleaks
+
+echo "Running TypeScript checks..."
+bun run typecheck
+
