@@ -7,3 +7,8 @@ bun run sec:gitleaks
 echo "Running TypeScript checks..."
 bun run typecheck
 
+echo "Running TypeScript lint..."
+bun run lint:ts
+
+echo "Running Rust lint..."
+bun run lint:rust
