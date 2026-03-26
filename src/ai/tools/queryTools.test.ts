@@ -148,7 +148,9 @@ describe("query tools", () => {
     useAppStore.setState({
       queryHistory: [
         {
+          id: "q-1",
           sql: "SELECT 1",
+          connectionId: "c1",
           connectionName: "Main DB",
           timestamp: 1_700_000_000_000,
           rowCount: 1,
@@ -156,7 +158,9 @@ describe("query tools", () => {
           error: null,
         },
         {
+          id: "q-2",
           sql: "SELECT * FROM orders",
+          connectionId: "c1",
           connectionName: "Main DB",
           timestamp: 1_700_000_000_100,
           rowCount: 10,
@@ -180,7 +184,9 @@ describe("query tools", () => {
       queryHistory: Array(20)
         .fill(null)
         .map((_, i) => ({
+          id: `q-${i}`,
           sql: `SELECT ${i}`,
+          connectionId: "c1",
           connectionName: "Main DB",
           timestamp: 1_700_000_000_000 + i,
           rowCount: 1,

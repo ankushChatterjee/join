@@ -2,16 +2,16 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetFullEditorContent = vi.fn(() => "");
 const mockGetSelectedText = vi.fn(() => null);
-const mockGetCursorPosition = vi.fn(() => null);
+const mockGetCursorPosition = vi.fn<() => { line: number; col: number } | null>(() => null);
 const mockGetEditorView = vi.fn(() => null);
-const mockInsertTextAtCursor = vi.fn(() => {});
+const mockInsertTextAtCursor = vi.fn<(text: string) => void>();
 
 vi.mock("@/components/editor/editorUtils", () => ({
   getFullEditorContent: () => mockGetFullEditorContent(),
   getSelectedText: () => mockGetSelectedText(),
   getCursorPosition: () => mockGetCursorPosition(),
   getEditorView: () => mockGetEditorView(),
-  insertTextAtCursor: (text: string) => mockInsertTextAtCursor(text),
+  insertTextAtCursor: mockInsertTextAtCursor,
 }));
 
 let useAppStore: (typeof import("@/stores/appStore"))["useAppStore"];

@@ -27,10 +27,6 @@ async function lint(ddl: string, dialect: "postgresql" | "mysql" | "sqlite" = "p
   };
 }
 
-function ruleIds(result: Awaited<ReturnType<typeof lint>>) {
-  return result.checks.map((c) => c.rule_id);
-}
-
 function hasRule(result: Awaited<ReturnType<typeof lint>>, ruleId: string) {
   return result.checks.some((c) => c.rule_id === ruleId);
 }

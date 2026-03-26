@@ -7,6 +7,8 @@
   "scripts": {
     "preinstall": "case \"$npm_config_user_agent\" in bun/*) ;; *) echo \"Use Bun only: run 'bun install'\"; exit 1;; esac",
     "dev": "vite",
+    "typecheck": "tsc --noEmit --pretty false",
+    "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

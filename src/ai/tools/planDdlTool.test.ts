@@ -380,7 +380,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("does not fetch custom types for non-postgres dialects", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       return Promise.resolve([]);
     });
@@ -397,7 +397,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("returns empty pk_columns when referenced table does not exist", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]); // nothing exists
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -448,7 +448,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("next_steps include validate_ddl reminder", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -465,7 +465,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("recommended rules always include schema-primary-keys and schema-constraints", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -482,7 +482,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("recommended rules include schema-foreign-key-indexes when references are provided", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([{ name: "users", schema: "public" }]);
       if (cmd === "get_columns") return Promise.resolve([
         { name: "id", data_type: "bigint", is_nullable: false, is_primary_key: true },
@@ -505,7 +505,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("recommended rules include schema-foreign-key-indexes when goal mentions FK keywords", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -524,7 +524,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("recommended rules include schema-partitioning when goal mentions partitioning", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -540,7 +540,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("recommended rules include security-rls-basics when goal mentions RLS", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -556,7 +556,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("next_steps include get_postgres_best_practice call", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") return Promise.resolve([]);
       return Promise.resolve([]);
@@ -573,7 +573,7 @@ describe("plan_ddl — CREATE mode", () => {
   });
 
   it("next_steps mention ENUM reuse when reusable types exist", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([]);
       if (cmd === "get_custom_types") {
         return Promise.resolve([
@@ -809,7 +809,7 @@ describe("plan_ddl — ALTER mode", () => {
   });
 
   it("preserves column comment field in current_state", async () => {
-    invokeMock.mockImplementation((cmd: string, payload: any) => {
+    invokeMock.mockImplementation((cmd: string, _payload: any) => {
       if (cmd === "get_tables") return Promise.resolve([{ name: "users", schema: "public" }]);
       if (cmd === "get_columns") {
         return Promise.resolve([

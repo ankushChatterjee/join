@@ -7,12 +7,13 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAppStore } from "@/stores/appStore";
+import type { DatabaseType } from "@/stores/types";
 import { buildSystemPrompt } from "./context";
 import { getCatalog } from "./skills/postgresBestPractices";
 
 function minimalExecutionContext(overrides: Partial<{
   targetConnectionId: string | null;
-  targetConnectionDialect: string | null;
+  targetConnectionDialect: DatabaseType | null;
 }> = {}) {
   return {
     runId: "run-1",
