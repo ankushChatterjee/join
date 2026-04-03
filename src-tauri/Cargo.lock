@@ -2138,6 +2138,7 @@ dependencies = [
  "chrono",
  "csv",
  "dirs",
+ "futures-util",
  "keyring",
  "once_cell",
  "rust_decimal",

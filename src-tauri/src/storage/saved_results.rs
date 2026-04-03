@@ -180,8 +180,10 @@ fn read_result_data(
     Ok(QueryResult {
         columns,
         row_count: rows.len(),
+        max_rows: rows.len(),
         rows,
         execution_time_ms: execution_time_ms.max(0) as u64,
+        truncated: false,
     })
 }
 
@@ -356,6 +358,8 @@ mod tests {
             ],
             row_count: 2,
             execution_time_ms: 12,
+            truncated: false,
+            max_rows: 2,
         }
     }
 

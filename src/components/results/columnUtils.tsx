@@ -320,20 +320,20 @@ function ColumnHeader({
   );
 }
 
-// Helper to create columns dynamically from data with SQL types
-export function createColumnsFromData<T extends Record<string, unknown>>(
-  data: T[],
+// Helper to create columns dynamically from SQL column metadata for row-array data.
+export function createColumnsFromData(
+  data: unknown[][],
   sqlColumns?: SqlColumnDef[],
   dbType?: DatabaseType
-): ColumnDef<T, unknown>[] {
-  if (data.length === 0) return [];
+): ColumnDef<unknown[], unknown>[] {
+  const columnHelper = createColumnHelper<unknown[]>();
+  const columnCount = sqlColumns?.length ?? data[0]?.length ?? 0;
+  if (columnCount === 0) return [];
 
-  const columnHelper = createColumnHelper<T>();
-  const keys = Object.keys(data[0]);
-
-  return keys.map((key, index) =>
-    columnHelper.accessor((row) => row[key], {
-      id: key,
+  return Array.from({ length: columnCount }, (_, index) => {
+    const key = sqlColumns?.[index]?.name ?? `column_${index + 1}`;
+    return columnHelper.accessor((row) => row[index], {
+      id: `${index}:${key}`,
       header: () => {
         const colDef = sqlColumns?.[index];
         return (
@@ -486,6 +486,6 @@ export function createColumnsFromData<T extends Record<string, unknown>>(
           />
         );
       },
-    })
-  ) as ColumnDef<T, unknown>[];
+    });
+  }) as ColumnDef<unknown[], unknown>[];
 }

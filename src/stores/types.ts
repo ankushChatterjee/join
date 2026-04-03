@@ -119,6 +119,8 @@ export interface QueryResult {
   rows: unknown[][];
   row_count: number;
   execution_time_ms: number;
+  truncated?: boolean;
+  max_rows?: number;
 }
 
 export interface SavedResultMetadata {

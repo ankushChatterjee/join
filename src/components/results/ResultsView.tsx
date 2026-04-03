@@ -80,16 +80,7 @@ export function ResultsView({
 }: ResultsViewProps) {
   const [activeTab, setActiveTab] = useState<"results" | "schema">("results");
 
-  const tableData = useMemo(() => {
-    if (!queryResults) return [];
-    return queryResults.rows.map((row) => {
-      const obj: Record<string, unknown> = {};
-      queryResults.columns.forEach((col, i) => {
-        obj[col.name] = row[i];
-      });
-      return obj;
-    });
-  }, [queryResults]);
+  const tableData = useMemo(() => queryResults?.rows ?? [], [queryResults]);
 
   const columns = useMemo(
     () => createColumnsFromData(tableData, queryResults?.columns, dbType),
@@ -141,6 +132,11 @@ export function ResultsView({
                   <span className="text-base-200">{queryResults.row_count}</span> rows
                 </span>
               </div>
+              {queryResults.truncated && (
+                <div className="text-[11px] text-warning">
+                  showing first {queryResults.max_rows ?? queryResults.row_count}
+                </div>
+              )}
               <div className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 <span>

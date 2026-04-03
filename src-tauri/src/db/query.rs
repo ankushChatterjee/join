@@ -1,3 +1,4 @@
+use futures_util::{TryStream, TryStreamExt};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
@@ -6,12 +7,94 @@ use std::time::Instant;
 
 use super::{get_pool, DatabasePool, DbError};
 
+const MAX_RESULT_ROWS: usize = 10_000;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryResult {
     pub columns: Vec<ColumnDef>,
     pub rows: Vec<Vec<JsonValue>>,
     pub row_count: usize,
     pub execution_time_ms: u64,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default = "default_max_rows")]
+    pub max_rows: usize,
+}
+
+const fn default_max_rows() -> usize {
+    MAX_RESULT_ROWS
+}
+
+fn build_columns_pg(row: &sqlx::postgres::PgRow) -> Vec<ColumnDef> {
+    row.columns()
+        .iter()
+        .map(|col| ColumnDef {
+            name: col.name().to_string(),
+            type_name: std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                col.type_info().name().to_string()
+            }))
+            .unwrap_or_else(|_| "unknown".to_string()),
+            is_primary_key: None,
+            is_indexed: None,
+        })
+        .collect()
+}
+
+fn build_columns_mysql(row: &sqlx::mysql::MySqlRow) -> Vec<ColumnDef> {
+    row.columns()
+        .iter()
+        .map(|col| ColumnDef {
+            name: col.name().to_string(),
+            type_name: col.type_info().name().to_string(),
+            is_primary_key: None,
+            is_indexed: None,
+        })
+        .collect()
+}
+
+fn build_columns_sqlite(row: &sqlx::sqlite::SqliteRow) -> Vec<ColumnDef> {
+    row.columns()
+        .iter()
+        .map(|col| ColumnDef {
+            name: col.name().to_string(),
+            type_name: col.type_info().name().to_string(),
+            is_primary_key: None,
+            is_indexed: None,
+        })
+        .collect()
+}
+
+async fn collect_limited_rows<S, R, E, FColumns, FConvert>(
+    mut stream: S,
+    mut build_columns: FColumns,
+    mut convert_row: FConvert,
+) -> Result<(Vec<ColumnDef>, Vec<Vec<JsonValue>>, bool), DbError>
+where
+    S: TryStream<Ok = R, Error = E> + Unpin,
+    E: std::fmt::Display,
+    FColumns: FnMut(&R) -> Vec<ColumnDef>,
+    FConvert: FnMut(&R) -> Vec<JsonValue>,
+{
+    let mut columns: Vec<ColumnDef> = vec![];
+    let mut result_rows: Vec<Vec<JsonValue>> = Vec::new();
+    let mut truncated = false;
+
+    while let Some(row) = stream
+        .try_next()
+        .await
+        .map_err(|e| DbError::QueryFailed(e.to_string()))?
+    {
+        if columns.is_empty() {
+            columns = build_columns(&row);
+        }
+        if result_rows.len() >= MAX_RESULT_ROWS {
+            truncated = true;
+            break;
+        }
+        result_rows.push(convert_row(&row));
+    }
+
+    Ok((columns, result_rows, truncated))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,130 +123,58 @@ pub async fn execute_query(connection_id: &str, sql: &str) -> Result<QueryResult
                 trimmed.contains(';')
             };
 
-            let rows = if is_multi_stmt {
-                sqlx::raw_sql(sql)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
+            let (columns, result_rows, truncated) = if is_multi_stmt {
+                collect_limited_rows(sqlx::raw_sql(sql).fetch(&pool), build_columns_pg, convert_pg_row)
+                    .await?
             } else {
-                sqlx::query(sql)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| DbError::QueryFailed(e.to_string()))?
+                collect_limited_rows(sqlx::query(sql).fetch(&pool), build_columns_pg, convert_pg_row)
+                    .await?
             };
-
             let execution_time_ms = start.elapsed().as_millis() as u64;
-
-            if rows.is_empty() {
-                return Ok(QueryResult {
-                    columns: vec![],
-                    rows: vec![],
-                    row_count: 0,
-                    execution_time_ms,
-                });
-            }
-
-            let columns: Vec<ColumnDef> = rows[0]
-                .columns()
-                .iter()
-                .map(|col| ColumnDef {
-                    name: col.name().to_string(),
-                    type_name: std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        col.type_info().name().to_string()
-                    }))
-                    .unwrap_or_else(|_| "unknown".to_string()),
-                    is_primary_key: None,
-                    is_indexed: None,
-                })
-                .collect();
-
-            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_pg_row).collect();
-
             let row_count = result_rows.len();
-
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
                 row_count,
                 execution_time_ms,
+                truncated,
+                max_rows: MAX_RESULT_ROWS,
             })
         }
         DatabasePool::MySql(pool) => {
-            let rows = sqlx::raw_sql(sql)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-
+            let (columns, result_rows, truncated) = collect_limited_rows(
+                sqlx::raw_sql(sql).fetch(&pool),
+                build_columns_mysql,
+                convert_mysql_row,
+            )
+            .await?;
             let execution_time_ms = start.elapsed().as_millis() as u64;
-
-            if rows.is_empty() {
-                return Ok(QueryResult {
-                    columns: vec![],
-                    rows: vec![],
-                    row_count: 0,
-                    execution_time_ms,
-                });
-            }
-
-            let columns: Vec<ColumnDef> = rows[0]
-                .columns()
-                .iter()
-                .map(|col| ColumnDef {
-                    name: col.name().to_string(),
-                    type_name: col.type_info().name().to_string(),
-                    is_primary_key: None,
-                    is_indexed: None,
-                })
-                .collect();
-
-            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_mysql_row).collect();
-
             let row_count = result_rows.len();
-
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
                 row_count,
                 execution_time_ms,
+                truncated,
+                max_rows: MAX_RESULT_ROWS,
             })
         }
         DatabasePool::Sqlite(pool) => {
-            let rows = sqlx::raw_sql(sql)
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DbError::QueryFailed(e.to_string()))?;
-
+            let (columns, result_rows, truncated) = collect_limited_rows(
+                sqlx::raw_sql(sql).fetch(&pool),
+                build_columns_sqlite,
+                convert_sqlite_row,
+            )
+            .await?;
             let execution_time_ms = start.elapsed().as_millis() as u64;
-
-            if rows.is_empty() {
-                return Ok(QueryResult {
-                    columns: vec![],
-                    rows: vec![],
-                    row_count: 0,
-                    execution_time_ms,
-                });
-            }
-
-            let columns: Vec<ColumnDef> = rows[0]
-                .columns()
-                .iter()
-                .map(|col| ColumnDef {
-                    name: col.name().to_string(),
-                    type_name: col.type_info().name().to_string(),
-                    is_primary_key: None,
-                    is_indexed: None,
-                })
-                .collect();
-
-            let result_rows: Vec<Vec<JsonValue>> = rows.iter().map(convert_sqlite_row).collect();
-
             let row_count = result_rows.len();
-
             Ok(QueryResult {
                 columns,
                 rows: result_rows,
                 row_count,
                 execution_time_ms,
+                truncated,
+                max_rows: MAX_RESULT_ROWS,
             })
         }
     }
