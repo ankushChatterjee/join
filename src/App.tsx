@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ConnectionDialog } from "@/components/connections/ConnectionDialog";
+import { QueryParametersDialog } from "@/components/query/QueryParametersDialog";
 import { ToastContainer } from "@/components/ui/Toast";
 import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { useAppStore } from "@/stores/appStore";
@@ -62,6 +63,7 @@ function App() {
     <>
       <MainLayout />
       <ConnectionDialog />
+      <QueryParametersDialog />
       <ToastContainer />
       <PerfOverlay />
     </>

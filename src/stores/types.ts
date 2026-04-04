@@ -1,4 +1,9 @@
 export type DatabaseType = "postgresql" | "mysql" | "sqlite";
+export type SqlPlaceholderMode = "named" | "positional";
+
+export type SqlParamDefaults =
+  | { mode: "named"; values: Record<string, string | null> }
+  | { mode: "positional"; values: Array<string | null> };
 
 export interface ConnectionInfo {
   id: string;

@@ -99,6 +99,11 @@ export const executeReadonlySql = tool({
       throw new Error(`Database is not connected for connection ${connectionId}`);
     }
 
+    const sqlForExecution = await useAppStore.getState().resolveSqlWithParameters(connectionId, sql);
+    if (!sqlForExecution) {
+      return "Execution cancelled before run.";
+    }
+
     const result = await invoke<{
       columns: { name: string }[];
       rows: unknown[][];
@@ -106,7 +111,7 @@ export const executeReadonlySql = tool({
       execution_time_ms: number;
     }>("execute_query", {
       connectionId,
-      sql,
+      sql: sqlForExecution,
     });
 
     // Format result as readable text

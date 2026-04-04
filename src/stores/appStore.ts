@@ -21,8 +21,18 @@ import type {
   SavedResultMetadata,
   ResultTabData,
   ConnectionMetadataSnapshot,
+  SqlParamDefaults,
+  SqlPlaceholderMode,
 } from "./types";
 import { recordPerfSample } from "@/lib/perf";
+import {
+  analyzeSqlPlaceholders,
+  applySqlParams,
+  buildParamCacheKey,
+  getParamDefaults,
+  setParamDefaults,
+  type SqlPlaceholderSpec,
+} from "@/lib/sqlParameters";
 
 export interface Toast {
   id: string;
@@ -65,6 +75,14 @@ interface ScriptSaveQueueStatus {
   pendingRevision: number | null;
   lastFlushedRevision: number;
   hasPending: boolean;
+}
+
+interface PendingSqlParameterPrompt {
+  connectionId: string;
+  sql: string;
+  spec: SqlPlaceholderSpec;
+  values: SqlParamDefaults;
+  resolve: (values: SqlParamDefaults | null) => void;
 }
 
 interface AppState {
@@ -121,6 +139,8 @@ interface AppState {
 
   // Query History
   queryHistory: QueryHistoryEntry[];
+  parameterDefaults: Record<string, SqlParamDefaults>;
+  pendingSqlParameterPrompt: PendingSqlParameterPrompt | null;
 
   // UI State
   isConnectionDialogOpen: boolean;
@@ -226,6 +246,26 @@ interface AppState {
     previewSource?: string,
     queryContext?: Omit<QueryContext, "capturedAt">
   ) => Promise<void>;
+  getParameterDefaults: (
+    connectionId: string,
+    sql: string,
+    mode: SqlPlaceholderMode,
+    spec: SqlPlaceholderSpec
+  ) => SqlParamDefaults;
+  saveParameterDefaults: (
+    connectionId: string,
+    sql: string,
+    mode: SqlPlaceholderMode,
+    values: SqlParamDefaults
+  ) => void;
+  requestSqlParameters: (
+    connectionId: string,
+    sql: string,
+    spec: SqlPlaceholderSpec
+  ) => Promise<SqlParamDefaults | null>;
+  submitSqlParameterPrompt: (values: SqlParamDefaults) => void;
+  cancelSqlParameterPrompt: () => void;
+  resolveSqlWithParameters: (connectionId: string, sql: string) => Promise<string | null>;
   clearResults: () => void;
   loadQueryHistory: () => Promise<void>;
   clearQueryHistory: () => void;
@@ -478,6 +518,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
   // Query History
   queryHistory: [],
+  parameterDefaults: {},
+  pendingSqlParameterPrompt: null,
 
   isConnectionDialogOpen: false,
   editingConnection: null,
@@ -2022,6 +2064,8 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!tab) return;
     const sql = tab.sqlCell.sql.trim();
     if (!sql) return;
+    const sqlForExecution = await get().resolveSqlWithParameters(tab.connectionId, sql);
+    if (!sqlForExecution) return;
     const connection = state.connections.find((c) => c.id === tab.connectionId);
     const now = Date.now();
 
@@ -2042,7 +2086,7 @@ export const useAppStore = create<AppState>((set, get) => {
     try {
       const queryResult = await invoke<QueryResult>("execute_query", {
         connectionId: tab.connectionId,
-        sql,
+        sql: sqlForExecution,
       });
 
       set((state) => ({
@@ -2447,6 +2491,11 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
 
+    const sqlForExecution = await get().resolveSqlWithParameters(connectionId, sql);
+    if (!sqlForExecution) {
+      return;
+    }
+
     const selectedCell = activeScript?.selectedCellId
       ? activeScript.cells.find((cell) => cell.id === activeScript.selectedCellId)
       : null;
@@ -2477,7 +2526,7 @@ export const useAppStore = create<AppState>((set, get) => {
     try {
       const results = await invoke<QueryResult>("execute_query", {
         connectionId,
-        sql,
+        sql: sqlForExecution,
       });
 
       // Add to history on success
@@ -2502,6 +2551,7 @@ export const useAppStore = create<AppState>((set, get) => {
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
     } catch (error) {
+      const errorMessage = String(error);
       // Add to history on error
       const historyEntry: QueryHistoryEntry = {
         id: crypto.randomUUID(),
@@ -2511,12 +2561,12 @@ export const useAppStore = create<AppState>((set, get) => {
         timestamp: startTime,
         rowCount: null,
         executionTimeMs: null,
-        error: error as string,
+        error: errorMessage,
       };
 
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
-        queryError: error as string,
+        queryError: errorMessage,
         isExecuting: false,
         queryResults: null,
         queryHistory: newHistory,
@@ -2556,6 +2606,11 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
 
+    const sqlForExecution = await get().resolveSqlWithParameters(connectionId, sql);
+    if (!sqlForExecution) {
+      return;
+    }
+
     set({
       isExecuting: true,
       queryError: null,
@@ -2577,7 +2632,7 @@ export const useAppStore = create<AppState>((set, get) => {
     try {
       const results = await invoke<QueryResult>("execute_query", {
         connectionId,
-        sql,
+        sql: sqlForExecution,
       });
 
       // Add to history
@@ -2602,6 +2657,7 @@ export const useAppStore = create<AppState>((set, get) => {
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
     } catch (error) {
+      const errorMessage = String(error);
       const historyEntry: QueryHistoryEntry = {
         id: crypto.randomUUID(),
         sql,
@@ -2610,12 +2666,12 @@ export const useAppStore = create<AppState>((set, get) => {
         timestamp: startTime,
         rowCount: null,
         executionTimeMs: null,
-        error: error as string,
+        error: errorMessage,
       };
 
       const newHistory = [historyEntry, ...get().queryHistory].slice(0, 50);
       set({
-        queryError: error as string,
+        queryError: errorMessage,
         isExecuting: false,
         queryResults: null,
         queryHistory: newHistory,
@@ -2623,6 +2679,76 @@ export const useAppStore = create<AppState>((set, get) => {
       });
       // Persist history to disk
       invoke("save_query_history", { entries: newHistory }).catch(console.error);
+    }
+  },
+
+  getParameterDefaults: (connectionId: string, sql: string, mode: SqlPlaceholderMode, spec: SqlPlaceholderSpec) => {
+    const key = buildParamCacheKey(connectionId, sql, mode);
+    return getParamDefaults(get().parameterDefaults, key, spec);
+  },
+
+  saveParameterDefaults: (connectionId: string, sql: string, mode: SqlPlaceholderMode, values: SqlParamDefaults) => {
+    const key = buildParamCacheKey(connectionId, sql, mode);
+    set((state) => ({
+      parameterDefaults: setParamDefaults(state.parameterDefaults, key, values),
+    }));
+  },
+
+  requestSqlParameters: async (connectionId: string, sql: string, spec: SqlPlaceholderSpec) => {
+    const defaults = get().getParameterDefaults(connectionId, sql, spec.mode, spec);
+    return new Promise<SqlParamDefaults | null>((resolve) => {
+      set({
+        pendingSqlParameterPrompt: {
+          connectionId,
+          sql,
+          spec,
+          values: defaults,
+          resolve,
+        },
+      });
+    });
+  },
+
+  submitSqlParameterPrompt: (values: SqlParamDefaults) => {
+    const pending = get().pendingSqlParameterPrompt;
+    if (!pending) return;
+    pending.resolve(values);
+    set({ pendingSqlParameterPrompt: null });
+  },
+
+  cancelSqlParameterPrompt: () => {
+    const pending = get().pendingSqlParameterPrompt;
+    if (!pending) return;
+    pending.resolve(null);
+    set({ pendingSqlParameterPrompt: null });
+  },
+
+  resolveSqlWithParameters: async (connectionId: string, sql: string) => {
+    const analyzed = analyzeSqlPlaceholders(sql);
+    if (analyzed.error) {
+      set({ queryError: analyzed.error });
+      get().showToast("error", analyzed.error);
+      return null;
+    }
+
+    if (!analyzed.spec) {
+      return sql;
+    }
+
+    const submittedValues = await get().requestSqlParameters(connectionId, sql, analyzed.spec);
+    if (!submittedValues) {
+      return null;
+    }
+
+    get().saveParameterDefaults(connectionId, sql, analyzed.spec.mode, submittedValues);
+
+    try {
+      return applySqlParams(sql, analyzed.spec, submittedValues);
+    } catch (error) {
+      const message = `Failed to apply SQL parameters: ${error}`;
+      set({ queryError: message });
+      get().showToast("error", message);
+      return null;
     }
   },
 

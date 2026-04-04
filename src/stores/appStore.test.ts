@@ -22,6 +22,8 @@ function resetStore() {
     previewSource: null,
     querySql: null,
     lastQueryContext: null,
+    parameterDefaults: {},
+    pendingSqlParameterPrompt: null,
     openScripts: [],
     activeScriptId: null,
     openResultTabs: [],
@@ -186,6 +188,55 @@ describe("appStore critical flows", () => {
     expect(String(state.queryHistory[0].error)).toContain("boom");
   });
 
+  it("executeQuery stringifies Error object rejections for panel-safe queryError", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "execute_query") {
+        return Promise.reject(new Error("db exploded"));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    useAppStore.setState({
+      connections: [
+        {
+          id: "c1",
+          name: "Main DB",
+          db_type: "postgresql",
+          host: "localhost",
+          port: 5432,
+          database: "join_test",
+          username: "join",
+          ssl_mode: "disable",
+          is_connected: true,
+        },
+      ],
+      openScripts: [
+        {
+          id: "script-1",
+          name: "Script 1",
+          connectionId: "c1",
+          cells: [{ id: "cell-1", sql: "SELECT * FROM boom", last_run_at: null, last_run_duration_ms: null, last_run_successful: null, proposed_sql: null }],
+          selectedCellId: "cell-1",
+          isDirty: false,
+          pendingSaveRevision: 0,
+          lastFlushedRevision: 0,
+        },
+      ],
+      activeScriptId: "script-1",
+      activeEditorTab: { kind: "script", id: "script-1" },
+    });
+
+    await useAppStore.getState().executeQuery("SELECT * FROM boom");
+
+    const state = useAppStore.getState();
+    expect(state.queryResults).toBeNull();
+    expect(typeof state.queryError).toBe("string");
+    expect(state.queryError).toContain("db exploded");
+    expect(state.queryHistory.length).toBe(1);
+    expect(typeof state.queryHistory[0].error).toBe("string");
+    expect(String(state.queryHistory[0].error)).toContain("db exploded");
+  });
+
   it("add/remove SQL cells keeps selection valid", async () => {
     invokeMock.mockResolvedValue(undefined);
 
@@ -303,6 +354,77 @@ describe("appStore critical flows", () => {
     await useAppStore.getState().deleteSavedResult("c1", "sr-1");
     expect(useAppStore.getState().openResultTabs.length).toBe(0);
     expect(useAppStore.getState().savedResultsByConnection.c1.length).toBe(0);
+  });
+
+  it("stores parameter defaults by connection + normalized sql + mode", () => {
+    const sqlA = "SELECT *   FROM users WHERE id = :id ;";
+    const sqlB = "SELECT * FROM users WHERE id = :id";
+
+    useAppStore
+      .getState()
+      .saveParameterDefaults("c1", sqlA, "named", {
+        mode: "named",
+        values: { id: "42" },
+      });
+
+    const defaults = useAppStore.getState().getParameterDefaults("c1", sqlB, "named", {
+      mode: "named",
+      names: ["id"],
+      occurrences: [{ name: "id", start: 31, end: 34 }],
+    });
+    expect(defaults).toEqual({
+      mode: "named",
+      values: { id: "42" },
+    });
+
+    const miss = useAppStore.getState().getParameterDefaults("c2", sqlB, "named", {
+      mode: "named",
+      names: ["id"],
+      occurrences: [{ name: "id", start: 31, end: 34 }],
+    });
+    expect(miss).toEqual({
+      mode: "named",
+      values: { id: null },
+    });
+  });
+
+  it("request/submit parameter prompt resolves and clears pending state", async () => {
+    const requestPromise = useAppStore
+      .getState()
+      .requestSqlParameters("c1", "SELECT * FROM t WHERE id = :id", {
+        mode: "named",
+        names: ["id"],
+        occurrences: [{ name: "id", start: 27, end: 30 }],
+      });
+
+    expect(useAppStore.getState().pendingSqlParameterPrompt).not.toBeNull();
+
+    useAppStore.getState().submitSqlParameterPrompt({
+      mode: "named",
+      values: { id: "123" },
+    });
+
+    await expect(requestPromise).resolves.toEqual({
+      mode: "named",
+      values: { id: "123" },
+    });
+    expect(useAppStore.getState().pendingSqlParameterPrompt).toBeNull();
+  });
+
+  it("request/cancel parameter prompt resolves null and does not save defaults", async () => {
+    const requestPromise = useAppStore
+      .getState()
+      .requestSqlParameters("c1", "SELECT * FROM t WHERE id = ?", {
+        mode: "positional",
+        count: 1,
+        occurrences: [{ index: 0, start: 27, end: 28 }],
+      });
+
+    useAppStore.getState().cancelSqlParameterPrompt();
+
+    await expect(requestPromise).resolves.toBeNull();
+    expect(useAppStore.getState().pendingSqlParameterPrompt).toBeNull();
+    expect(useAppStore.getState().parameterDefaults).toEqual({});
   });
 });
 
