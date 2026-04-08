@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ProjectInfo,
   ConnectionInfo,
   NewConnectionRequest,
   SchemaInfo,
@@ -86,6 +87,9 @@ interface PendingSqlParameterPrompt {
 }
 
 interface AppState {
+  // Project
+  activeProject: ProjectInfo | null;
+
   // Connections
   connections: ConnectionInfo[];
   activeConnectionId: string | null;
@@ -156,6 +160,9 @@ interface AppState {
   editorTabOrder: EditorTabRef[];
 
   // Actions - Connections
+  createProject: (parentDir: string, name: string) => Promise<void>;
+  openProject: (rootPath: string) => Promise<void>;
+  closeProject: () => void;
   loadConnections: () => Promise<void>;
   addConnection: (request: NewConnectionRequest) => Promise<ConnectionInfo>;
   updateConnection: (id: string, request: NewConnectionRequest) => Promise<void>;
@@ -415,6 +422,56 @@ export const useAppStore = create<AppState>((set, get) => {
   const scriptSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const openScriptIndexCache = new Map<string, number>();
   const selectedCellIndexCache = new Map<string, { id: string; index: number }>();
+  const requireProjectRoot = () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) {
+      throw new Error("No active project");
+    }
+    return projectRoot;
+  };
+  const resetProjectScopedState = () => ({
+    connections: [],
+    activeConnectionId: null,
+    isLoadingConnections: false,
+    schemas: [],
+    tablesBySchema: {},
+    viewsBySchema: {},
+    functionsBySchema: {},
+    typesBySchema: {},
+    columns: {},
+    indexes: {},
+    activeSchema: null,
+    isLoadingSchema: false,
+    loadingSchemas: new Set<string>(),
+    metadataByConnection: {},
+    selectedSchemaObject: null,
+    schemaObjectDetails: null,
+    isLoadingSchemaObjectDetails: false,
+    scriptsByConnection: {},
+    isScriptsFolderExpanded: true,
+    savedResultsByConnection: {},
+    isSavedResultsFolderExpanded: true,
+    expandedSchemas: new Set<string>(),
+    expandedTables: new Set<string>(),
+    expandedViews: new Set<string>(),
+    expandedIndexFolders: new Set<string>(),
+    isDbExpanded: true,
+    queryResults: null,
+    isExecuting: false,
+    executingCell: null,
+    queryError: null,
+    previewSource: null,
+    querySql: null,
+    lastQueryContext: null,
+    queryHistory: [],
+    parameterDefaults: {},
+    pendingSqlParameterPrompt: null,
+    openScripts: [],
+    activeScriptId: null,
+    openResultTabs: [],
+    activeEditorTab: null,
+    editorTabOrder: [],
+  });
 
   const applyConnectionMetadataToLegacyState = (connectionId: string) => {
     const snapshot = get().metadataByConnection[connectionId];
@@ -449,8 +506,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   const queueScriptPersist = async (script: OpenScript, sheetOverride?: SqlSheetDocument) => {
     try {
+      const projectRoot = requireProjectRoot();
       const sheet = sheetOverride ?? toSheetDocument(script);
       await invoke<ScriptSaveQueueStatus>("queue_script_update", {
+        projectRoot,
         connectionId: script.connectionId,
         scriptId: script.id,
         sheet,
@@ -475,6 +534,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   return ({
   // Initial state
+  activeProject: null,
   connections: [],
   activeConnectionId: null,
   isLoadingConnections: false,
@@ -534,11 +594,45 @@ export const useAppStore = create<AppState>((set, get) => {
   editorTabOrder: [],
   metadataByConnection: {},
 
+  createProject: async (parentDir: string, name: string) => {
+    const project = await invoke<ProjectInfo>("create_project", { parentDir, name });
+    await get().openProject(project.rootPath);
+  },
+
+  openProject: async (rootPath: string) => {
+    const project = await invoke<ProjectInfo>("open_project", { rootPath });
+    set({
+      activeProject: project,
+      isConnectionDialogOpen: false,
+      editingConnection: null,
+      ...resetProjectScopedState(),
+    });
+    await Promise.all([
+      get().loadConnections(),
+      get().loadOpenTabs(),
+      get().loadQueryHistory(),
+    ]);
+  },
+
+  closeProject: () => {
+    set({
+      activeProject: null,
+      isConnectionDialogOpen: false,
+      editingConnection: null,
+      ...resetProjectScopedState(),
+    });
+  },
+
   // Connection actions
   loadConnections: async () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) {
+      set({ connections: [], activeConnectionId: null, isLoadingConnections: false });
+      return;
+    }
     set({ isLoadingConnections: true });
     try {
-      const connections = await invoke<ConnectionInfo[]>("list_connections");
+      const connections = await invoke<ConnectionInfo[]>("list_connections", { projectRoot });
       set({ connections, isLoadingConnections: false });
     } catch (error) {
       console.error("Failed to load connections:", error);
@@ -547,7 +641,8 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   addConnection: async (request: NewConnectionRequest) => {
-    const connection = await invoke<ConnectionInfo>("add_connection", { request });
+    const projectRoot = requireProjectRoot();
+    const connection = await invoke<ConnectionInfo>("add_connection", { projectRoot, request });
     set((state) => ({
       connections: [...state.connections, connection],
     }));
@@ -555,7 +650,9 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   updateConnection: async (connectionId: string, request: NewConnectionRequest) => {
+    const projectRoot = requireProjectRoot();
     const connection = await invoke<ConnectionInfo>("update_connection", {
+      projectRoot,
       connectionId,
       request,
     });
@@ -567,7 +664,8 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   deleteConnection: async (id: string) => {
-    await invoke("delete_connection", { connectionId: id });
+    const projectRoot = requireProjectRoot();
+    await invoke("delete_connection", { projectRoot, connectionId: id });
     set((state) => ({
       connections: state.connections.filter((c) => c.id !== id),
       activeConnectionId:
@@ -592,11 +690,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   connect: async (id: string) => {
+    const projectRoot = requireProjectRoot();
     // Clear any previous errors and results when attempting to connect
     set({ queryError: null, queryResults: null, querySql: null, lastQueryContext: null });
 
     try {
-      await invoke("connect", { connectionId: id });
+      await invoke("connect", { projectRoot, connectionId: id });
     } catch (error) {
       // Show connection error in results panel
       set({ queryError: `Connection failed: ${error}` });
@@ -1214,8 +1313,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   // Script actions
   loadScripts: async (connectionId: string) => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) return;
     try {
-      const scripts = await invoke<ScriptMetadata[]>("list_scripts", { connectionId });
+      const scripts = await invoke<ScriptMetadata[]>("list_scripts", { projectRoot, connectionId });
       set((state) => ({
         scriptsByConnection: {
           ...state.scriptsByConnection,
@@ -1228,8 +1329,10 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   loadSavedResults: async (connectionId: string) => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) return;
     try {
-      const savedResults = await invoke<SavedResultMetadata[]>("list_saved_results", { connectionId });
+      const savedResults = await invoke<SavedResultMetadata[]>("list_saved_results", { projectRoot, connectionId });
       set((state) => ({
         savedResultsByConnection: {
           ...state.savedResultsByConnection,
@@ -1242,6 +1345,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   createScript: async (connectionId: string) => {
+    const projectRoot = requireProjectRoot();
     const { connections, scriptsByConnection } = get();
     const connection = connections.find((c) => c.id === connectionId);
 
@@ -1255,7 +1359,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const name = `${connection.name}_${existingScripts.length + 1}`;
 
     try {
-      const script = await invoke<Script>("create_script", { connectionId, name });
+      const script = await invoke<Script>("create_script", { projectRoot, connectionId, name });
 
       const cells = normalizeCells(script.cells || []);
       const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
@@ -1298,6 +1402,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   openScript: async (connectionId: string, scriptId: string) => {
+    const projectRoot = requireProjectRoot();
     const { openScripts } = get();
 
     // Check if already open
@@ -1309,7 +1414,7 @@ export const useAppStore = create<AppState>((set, get) => {
     }
 
     try {
-      const script = await invoke<Script>("get_script", { connectionId, scriptId });
+      const script = await invoke<Script>("get_script", { projectRoot, connectionId, scriptId });
       const cells = normalizeCells(script.cells || []);
       const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
 
@@ -1617,6 +1722,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   flushScriptNow: async (scriptId: string) => {
+    requireProjectRoot();
     const timer = scriptSaveTimers.get(scriptId);
     if (timer) {
       clearTimeout(timer);
@@ -1671,6 +1777,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   renameScript: async (scriptId: string, name: string) => {
+    const projectRoot = requireProjectRoot();
     const script = get().openScripts.find((s) => s.id === scriptId);
     const connectionId = script?.connectionId;
 
@@ -1679,7 +1786,7 @@ export const useAppStore = create<AppState>((set, get) => {
       for (const [connId, scripts] of Object.entries(get().scriptsByConnection)) {
         if (scripts.some((s) => s.id === scriptId)) {
           try {
-            await invoke("rename_script", { connectionId: connId, scriptId, newName: name });
+            await invoke("rename_script", { projectRoot, connectionId: connId, scriptId, newName: name });
 
             // Update in scriptsByConnection
             set((state) => ({
@@ -1704,7 +1811,7 @@ export const useAppStore = create<AppState>((set, get) => {
     }
 
     try {
-      await invoke("rename_script", { connectionId, scriptId, newName: name });
+      await invoke("rename_script", { projectRoot, connectionId, scriptId, newName: name });
 
       // Update in both places
       set((state) => ({
@@ -1725,8 +1832,9 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   deleteScript: async (connectionId: string, scriptId: string) => {
+    const projectRoot = requireProjectRoot();
     try {
-      await invoke("delete_script", { connectionId, scriptId });
+      await invoke("delete_script", { projectRoot, connectionId, scriptId });
 
       set((state) => ({
         scriptsByConnection: {
@@ -1950,6 +2058,7 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   saveCurrentResults: async () => {
+    const projectRoot = requireProjectRoot();
     const {
       queryResults,
       activeConnectionId,
@@ -1977,6 +2086,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     try {
       const saved = await invoke<SavedResultRecord>("save_saved_result", {
+        projectRoot,
         connectionId: activeConnectionId,
         request: {
           id: activeResultTab?.savedResultId ?? null,
@@ -2019,8 +2129,10 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   openSavedResult: async (connectionId: string, savedResultId: string) => {
+    const projectRoot = requireProjectRoot();
     try {
       const saved = await invoke<SavedResultRecord>("get_saved_result", {
+        projectRoot,
         connectionId,
         savedResultId,
       });
@@ -2116,8 +2228,9 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   deleteSavedResult: async (connectionId: string, savedResultId: string) => {
+    const projectRoot = requireProjectRoot();
     try {
-      await invoke("delete_saved_result", { connectionId, savedResultId });
+      await invoke("delete_saved_result", { projectRoot, connectionId, savedResultId });
       set((state) => ({
         savedResultsByConnection: {
           ...state.savedResultsByConnection,
@@ -2132,11 +2245,13 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   renameSavedResult: async (connectionId: string, savedResultId: string, name: string) => {
+    const projectRoot = requireProjectRoot();
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
     try {
       const updated = await invoke<SavedResultMetadata>("rename_saved_result", {
+        projectRoot,
         connectionId,
         savedResultId,
         newName: trimmedName,
@@ -2163,6 +2278,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
   // Tabs persistence actions
   loadOpenTabs: async () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) {
+      set({ openScripts: [], openResultTabs: [], activeScriptId: null, activeEditorTab: null, editorTabOrder: [] });
+      return;
+    }
     try {
       const tabsState = await invoke<{
         tabs: Array<{
@@ -2180,7 +2300,7 @@ export const useAppStore = create<AppState>((set, get) => {
           created_at: number;
         }>;
         active_tab_id: string | null;
-      }>("load_tabs");
+      }>("load_tabs", { projectRoot });
 
       if (tabsState.tabs.length > 0) {
         const openScripts: OpenScript[] = [];
@@ -2195,6 +2315,7 @@ export const useAppStore = create<AppState>((set, get) => {
             if (savedResultId) {
               try {
                 const saved = await invoke<SavedResultRecord>("get_saved_result", {
+                  projectRoot,
                   connectionId: tab.connection_id,
                   savedResultId,
                 });
@@ -2249,6 +2370,7 @@ export const useAppStore = create<AppState>((set, get) => {
           try {
             const scriptId = tab.script_id || tab.id;
             const script = await invoke<Script>("get_script", {
+              projectRoot,
               connectionId: tab.connection_id,
               scriptId,
             });
@@ -2311,6 +2433,8 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   saveOpenTabs: async () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) return;
     const { openScripts, openResultTabs, activeEditorTab, editorTabOrder } = get();
     const orderedTabs = normalizeEditorTabOrder(editorTabOrder, openScripts, openResultTabs);
     const scriptsById = new Map(openScripts.map((script) => [script.id, script]));
@@ -2376,7 +2500,7 @@ export const useAppStore = create<AppState>((set, get) => {
     };
 
     try {
-      await invoke("save_tabs", { state: tabsState });
+      await invoke("save_tabs", { projectRoot, state: tabsState });
     } catch (error) {
       console.error("Failed to save open tabs:", error);
     }
@@ -2480,7 +2604,7 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!connection.is_connected) {
       get().showToast("info", `Connecting to ${connection.name}...`);
       try {
-        await invoke("connect", { connectionId });
+        await invoke("connect", { projectRoot: requireProjectRoot(), connectionId });
         // Refresh connections to update is_connected status
         await get().loadConnections();
         get().showToast("success", `Connected to ${connection.name}`);
@@ -2549,7 +2673,7 @@ export const useAppStore = create<AppState>((set, get) => {
         querySql: sql,
       });
       // Persist history to disk
-      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+      invoke("save_query_history", { projectRoot: requireProjectRoot(), entries: newHistory }).catch(console.error);
     } catch (error) {
       const errorMessage = String(error);
       // Add to history on error
@@ -2573,7 +2697,7 @@ export const useAppStore = create<AppState>((set, get) => {
         querySql: null,
       });
       // Persist history to disk
-      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+      invoke("save_query_history", { projectRoot: requireProjectRoot(), entries: newHistory }).catch(console.error);
     }
   },
 
@@ -2596,7 +2720,7 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!connection.is_connected) {
       get().showToast("info", `Connecting to ${connection.name}...`);
       try {
-        await invoke("connect", { connectionId });
+        await invoke("connect", { projectRoot: requireProjectRoot(), connectionId });
         await get().loadConnections();
         get().showToast("success", `Connected to ${connection.name}`);
       } catch (error) {
@@ -2655,7 +2779,7 @@ export const useAppStore = create<AppState>((set, get) => {
         querySql: sql,
       });
       // Persist history to disk
-      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+      invoke("save_query_history", { projectRoot: requireProjectRoot(), entries: newHistory }).catch(console.error);
     } catch (error) {
       const errorMessage = String(error);
       const historyEntry: QueryHistoryEntry = {
@@ -2678,7 +2802,7 @@ export const useAppStore = create<AppState>((set, get) => {
         querySql: null,
       });
       // Persist history to disk
-      invoke("save_query_history", { entries: newHistory }).catch(console.error);
+      invoke("save_query_history", { projectRoot: requireProjectRoot(), entries: newHistory }).catch(console.error);
     }
   },
 
@@ -2757,8 +2881,13 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   loadQueryHistory: async () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) {
+      set({ queryHistory: [] });
+      return;
+    }
     try {
-      const entries = await invoke<QueryHistoryEntry[]>("load_query_history");
+      const entries = await invoke<QueryHistoryEntry[]>("load_query_history", { projectRoot });
       set({ queryHistory: entries });
     } catch (error) {
       console.error("Failed to load query history:", error);
@@ -2766,9 +2895,11 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   clearQueryHistory: async () => {
+    const projectRoot = get().activeProject?.rootPath;
     set({ queryHistory: [] });
+    if (!projectRoot) return;
     try {
-      await invoke("clear_query_history");
+      await invoke("clear_query_history", { projectRoot });
     } catch (error) {
       console.error("Failed to clear query history:", error);
     }

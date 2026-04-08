@@ -1,6 +1,14 @@
 export type DatabaseType = "postgresql" | "mysql" | "sqlite";
 export type SqlPlaceholderMode = "named" | "positional";
 
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  rootPath: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type SqlParamDefaults =
   | { mode: "named"; values: Record<string, string | null> }
   | { mode: "positional"; values: Array<string | null> };

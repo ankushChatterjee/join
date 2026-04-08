@@ -23,12 +23,23 @@ vi.mock("@/ai/contextResolver", () => ({
 }));
 
 let useAiStore: (typeof import("./aiStore"))["useAiStore"];
+let useAppStore: (typeof import("./appStore"))["useAppStore"];
 
 beforeAll(async () => {
   ({ useAiStore } = await import("./aiStore"));
+  ({ useAppStore } = await import("./appStore"));
 });
 
 function resetStore() {
+  useAppStore.setState({
+    activeProject: {
+      id: "p1",
+      name: "Test Project",
+      rootPath: "/tmp/test-project",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  } as any);
   useAiStore.setState({
     isPanelOpen: true,
     selectedModelId: "claude-sonnet-4-5-20250929",

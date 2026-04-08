@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Search,
   X,
-  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/appStore";
@@ -122,10 +121,11 @@ function ConnectionRow({
 }
 
 interface ConnectionsListProps {
-  onCollapseSidebar?: () => void;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
 }
 
-export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
+export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsListProps) {
   const {
     connections,
     activeConnectionId,
@@ -139,7 +139,6 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
     refreshConnectionMetadata,
   } = useAppStore();
 
-  const [isExpanded, setIsExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [connectingId, setConnectingId] = useState<string | null>(null);
 
@@ -147,12 +146,6 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
   const connectedCount = useMemo(
     () => connections.filter((c) => c.is_connected).length,
     [connections]
-  );
-
-  // Find active connection
-  const activeConnection = useMemo(
-    () => connections.find((c) => c.id === activeConnectionId),
-    [connections, activeConnectionId]
   );
 
   // Filter connections based on search query
@@ -205,25 +198,12 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
   return (
     <div className="border-b border-base-750 bg-base-900/85">
       {/* Header - clickable to expand/collapse */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-2.5 py-1.5 flex items-center justify-between hover:bg-base-850 transition-colors-fast cursor-pointer font-mono"
-      >
-        <div className="flex items-center gap-1.5">
-          {onCollapseSidebar && (
-            <span
-              role="button"
-              tabIndex={-1}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCollapseSidebar();
-              }}
-              className="w-5 h-5 rounded-sm flex items-center justify-center text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast mr-0.5"
-              title="Collapse sidebar"
-            >
-              <PanelLeftClose className="w-3.5 h-3.5" />
-            </span>
-          )}
+      <div className="flex items-center gap-2 px-2.5 py-1.5 font-mono">
+        <button
+          onClick={onToggleExpanded}
+          className="flex flex-1 items-center gap-1.5 rounded-sm px-1 py-0.5 text-left transition-colors-fast hover:bg-base-850 cursor-pointer"
+          title={isExpanded ? "Collapse connections" : "Expand connections"}
+        >
           <ChevronRight
             className={cn(
               "w-3 h-3 text-base-300 transition-transform duration-150",
@@ -238,35 +218,15 @@ export function ConnectionsList({ onCollapseSidebar }: ConnectionsListProps) {
               [{connectedCount > 0 ? `${connectedCount} ONLINE` : connections.length}]
             </span>
           )}
-        </div>
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            openConnectionDialog();
-          }}
-          className="p-1 -mr-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 transition-colors-fast"
-          role="button"
+        </button>
+        <button
+          onClick={() => openConnectionDialog()}
+          className="p-1 -mr-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 transition-colors-fast cursor-pointer"
           aria-label="Add connection"
         >
           <Plus className="w-3.5 h-3.5" />
-        </div>
-      </button>
-
-      {/* Collapsed: Show only active connection */}
-      {!isExpanded && activeConnection && (
-        <div className="pb-1">
-          <ConnectionRow
-            conn={activeConnection}
-            isActive={true}
-            isConnecting={connectingId === activeConnection.id}
-            onConnect={handleConnect}
-            onEdit={openConnectionDialog}
-            onDelete={handleDelete}
-            onSelect={handleSelect}
-            onRefresh={refreshConnectionMetadata}
-          />
-        </div>
-      )}
+        </button>
+      </div>
 
       {/* Expanded: Show search + all connections */}
       {isExpanded && (

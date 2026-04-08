@@ -53,12 +53,26 @@ pub struct NewConnectionRequest {
 }
 
 // ============================================================================
+// Tauri Commands - Projects
+// ============================================================================
+
+#[tauri::command]
+fn create_project(parent_dir: String, name: String) -> Result<storage::ProjectInfo, String> {
+    storage::project::create_project(&parent_dir, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_project(root_path: String) -> Result<storage::ProjectInfo, String> {
+    storage::project::open_project(&root_path).map_err(|e| e.to_string())
+}
+
+// ============================================================================
 // Tauri Commands - Connections
 // ============================================================================
 
 #[tauri::command]
-async fn list_connections() -> Result<Vec<ConnectionInfo>, String> {
-    let configs = storage::list_connections().map_err(|e| e.to_string())?;
+async fn list_connections(project_root: String) -> Result<Vec<ConnectionInfo>, String> {
+    let configs = storage::list_connections(&project_root).map_err(|e| e.to_string())?;
 
     let mut connections = Vec::new();
     for config in configs {
@@ -69,7 +83,7 @@ async fn list_connections() -> Result<Vec<ConnectionInfo>, String> {
 }
 
 #[tauri::command]
-async fn add_connection(request: NewConnectionRequest) -> Result<ConnectionInfo, String> {
+async fn add_connection(project_root: String, request: NewConnectionRequest) -> Result<ConnectionInfo, String> {
     let config = ConnectionConfig::new(
         request.name,
         request.db_type,
@@ -88,18 +102,19 @@ async fn add_connection(request: NewConnectionRequest) -> Result<ConnectionInfo,
     }
 
     // Save connection config
-    storage::add_connection(config.clone()).map_err(|e| e.to_string())?;
+    storage::add_connection(&project_root, config.clone()).map_err(|e| e.to_string())?;
 
     Ok(ConnectionInfo::from_config(config).await)
 }
 
 #[tauri::command]
 async fn update_connection(
+    project_root: String,
     connection_id: String,
     request: NewConnectionRequest,
 ) -> Result<ConnectionInfo, String> {
     // Get existing config to preserve the ID
-    let mut config = storage::get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let mut config = storage::get_connection(&project_root, &connection_id).map_err(|e| e.to_string())?;
 
     config.name = request.name;
     config.db_type = request.db_type;
@@ -117,13 +132,13 @@ async fn update_connection(
     }
 
     // Save updated config
-    storage::add_connection(config.clone()).map_err(|e| e.to_string())?;
+    storage::add_connection(&project_root, config.clone()).map_err(|e| e.to_string())?;
 
     Ok(ConnectionInfo::from_config(config).await)
 }
 
 #[tauri::command]
-async fn delete_connection(connection_id: String) -> Result<(), String> {
+async fn delete_connection(project_root: String, connection_id: String) -> Result<(), String> {
     // Disconnect if connected
     let _ = db::disconnect(&connection_id).await;
 
@@ -131,11 +146,11 @@ async fn delete_connection(connection_id: String) -> Result<(), String> {
     let _ = storage::delete_password(&connection_id);
 
     // Remove any scripts stored for this connection
-    let _ = storage::scripts::delete_connection_scripts(&connection_id);
-    let _ = storage::saved_results::delete_connection_saved_results(&connection_id);
+    let _ = storage::scripts::delete_connection_scripts(&project_root, &connection_id);
+    let _ = storage::saved_results::delete_connection_saved_results(&project_root, &connection_id);
 
     // Remove from config
-    storage::remove_connection(&connection_id).map_err(|e| e.to_string())?;
+    storage::remove_connection(&project_root, &connection_id).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -158,8 +173,8 @@ async fn test_connection(request: NewConnectionRequest) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn connect(connection_id: String) -> Result<(), String> {
-    let config = storage::get_connection(&connection_id).map_err(|e| e.to_string())?;
+async fn connect(project_root: String, connection_id: String) -> Result<(), String> {
+    let config = storage::get_connection(&project_root, &connection_id).map_err(|e| e.to_string())?;
 
     // Get password from keychain
     let password = match storage::get_password(&connection_id) {
@@ -315,29 +330,35 @@ async fn execute_query(connection_id: String, sql: String) -> Result<QueryResult
 // ============================================================================
 
 #[tauri::command]
-fn list_saved_results(connection_id: String) -> Result<Vec<storage::SavedResultMetadata>, String> {
-    storage::saved_results::list_saved_results(&connection_id).map_err(|e| e.to_string())
+fn list_saved_results(
+    project_root: String,
+    connection_id: String,
+) -> Result<Vec<storage::SavedResultMetadata>, String> {
+    storage::saved_results::list_saved_results(&project_root, &connection_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn save_saved_result(
+    project_root: String,
     connection_id: String,
     request: storage::SaveSavedResultRequest,
 ) -> Result<storage::SavedResult, String> {
-    storage::saved_results::save_saved_result(&connection_id, &request).map_err(|e| e.to_string())
+    storage::saved_results::save_saved_result(&project_root, &connection_id, &request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_saved_result(
+    project_root: String,
     connection_id: String,
     saved_result_id: String,
 ) -> Result<storage::SavedResult, String> {
-    storage::saved_results::get_saved_result(&connection_id, &saved_result_id)
+    storage::saved_results::get_saved_result(&project_root, &connection_id, &saved_result_id)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn refresh_saved_result(
+    project_root: String,
     connection_id: String,
     saved_result_id: String,
     sql: String,
@@ -355,22 +376,28 @@ async fn refresh_saved_result(
         preview_source,
         query_result: result,
     };
-    storage::saved_results::save_saved_result(&connection_id, &request).map_err(|e| e.to_string())
+    storage::saved_results::save_saved_result(&project_root, &connection_id, &request)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn delete_saved_result(connection_id: String, saved_result_id: String) -> Result<(), String> {
-    storage::saved_results::delete_saved_result(&connection_id, &saved_result_id)
+fn delete_saved_result(
+    project_root: String,
+    connection_id: String,
+    saved_result_id: String,
+) -> Result<(), String> {
+    storage::saved_results::delete_saved_result(&project_root, &connection_id, &saved_result_id)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn rename_saved_result(
+    project_root: String,
     connection_id: String,
     saved_result_id: String,
     new_name: String,
 ) -> Result<storage::SavedResultMetadata, String> {
-    storage::saved_results::rename_saved_result(&connection_id, &saved_result_id, &new_name)
+    storage::saved_results::rename_saved_result(&project_root, &connection_id, &saved_result_id, &new_name)
         .map_err(|e| e.to_string())
 }
 
@@ -379,13 +406,13 @@ fn rename_saved_result(
 // ============================================================================
 
 #[tauri::command]
-fn load_tabs() -> Result<storage::TabsState, String> {
-    storage::tabs::load_tabs().map_err(|e| e.to_string())
+fn load_tabs(project_root: String) -> Result<storage::TabsState, String> {
+    storage::tabs::load_tabs(&project_root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn save_tabs(state: storage::TabsState) -> Result<(), String> {
-    storage::tabs::save_tabs(&state).map_err(|e| e.to_string())
+fn save_tabs(project_root: String, state: storage::TabsState) -> Result<(), String> {
+    storage::tabs::save_tabs(&project_root, &state).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -393,38 +420,40 @@ fn save_tabs(state: storage::TabsState) -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
-fn list_scripts(connection_id: String) -> Result<Vec<storage::ScriptMetadata>, String> {
-    storage::scripts::list_scripts(&connection_id).map_err(|e| e.to_string())
+fn list_scripts(project_root: String, connection_id: String) -> Result<Vec<storage::ScriptMetadata>, String> {
+    storage::scripts::list_scripts(&project_root, &connection_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn create_script(connection_id: String, name: String) -> Result<storage::Script, String> {
-    storage::scripts::create_script(&connection_id, &name).map_err(|e| e.to_string())
+fn create_script(project_root: String, connection_id: String, name: String) -> Result<storage::Script, String> {
+    storage::scripts::create_script(&project_root, &connection_id, &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_script(connection_id: String, script_id: String) -> Result<storage::Script, String> {
-    storage::scripts::get_script(&connection_id, &script_id).map_err(|e| e.to_string())
+fn get_script(project_root: String, connection_id: String, script_id: String) -> Result<storage::Script, String> {
+    storage::scripts::get_script(&project_root, &connection_id, &script_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn update_script_content(
+    project_root: String,
     connection_id: String,
     script_id: String,
     sheet: storage::SqlSheetDocument,
 ) -> Result<(), String> {
-    storage::scripts::update_script_content(&connection_id, &script_id, &sheet)
+    storage::scripts::update_script_content(&project_root, &connection_id, &script_id, &sheet)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn queue_script_update(
+    project_root: String,
     connection_id: String,
     script_id: String,
     sheet: storage::SqlSheetDocument,
     revision: i64,
 ) -> Result<storage::ScriptSaveQueueStatus, String> {
-    storage::scripts::queue_script_update(&connection_id, &script_id, &sheet, revision)
+    storage::scripts::queue_script_update(&project_root, &connection_id, &script_id, &sheet, revision)
         .map_err(|e| e.to_string())
 }
 
@@ -440,17 +469,18 @@ fn get_script_update_status(script_id: String) -> Result<storage::ScriptSaveQueu
 
 #[tauri::command]
 fn rename_script(
+    project_root: String,
     connection_id: String,
     script_id: String,
     new_name: String,
 ) -> Result<storage::ScriptMetadata, String> {
-    storage::scripts::rename_script(&connection_id, &script_id, &new_name)
+    storage::scripts::rename_script(&project_root, &connection_id, &script_id, &new_name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn delete_script(connection_id: String, script_id: String) -> Result<(), String> {
-    storage::scripts::delete_script(&connection_id, &script_id).map_err(|e| e.to_string())
+fn delete_script(project_root: String, connection_id: String, script_id: String) -> Result<(), String> {
+    storage::scripts::delete_script(&project_root, &connection_id, &script_id).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -458,20 +488,20 @@ fn delete_script(connection_id: String, script_id: String) -> Result<(), String>
 // ============================================================================
 
 #[tauri::command]
-fn load_query_history() -> Result<Vec<storage::QueryHistoryEntry>, String> {
-    let history = storage::history::load_history().map_err(|e| e.to_string())?;
+fn load_query_history(project_root: String) -> Result<Vec<storage::QueryHistoryEntry>, String> {
+    let history = storage::history::load_history(&project_root).map_err(|e| e.to_string())?;
     Ok(history.entries)
 }
 
 #[tauri::command]
-fn save_query_history(entries: Vec<storage::QueryHistoryEntry>) -> Result<(), String> {
+fn save_query_history(project_root: String, entries: Vec<storage::QueryHistoryEntry>) -> Result<(), String> {
     let history = storage::QueryHistory { entries };
-    storage::history::save_history(&history).map_err(|e| e.to_string())
+    storage::history::save_history(&project_root, &history).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn clear_query_history() -> Result<(), String> {
-    storage::history::clear_history().map_err(|e| e.to_string())
+fn clear_query_history(project_root: String) -> Result<(), String> {
+    storage::history::clear_history(&project_root).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -577,23 +607,23 @@ fn warn_api_key_configuration() {
 // ============================================================================
 
 #[tauri::command]
-fn list_chat_sessions() -> Result<Vec<storage::chats::ChatSessionMeta>, String> {
-    storage::chats::list_chat_sessions().map_err(|e| e.to_string())
+fn list_chat_sessions(project_root: String) -> Result<Vec<storage::chats::ChatSessionMeta>, String> {
+    storage::chats::list_chat_sessions(&project_root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_chat_session(session_id: String) -> Result<storage::chats::ChatSession, String> {
-    storage::chats::get_chat_session(&session_id).map_err(|e| e.to_string())
+fn get_chat_session(project_root: String, session_id: String) -> Result<storage::chats::ChatSession, String> {
+    storage::chats::get_chat_session(&project_root, &session_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn save_chat_session(session: storage::chats::ChatSession) -> Result<(), String> {
-    storage::chats::save_chat_session(&session).map_err(|e| e.to_string())
+fn save_chat_session(project_root: String, session: storage::chats::ChatSession) -> Result<(), String> {
+    storage::chats::save_chat_session(&project_root, &session).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn delete_chat_session(session_id: String) -> Result<(), String> {
-    storage::chats::delete_chat_session(&session_id).map_err(|e| e.to_string())
+fn delete_chat_session(project_root: String, session_id: String) -> Result<(), String> {
+    storage::chats::delete_chat_session(&project_root, &session_id).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -632,6 +662,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
+            create_project,
+            open_project,
             // Connections
             list_connections,
             add_connection,
@@ -807,11 +839,14 @@ mod tests {
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .expect("webview");
+        let project =
+            storage::project::create_project(temp.to_str().expect("temp"), "Smoke").expect("project");
 
         let conn: ConnectionInfo = invoke_ok(
             &webview,
             "add_connection",
             json!({
+                "projectRoot": project.root_path,
                 "request": {
                     "name": "sqlite-smoke",
                     "db_type": "sqlite",
@@ -829,6 +864,7 @@ mod tests {
             &webview,
             "connect",
             json!({
+                "projectRoot": project.root_path,
                 "connectionId": conn.id
             }),
         );
@@ -927,11 +963,14 @@ mod tests {
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .expect("webview");
+        let project =
+            storage::project::create_project(_temp.to_str().expect("temp"), "Chat").expect("project");
 
         let denied = invoke_err(
             &webview,
             "get_chat_session",
             json!({
+                "projectRoot": project.root_path,
                 "sessionId": "../escape"
             }),
         );

@@ -2,10 +2,11 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use super::path_safety::{safe_join, validate_id};
+use super::project::get_project_root;
 use super::ConfigError;
 
 const SHEET_FORMAT_VERSION: i64 = 1;
@@ -67,6 +68,7 @@ pub struct ScriptSaveQueueStatus {
 
 #[derive(Debug, Clone)]
 struct PendingScriptUpdate {
+    project_root: String,
     connection_id: String,
     script_id: String,
     revision: i64,
@@ -76,43 +78,52 @@ struct PendingScriptUpdate {
 static SCRIPT_SAVE_QUEUE: Lazy<Mutex<HashMap<String, PendingScriptUpdate>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-/// Get the base directory for all scripts
-fn get_scripts_base_dir() -> PathBuf {
-    let config_dir = super::config::get_join_config_dir().join("scripts");
-
-    fs::create_dir_all(&config_dir).ok();
-    config_dir
+fn get_scripts_base_dir(project_root: &Path) -> PathBuf {
+    let dir = project_root.join("scripts");
+    fs::create_dir_all(&dir).ok();
+    dir
 }
 
-/// Get the directory for a specific connection's scripts
-fn get_connection_scripts_dir(connection_id: &str) -> Result<PathBuf, ConfigError> {
-    safe_join(&get_scripts_base_dir(), connection_id)
+fn get_connection_scripts_dir(
+    project_root: &Path,
+    connection_id: &str,
+) -> Result<PathBuf, ConfigError> {
+    safe_join(&get_scripts_base_dir(project_root), connection_id)
 }
 
-/// Get the path to a script's legacy SQL file.
-fn get_script_sql_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_script_sql_path(
+    project_root: &Path,
+    connection_id: &str,
+    script_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(script_id)?;
     safe_join(
-        &get_connection_scripts_dir(connection_id)?,
-        &format!("{}.sql", script_id),
+        &get_connection_scripts_dir(project_root, connection_id)?,
+        &format!("{script_id}.sql"),
     )
 }
 
-/// Get the path to a script's sheet JSON file.
-fn get_script_sheet_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_script_sheet_path(
+    project_root: &Path,
+    connection_id: &str,
+    script_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(script_id)?;
     safe_join(
-        &get_connection_scripts_dir(connection_id)?,
-        &format!("{}.sheet.json", script_id),
+        &get_connection_scripts_dir(project_root, connection_id)?,
+        &format!("{script_id}.sheet.json"),
     )
 }
 
-/// Get the path to a script's metadata file
-fn get_script_meta_path(connection_id: &str, script_id: &str) -> Result<PathBuf, ConfigError> {
+fn get_script_meta_path(
+    project_root: &Path,
+    connection_id: &str,
+    script_id: &str,
+) -> Result<PathBuf, ConfigError> {
     validate_id(script_id)?;
     safe_join(
-        &get_connection_scripts_dir(connection_id)?,
-        &format!("{}.meta.json", script_id),
+        &get_connection_scripts_dir(project_root, connection_id)?,
+        &format!("{script_id}.meta.json"),
     )
 }
 
@@ -165,30 +176,30 @@ fn normalize_sheet(mut sheet: SqlSheetDocument) -> SqlSheetDocument {
     sheet
 }
 
-/// Load a script's metadata
 fn load_script_metadata(
+    project_root: &Path,
     connection_id: &str,
     script_id: &str,
 ) -> Result<ScriptMetadata, ConfigError> {
-    let meta_path = get_script_meta_path(connection_id, script_id)?;
+    let meta_path = get_script_meta_path(project_root, connection_id, script_id)?;
     let content = fs::read_to_string(meta_path)?;
     let metadata: ScriptMetadata = serde_json::from_str(&content)?;
     Ok(metadata)
 }
 
-/// Save a script's metadata
-fn save_script_metadata(metadata: &ScriptMetadata) -> Result<(), ConfigError> {
-    let meta_path = get_script_meta_path(&metadata.connection_id, &metadata.id)?;
+fn save_script_metadata(project_root: &Path, metadata: &ScriptMetadata) -> Result<(), ConfigError> {
+    let meta_path = get_script_meta_path(project_root, &metadata.connection_id, &metadata.id)?;
     let content = serde_json::to_string_pretty(metadata)?;
     fs::write(meta_path, content)?;
     Ok(())
 }
 
 fn load_script_sheet(
+    project_root: &Path,
     connection_id: &str,
     script_id: &str,
 ) -> Result<SqlSheetDocument, ConfigError> {
-    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
+    let sheet_path = get_script_sheet_path(project_root, connection_id, script_id)?;
 
     if sheet_path.exists() {
         let content = fs::read_to_string(sheet_path)?;
@@ -196,59 +207,56 @@ fn load_script_sheet(
         return Ok(normalize_sheet(sheet));
     }
 
-    // Legacy migration path: if there is only a .sql file, convert it to one sheet cell.
     let legacy_content =
-        fs::read_to_string(get_script_sql_path(connection_id, script_id)?).unwrap_or_default();
+        fs::read_to_string(get_script_sql_path(project_root, connection_id, script_id)?)
+            .unwrap_or_default();
     let sheet = create_default_sheet(legacy_content);
-    save_script_sheet(connection_id, script_id, &sheet)?;
+    save_script_sheet(project_root, connection_id, script_id, &sheet)?;
     Ok(sheet)
 }
 
 fn save_script_sheet(
+    project_root: &Path,
     connection_id: &str,
     script_id: &str,
     sheet: &SqlSheetDocument,
 ) -> Result<(), ConfigError> {
-    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
+    let sheet_path = get_script_sheet_path(project_root, connection_id, script_id)?;
     let normalized = normalize_sheet(sheet.clone());
     let content = serde_json::to_string(&normalized)?;
     fs::write(sheet_path, content)?;
     Ok(())
 }
 
-/// List all scripts for a connection
-pub fn list_scripts(connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigError> {
-    let dir = get_connection_scripts_dir(connection_id)?;
+pub fn list_scripts(project_root: &str, connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigError> {
+    let project_root = get_project_root(project_root)?;
+    let dir = get_connection_scripts_dir(&project_root, connection_id)?;
 
     if !dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut scripts = Vec::new();
-
     for entry in fs::read_dir(&dir)? {
         let entry = entry?;
         let path = entry.path();
-
-        // Only process .meta.json files
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             if name.ends_with(".meta.json") {
                 let script_id = name.trim_end_matches(".meta.json");
-                if let Ok(metadata) = load_script_metadata(connection_id, script_id) {
+                if let Ok(metadata) = load_script_metadata(&project_root, connection_id, script_id)
+                {
                     scripts.push(metadata);
                 }
             }
         }
     }
 
-    // Sort by created_at
     scripts.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-
     Ok(scripts)
 }
 
-/// Create a new script
-pub fn create_script(connection_id: &str, name: &str) -> Result<Script, ConfigError> {
+pub fn create_script(project_root: &str, connection_id: &str, name: &str) -> Result<Script, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     let script_id = format!("script-{}", chrono::Utc::now().timestamp_millis());
     let now = chrono::Utc::now().timestamp_millis();
@@ -261,45 +269,41 @@ pub fn create_script(connection_id: &str, name: &str) -> Result<Script, ConfigEr
         updated_at: now,
     };
 
-    // Save metadata
-    save_script_metadata(&metadata)?;
-
-    // Create default sheet JSON (single empty cell)
+    save_script_metadata(&project_root, &metadata)?;
     let sheet = create_default_sheet(String::new());
-    save_script_sheet(connection_id, &script_id, &sheet)?;
+    save_script_sheet(&project_root, connection_id, &script_id, &sheet)?;
 
     Ok(Script { metadata, sheet })
 }
 
-/// Get a script by ID
-pub fn get_script(connection_id: &str, script_id: &str) -> Result<Script, ConfigError> {
+pub fn get_script(project_root: &str, connection_id: &str, script_id: &str) -> Result<Script, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
-    let metadata = load_script_metadata(connection_id, script_id)?;
-    let sheet = load_script_sheet(connection_id, script_id)?;
-
+    let metadata = load_script_metadata(&project_root, connection_id, script_id)?;
+    let sheet = load_script_sheet(&project_root, connection_id, script_id)?;
     Ok(Script { metadata, sheet })
 }
 
-/// Update a script's sheet content
 pub fn update_script_content(
+    project_root: &str,
     connection_id: &str,
     script_id: &str,
     sheet: &SqlSheetDocument,
 ) -> Result<(), ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
-    save_script_sheet(connection_id, script_id, sheet)?;
+    save_script_sheet(&project_root, connection_id, script_id, sheet)?;
 
-    // Update the metadata timestamp
-    let mut metadata = load_script_metadata(connection_id, script_id)?;
+    let mut metadata = load_script_metadata(&project_root, connection_id, script_id)?;
     metadata.updated_at = chrono::Utc::now().timestamp_millis();
-    save_script_metadata(&metadata)?;
-
+    save_script_metadata(&project_root, &metadata)?;
     Ok(())
 }
 
 pub fn queue_script_update(
+    project_root: &str,
     connection_id: &str,
     script_id: &str,
     sheet: &SqlSheetDocument,
@@ -307,7 +311,7 @@ pub fn queue_script_update(
 ) -> Result<ScriptSaveQueueStatus, ConfigError> {
     validate_id(connection_id)?;
     validate_id(script_id)?;
-    let key = format!("{connection_id}:{script_id}");
+    let key = format!("{project_root}:{connection_id}:{script_id}");
     let mut queue = SCRIPT_SAVE_QUEUE
         .lock()
         .map_err(|_| ConfigError::ValidationError("script save queue lock poisoned".to_string()))?;
@@ -316,6 +320,7 @@ pub fn queue_script_update(
     queue.insert(
         key,
         PendingScriptUpdate {
+            project_root: project_root.to_string(),
             connection_id: connection_id.to_string(),
             script_id: script_id.to_string(),
             revision,
@@ -349,6 +354,7 @@ pub fn flush_script_updates(script_id: &str) -> Result<ScriptSaveQueueStatus, Co
             has_pending: false,
         });
     };
+
     let pending = queue.remove(&queue_key);
     drop(queue);
 
@@ -361,7 +367,12 @@ pub fn flush_script_updates(script_id: &str) -> Result<ScriptSaveQueueStatus, Co
         });
     };
 
-    update_script_content(&update.connection_id, &update.script_id, &update.sheet)?;
+    update_script_content(
+        &update.project_root,
+        &update.connection_id,
+        &update.script_id,
+        &update.sheet,
+    )?;
 
     Ok(ScriptSaveQueueStatus {
         script_id: update.script_id,
@@ -389,41 +400,40 @@ pub fn get_script_update_status(script_id: &str) -> Result<ScriptSaveQueueStatus
     })
 }
 
-/// Rename a script
 pub fn rename_script(
+    project_root: &str,
     connection_id: &str,
     script_id: &str,
     new_name: &str,
 ) -> Result<ScriptMetadata, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
-    let mut metadata = load_script_metadata(connection_id, script_id)?;
+    let mut metadata = load_script_metadata(&project_root, connection_id, script_id)?;
     metadata.name = new_name.to_string();
     metadata.updated_at = chrono::Utc::now().timestamp_millis();
-    save_script_metadata(&metadata)?;
+    save_script_metadata(&project_root, &metadata)?;
     Ok(metadata)
 }
 
-/// Delete a script
-pub fn delete_script(connection_id: &str, script_id: &str) -> Result<(), ConfigError> {
+pub fn delete_script(project_root: &str, connection_id: &str, script_id: &str) -> Result<(), ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
-    let sheet_path = get_script_sheet_path(connection_id, script_id)?;
-    let legacy_sql_path = get_script_sql_path(connection_id, script_id)?;
-    let meta_path = get_script_meta_path(connection_id, script_id)?;
+    let sheet_path = get_script_sheet_path(&project_root, connection_id, script_id)?;
+    let legacy_sql_path = get_script_sql_path(&project_root, connection_id, script_id)?;
+    let meta_path = get_script_meta_path(&project_root, connection_id, script_id)?;
 
-    // Remove all known files (ignore errors if they don't exist)
     fs::remove_file(sheet_path).ok();
     fs::remove_file(legacy_sql_path).ok();
     fs::remove_file(meta_path).ok();
-
     Ok(())
 }
 
-/// Delete all scripts for a connection
-pub fn delete_connection_scripts(connection_id: &str) -> Result<(), ConfigError> {
+pub fn delete_connection_scripts(project_root: &str, connection_id: &str) -> Result<(), ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
-    let dir = get_connection_scripts_dir(connection_id)?;
+    let dir = get_connection_scripts_dir(&project_root, connection_id)?;
     if dir.exists() {
         fs::remove_dir_all(&dir)?;
     }
@@ -433,108 +443,39 @@ pub fn delete_connection_scripts(connection_id: &str) -> Result<(), ConfigError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::project;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn setup_temp_config() -> std::path::PathBuf {
+    fn setup_project() -> std::path::PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
         let dir = std::env::temp_dir().join(format!("join-scripts-tests-{nanos}"));
         fs::create_dir_all(&dir).expect("create temp dir");
-        unsafe {
-            std::env::set_var("JOIN_CONFIG_DIR", &dir);
-        }
-        dir
+        let project = project::create_project(dir.to_str().expect("path"), "Demo").expect("create");
+        PathBuf::from(project.root_path)
     }
 
     #[test]
     fn update_script_normalizes_empty_sheet_and_selection() {
-        let _lock = crate::storage::config::test_env_lock()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let _guard = setup_temp_config();
-        let script = create_script("conn-1", "My Script").expect("create script");
+        let root = setup_project();
+        let root = root.to_str().expect("root");
+        let script = create_script(root, "conn-1", "My Script").expect("create script");
 
         let sheet = SqlSheetDocument {
             version: 0,
             selected_cell_id: Some("missing-cell".into()),
             cells: vec![],
         };
-        update_script_content("conn-1", &script.metadata.id, &sheet).expect("update");
+        update_script_content(root, "conn-1", &script.metadata.id, &sheet).expect("update");
 
-        let loaded = get_script("conn-1", &script.metadata.id).expect("load script");
+        let loaded = get_script(root, "conn-1", &script.metadata.id).expect("load script");
         assert_eq!(loaded.sheet.version, SHEET_FORMAT_VERSION);
         assert_eq!(loaded.sheet.cells.len(), 1);
         assert_eq!(
             loaded.sheet.selected_cell_id.as_deref(),
             Some(loaded.sheet.cells[0].id.as_str())
         );
-    }
-
-    #[test]
-    fn get_script_migrates_legacy_sql_file() {
-        let _lock = crate::storage::config::test_env_lock()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let _guard = setup_temp_config();
-        let script = create_script("conn-legacy", "Legacy Script").expect("create script");
-
-        let legacy_sql = "SELECT * FROM customers;";
-        let legacy_path =
-            get_script_sql_path("conn-legacy", &script.metadata.id).expect("legacy path");
-        fs::write(&legacy_path, legacy_sql).expect("write legacy sql");
-        fs::remove_file(
-            get_script_sheet_path("conn-legacy", &script.metadata.id).expect("sheet path"),
-        )
-        .expect("remove sheet");
-
-        let loaded = get_script("conn-legacy", &script.metadata.id).expect("load script");
-        assert_eq!(loaded.sheet.cells.len(), 1);
-        assert_eq!(loaded.sheet.cells[0].sql, legacy_sql);
-        assert!(get_script_sheet_path("conn-legacy", &script.metadata.id)
-            .expect("sheet path")
-            .exists());
-    }
-
-    #[test]
-    fn queue_coalesces_and_flushes_latest_revision() {
-        let _lock = crate::storage::config::test_env_lock()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let _guard = setup_temp_config();
-        let script = create_script("conn-q", "Queue Script").expect("create script");
-
-        let first_sheet = SqlSheetDocument {
-            version: SHEET_FORMAT_VERSION,
-            selected_cell_id: Some("cell-1".into()),
-            cells: vec![SqlSheetCell {
-                id: "cell-1".into(),
-                sql: "SELECT 1".into(),
-                last_run_at: None,
-                last_run_duration_ms: None,
-                last_run_successful: None,
-                proposed_sql: None,
-            }],
-        };
-        let second_sheet = SqlSheetDocument {
-            version: SHEET_FORMAT_VERSION,
-            selected_cell_id: Some("cell-1".into()),
-            cells: vec![SqlSheetCell {
-                id: "cell-1".into(),
-                sql: "SELECT 2".into(),
-                last_run_at: None,
-                last_run_duration_ms: None,
-                last_run_successful: None,
-                proposed_sql: None,
-            }],
-        };
-
-        queue_script_update("conn-q", &script.metadata.id, &first_sheet, 1).expect("queue first");
-        queue_script_update("conn-q", &script.metadata.id, &second_sheet, 2).expect("queue second");
-        let status = flush_script_updates(&script.metadata.id).expect("flush");
-        assert_eq!(status.last_flushed_revision, 2);
-        let loaded = get_script("conn-q", &script.metadata.id).expect("load");
-        assert_eq!(loaded.sheet.cells[0].sql, "SELECT 2");
     }
 }

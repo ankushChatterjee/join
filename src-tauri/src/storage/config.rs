@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::db::ConnectionConfig;
+use crate::storage::project::get_project_root;
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
 
@@ -54,12 +55,12 @@ pub(crate) fn test_env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn get_config_path() -> PathBuf {
-    get_join_config_dir().join("connections.json")
+fn get_config_path(project_root: &str) -> Result<PathBuf, ConfigError> {
+    Ok(get_project_root(project_root)?.join("connections").join("connections.json"))
 }
 
-pub fn load_config() -> Result<AppConfig, ConfigError> {
-    let path = get_config_path();
+pub fn load_config(project_root: &str) -> Result<AppConfig, ConfigError> {
+    let path = get_config_path(project_root)?;
 
     if !path.exists() {
         return Ok(AppConfig::default());
@@ -71,32 +72,32 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     Ok(config)
 }
 
-pub fn save_config(config: &AppConfig) -> Result<(), ConfigError> {
-    let path = get_config_path();
+pub fn save_config(project_root: &str, config: &AppConfig) -> Result<(), ConfigError> {
+    let path = get_config_path(project_root)?;
     let content = serde_json::to_string_pretty(config)?;
     fs::write(&path, content)?;
 
     Ok(())
 }
 
-pub fn add_connection(connection: ConnectionConfig) -> Result<(), ConfigError> {
-    let mut config = load_config()?;
+pub fn add_connection(project_root: &str, connection: ConnectionConfig) -> Result<(), ConfigError> {
+    let mut config = load_config(project_root)?;
 
     // Remove existing connection with same ID if it exists
     config.connections.retain(|c| c.id != connection.id);
     config.connections.push(connection);
 
-    save_config(&config)
+    save_config(project_root, &config)
 }
 
-pub fn remove_connection(connection_id: &str) -> Result<(), ConfigError> {
-    let mut config = load_config()?;
+pub fn remove_connection(project_root: &str, connection_id: &str) -> Result<(), ConfigError> {
+    let mut config = load_config(project_root)?;
     config.connections.retain(|c| c.id != connection_id);
-    save_config(&config)
+    save_config(project_root, &config)
 }
 
-pub fn get_connection(connection_id: &str) -> Result<ConnectionConfig, ConfigError> {
-    let config = load_config()?;
+pub fn get_connection(project_root: &str, connection_id: &str) -> Result<ConnectionConfig, ConfigError> {
+    let config = load_config(project_root)?;
 
     config
         .connections
@@ -105,7 +106,7 @@ pub fn get_connection(connection_id: &str) -> Result<ConnectionConfig, ConfigErr
         .ok_or(ConfigError::NotFound)
 }
 
-pub fn list_connections() -> Result<Vec<ConnectionConfig>, ConfigError> {
-    let config = load_config()?;
+pub fn list_connections(project_root: &str) -> Result<Vec<ConnectionConfig>, ConfigError> {
+    let config = load_config(project_root)?;
     Ok(config.connections)
 }

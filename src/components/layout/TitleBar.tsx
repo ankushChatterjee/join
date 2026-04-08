@@ -215,23 +215,31 @@ function QueryHistoryDropdown() {
 }
 
 export function TitleBar() {
+  const projectName = useAppStore((state) => state.activeProject?.name ?? null);
   return (
     <header 
-      className="title-bar h-[30px] flex items-center justify-between px-2 bg-base-900/95 border-b border-base-750 select-none shrink-0 relative"
+      className="title-bar grid h-[30px] grid-cols-[68px_1fr_68px] items-center bg-base-900/95 border-b border-base-750 select-none shrink-0 relative"
       data-tauri-drag-region
     >
       {/* Left side - traffic lights space on macOS */}
-      <div className="min-w-[68px]" />
+      <div className="h-full" />
 
       {/* Center - App title (pointer-events-none so it doesn't block dragging) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-[11px] font-semibold text-base-100 tracking-[0.1em] uppercase">
-          Join
-        </span>
+      <div className="flex items-center justify-center pointer-events-none px-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-base-100 tracking-[0.1em] uppercase">
+            Join
+          </span>
+          {projectName ? (
+            <span className="text-[11px] text-base-300 tracking-[0.04em]">
+              / {projectName}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {/* Right side - Action buttons */}
-      <div className="flex items-center gap-1 relative z-10">
+      <div className="flex h-full items-center justify-end gap-1 px-2 relative z-10">
         <QueryHistoryDropdown />
       </div>
     </header>

@@ -13,6 +13,13 @@ beforeAll(async () => {
 
 function resetStore() {
   useAppStore.setState({
+    activeProject: {
+      id: "p1",
+      name: "Test Project",
+      rootPath: "/tmp/test-project",
+      createdAt: 1,
+      updatedAt: 1,
+    },
     connections: [],
     activeConnectionId: null,
     queryResults: null,
@@ -137,7 +144,10 @@ describe("appStore critical flows", () => {
     expect(state.queryResults?.row_count).toBe(1);
     expect(state.queryHistory.length).toBe(1);
     expect(state.queryHistory[0].error).toBeNull();
-    expect(invokeMock).toHaveBeenCalledWith("connect", { connectionId: "c1" });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "connect",
+      expect.objectContaining({ connectionId: "c1", projectRoot: "/tmp/test-project" })
+    );
     expect(invokeMock).toHaveBeenCalledWith("execute_query", { connectionId: "c1", sql: "SELECT 1" });
   });
 

@@ -111,6 +111,7 @@ interface AiState {
   setSelectedModel: (modelId: string) => void;
 
   // Session actions
+  resetProjectState: () => void;
   loadSessions: () => Promise<void>;
   createSession: () => Promise<string>;
   forkSession: (sessionId: string) => Promise<string>;
@@ -277,14 +278,39 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   // Session management
+  resetProjectState: () => {
+    set({
+      sessions: [],
+      activeSessionId: null,
+      activeSession: null,
+      isStreaming: false,
+      streamingTextLive: "",
+      streamingTextRendered: "",
+      streamingToolCalls: [],
+      streamingParts: [],
+      abortController: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      tokenUsage: 0,
+      isCompacting: false,
+    });
+    resetStreamingBuffer();
+  },
+
   loadSessions: async () => {
     try {
+      const projectRoot = useAppStore.getState().activeProject?.rootPath;
       const savedModelId = await invoke<string | null>("get_selected_model_id");
       if (savedModelId && getModelConfig(savedModelId)) {
         set({ selectedModelId: savedModelId });
       }
 
-      const sessions = await invoke<ChatSessionMeta[]>("list_chat_sessions");
+      if (!projectRoot) {
+        get().resetProjectState();
+        return;
+      }
+
+      const sessions = await invoke<ChatSessionMeta[]>("list_chat_sessions", { projectRoot });
       set({ sessions });
 
       const { activeSessionId } = get();
@@ -301,6 +327,8 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   createSession: async () => {
+    const projectRoot = useAppStore.getState().activeProject?.rootPath;
+    if (!projectRoot) return "";
     const { selectedModelId } = get();
     const session: ChatSessionData = {
       id: crypto.randomUUID(),
@@ -313,7 +341,7 @@ export const useAiStore = create<AiState>((set, get) => {
     };
 
     try {
-      await invoke("save_chat_session", { session });
+      await invoke("save_chat_session", { projectRoot, session });
 
       const meta: ChatSessionMeta = {
         id: session.id,
@@ -340,6 +368,8 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   forkSession: async (sessionId: string) => {
+    const projectRoot = useAppStore.getState().activeProject?.rootPath;
+    if (!projectRoot) return "";
     const { sessions } = get();
     
     // Find the source session
@@ -352,6 +382,7 @@ export const useAiStore = create<AiState>((set, get) => {
     try {
       // Load full session data
       const sourceSession = await invoke<ChatSession>("get_chat_session", {
+        projectRoot,
         sessionId,
       });
       const normalizedSourceMessages = normalizeSessionMessages(sourceSession.messages);
@@ -371,7 +402,10 @@ export const useAiStore = create<AiState>((set, get) => {
         })),
       };
 
-      await invoke("save_chat_session", { session: newSession });
+      await invoke("save_chat_session", {
+        projectRoot,
+        session: newSession,
+      });
 
       const meta: ChatSessionMeta = {
         id: newSession.id,
@@ -400,8 +434,11 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   loadSession: async (sessionId: string) => {
+    const projectRoot = useAppStore.getState().activeProject?.rootPath;
+    if (!projectRoot) return;
     try {
       const session = await invoke<ChatSession>("get_chat_session", {
+        projectRoot,
         sessionId,
       });
       const normalizedSession: ChatSession = {
@@ -420,8 +457,13 @@ export const useAiStore = create<AiState>((set, get) => {
   },
 
   deleteSession: async (sessionId: string) => {
+    const projectRoot = useAppStore.getState().activeProject?.rootPath;
+    if (!projectRoot) return;
     try {
-      await invoke("delete_chat_session", { sessionId });
+      await invoke("delete_chat_session", {
+        projectRoot,
+        sessionId,
+      });
       const { activeSessionId } = get();
 
       set((state) => ({
@@ -851,10 +893,11 @@ export const useAiStore = create<AiState>((set, get) => {
 
   saveActiveSession: async () => {
     const { activeSession } = get();
-    if (!activeSession) return;
+    const projectRoot = useAppStore.getState().activeProject?.rootPath;
+    if (!activeSession || !projectRoot) return;
 
     try {
-      await invoke("save_chat_session", { session: activeSession });
+      await invoke("save_chat_session", { projectRoot, session: activeSession });
     } catch (error) {
       console.error("Failed to save chat session:", error);
     }

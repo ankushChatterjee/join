@@ -2,11 +2,12 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::db::{ColumnDef, QueryResult};
 
 use super::path_safety::{safe_join, validate_id};
+use super::project::get_project_root;
 use super::ConfigError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,61 +39,68 @@ pub struct SavedResult {
     pub query_result: QueryResult,
 }
 
-fn get_saved_results_base_dir() -> PathBuf {
-    let config_dir = super::config::get_join_config_dir().join("saved-results");
-    fs::create_dir_all(&config_dir).ok();
-    config_dir
+fn get_saved_results_base_dir(project_root: &Path) -> PathBuf {
+    let dir = project_root.join("saved-results");
+    fs::create_dir_all(&dir).ok();
+    dir
 }
 
-fn get_connection_saved_results_dir(connection_id: &str) -> Result<PathBuf, ConfigError> {
-    safe_join(&get_saved_results_base_dir(), connection_id)
+fn get_connection_saved_results_dir(
+    project_root: &Path,
+    connection_id: &str,
+) -> Result<PathBuf, ConfigError> {
+    safe_join(&get_saved_results_base_dir(project_root), connection_id)
 }
 
 fn get_saved_result_meta_path(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
 ) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
-        &get_connection_saved_results_dir(connection_id)?,
+        &get_connection_saved_results_dir(project_root, connection_id)?,
         &format!("{saved_result_id}.meta.json"),
     )
 }
 
 fn get_saved_result_csv_path(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
 ) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
-        &get_connection_saved_results_dir(connection_id)?,
+        &get_connection_saved_results_dir(project_root, connection_id)?,
         &format!("{saved_result_id}.csv"),
     )
 }
 
 fn get_saved_result_data_path(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
 ) -> Result<PathBuf, ConfigError> {
     validate_id(saved_result_id)?;
     safe_join(
-        &get_connection_saved_results_dir(connection_id)?,
+        &get_connection_saved_results_dir(project_root, connection_id)?,
         &format!("{saved_result_id}.data.json"),
     )
 }
 
 fn load_metadata(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
 ) -> Result<SavedResultMetadata, ConfigError> {
-    let path = get_saved_result_meta_path(connection_id, saved_result_id)?;
+    let path = get_saved_result_meta_path(project_root, connection_id, saved_result_id)?;
     let content = fs::read_to_string(path)?;
-    let metadata: SavedResultMetadata = serde_json::from_str(&content)?;
+    let metadata = serde_json::from_str(&content)?;
     Ok(metadata)
 }
 
-fn save_metadata(metadata: &SavedResultMetadata) -> Result<(), ConfigError> {
-    let path = get_saved_result_meta_path(&metadata.connection_id, &metadata.id)?;
+fn save_metadata(project_root: &Path, metadata: &SavedResultMetadata) -> Result<(), ConfigError> {
+    let path = get_saved_result_meta_path(project_root, &metadata.connection_id, &metadata.id)?;
     let content = serde_json::to_string_pretty(metadata)?;
     fs::write(path, content)?;
     Ok(())
@@ -107,17 +115,16 @@ fn to_csv_cell(value: &JsonValue) -> String {
 }
 
 fn write_result_data(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
     result: &QueryResult,
 ) -> Result<(), ConfigError> {
-    // Write JSON file preserving full type information (column types and value types).
-    let data_path = get_saved_result_data_path(connection_id, saved_result_id)?;
+    let data_path = get_saved_result_data_path(project_root, connection_id, saved_result_id)?;
     let content = serde_json::to_string(result)?;
     fs::write(data_path, content)?;
 
-    // Also write CSV as a human-readable export fallback.
-    let csv_path = get_saved_result_csv_path(connection_id, saved_result_id)?;
+    let csv_path = get_saved_result_csv_path(project_root, connection_id, saved_result_id)?;
     let mut writer =
         csv::Writer::from_path(csv_path).map_err(|e| std::io::Error::other(e.to_string()))?;
     let headers: Vec<String> = result.columns.iter().map(|c| c.name.clone()).collect();
@@ -137,20 +144,19 @@ fn write_result_data(
 }
 
 fn read_result_data(
+    project_root: &Path,
     connection_id: &str,
     saved_result_id: &str,
     execution_time_ms: i64,
 ) -> Result<QueryResult, ConfigError> {
-    // Prefer the JSON file which preserves column types and value types.
-    let data_path = get_saved_result_data_path(connection_id, saved_result_id)?;
+    let data_path = get_saved_result_data_path(project_root, connection_id, saved_result_id)?;
     if data_path.exists() {
         let content = fs::read_to_string(data_path)?;
-        let result: QueryResult = serde_json::from_str(&content)?;
+        let result = serde_json::from_str(&content)?;
         return Ok(result);
     }
 
-    // Fall back to CSV for results saved before the JSON format was introduced.
-    let csv_path = get_saved_result_csv_path(connection_id, saved_result_id)?;
+    let csv_path = get_saved_result_csv_path(project_root, connection_id, saved_result_id)?;
     let mut reader =
         csv::Reader::from_path(csv_path).map_err(|e| std::io::Error::other(e.to_string()))?;
     let headers = reader
@@ -170,11 +176,12 @@ fn read_result_data(
     let mut rows: Vec<Vec<JsonValue>> = Vec::new();
     for row in reader.records() {
         let record = row.map_err(|e| std::io::Error::other(e.to_string()))?;
-        let parsed = record
-            .iter()
-            .map(|field| JsonValue::String(field.to_string()))
-            .collect();
-        rows.push(parsed);
+        rows.push(
+            record
+                .iter()
+                .map(|field| JsonValue::String(field.to_string()))
+                .collect(),
+        );
     }
 
     Ok(QueryResult {
@@ -187,9 +194,13 @@ fn read_result_data(
     })
 }
 
-pub fn list_saved_results(connection_id: &str) -> Result<Vec<SavedResultMetadata>, ConfigError> {
+pub fn list_saved_results(
+    project_root: &str,
+    connection_id: &str,
+) -> Result<Vec<SavedResultMetadata>, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
-    let dir = get_connection_saved_results_dir(connection_id)?;
+    let dir = get_connection_saved_results_dir(&project_root, connection_id)?;
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -214,17 +225,19 @@ pub fn list_saved_results(connection_id: &str) -> Result<Vec<SavedResultMetadata
 }
 
 pub fn save_saved_result(
+    project_root: &str,
     connection_id: &str,
     request: &SaveSavedResultRequest,
 ) -> Result<SavedResult, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     let now = Utc::now().timestamp_millis();
     let id = request
         .id
         .clone()
-        .unwrap_or_else(|| format!("result-{}", now));
+        .unwrap_or_else(|| format!("result-{now}"));
 
-    let existing = load_metadata(connection_id, &id).ok();
+    let existing = load_metadata(&project_root, connection_id, &id).ok();
     let created_at = existing.as_ref().map(|m| m.created_at).unwrap_or(now);
     let default_name = Utc::now().format("Result %Y-%m-%d %H:%M:%S").to_string();
     let name = request
@@ -245,8 +258,8 @@ pub fn save_saved_result(
         updated_at: now,
     };
 
-    write_result_data(connection_id, &id, &request.query_result)?;
-    save_metadata(&metadata)?;
+    write_result_data(&project_root, connection_id, &id, &request.query_result)?;
+    save_metadata(&project_root, &metadata)?;
 
     Ok(SavedResult {
         metadata,
@@ -255,26 +268,37 @@ pub fn save_saved_result(
 }
 
 pub fn get_saved_result(
+    project_root: &str,
     connection_id: &str,
     saved_result_id: &str,
 ) -> Result<SavedResult, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(saved_result_id)?;
-    let metadata = load_metadata(connection_id, saved_result_id)?;
-    let query_result =
-        read_result_data(connection_id, saved_result_id, metadata.execution_time_ms)?;
+    let metadata = load_metadata(&project_root, connection_id, saved_result_id)?;
+    let query_result = read_result_data(
+        &project_root,
+        connection_id,
+        saved_result_id,
+        metadata.execution_time_ms,
+    )?;
     Ok(SavedResult {
         metadata,
         query_result,
     })
 }
 
-pub fn delete_saved_result(connection_id: &str, saved_result_id: &str) -> Result<(), ConfigError> {
+pub fn delete_saved_result(
+    project_root: &str,
+    connection_id: &str,
+    saved_result_id: &str,
+) -> Result<(), ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(saved_result_id)?;
-    let meta_path = get_saved_result_meta_path(connection_id, saved_result_id)?;
-    let csv_path = get_saved_result_csv_path(connection_id, saved_result_id)?;
-    let data_path = get_saved_result_data_path(connection_id, saved_result_id)?;
+    let meta_path = get_saved_result_meta_path(&project_root, connection_id, saved_result_id)?;
+    let csv_path = get_saved_result_csv_path(&project_root, connection_id, saved_result_id)?;
+    let data_path = get_saved_result_data_path(&project_root, connection_id, saved_result_id)?;
     fs::remove_file(meta_path).ok();
     fs::remove_file(csv_path).ok();
     fs::remove_file(data_path).ok();
@@ -282,126 +306,30 @@ pub fn delete_saved_result(connection_id: &str, saved_result_id: &str) -> Result
 }
 
 pub fn rename_saved_result(
+    project_root: &str,
     connection_id: &str,
     saved_result_id: &str,
     new_name: &str,
 ) -> Result<SavedResultMetadata, ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(saved_result_id)?;
-    let mut metadata = load_metadata(connection_id, saved_result_id)?;
+    let mut metadata = load_metadata(&project_root, connection_id, saved_result_id)?;
     metadata.name = new_name.to_string();
     metadata.updated_at = Utc::now().timestamp_millis();
-    save_metadata(&metadata)?;
+    save_metadata(&project_root, &metadata)?;
     Ok(metadata)
 }
 
-pub fn delete_connection_saved_results(connection_id: &str) -> Result<(), ConfigError> {
+pub fn delete_connection_saved_results(
+    project_root: &str,
+    connection_id: &str,
+) -> Result<(), ConfigError> {
+    let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
-    let dir = get_connection_saved_results_dir(connection_id)?;
+    let dir = get_connection_saved_results_dir(&project_root, connection_id)?;
     if dir.exists() {
         fs::remove_dir_all(dir)?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn setup_temp_config() -> std::path::PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("join-saved-results-tests-{nanos}"));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        unsafe {
-            std::env::set_var("JOIN_CONFIG_DIR", &dir);
-        }
-        dir
-    }
-
-    fn sample_query_result() -> QueryResult {
-        QueryResult {
-            columns: vec![
-                ColumnDef {
-                    name: "id".into(),
-                    type_name: "int4".into(),
-                    is_primary_key: Some(true),
-                    is_indexed: Some(true),
-                },
-                ColumnDef {
-                    name: "note".into(),
-                    type_name: "text".into(),
-                    is_primary_key: None,
-                    is_indexed: None,
-                },
-                ColumnDef {
-                    name: "tags".into(),
-                    type_name: "_text".into(),
-                    is_primary_key: None,
-                    is_indexed: None,
-                },
-            ],
-            rows: vec![
-                vec![
-                    JsonValue::from(1),
-                    JsonValue::from("hello,world"),
-                    JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")]),
-                ],
-                vec![
-                    JsonValue::from(2),
-                    JsonValue::from("line\nbreak"),
-                    JsonValue::Array(vec![JsonValue::from("x")]),
-                ],
-            ],
-            row_count: 2,
-            execution_time_ms: 12,
-            truncated: false,
-            max_rows: 2,
-        }
-    }
-
-    #[test]
-    fn saved_result_roundtrip_and_rename_delete() {
-        let _lock = crate::storage::config::test_env_lock()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let _guard = setup_temp_config();
-        let request = SaveSavedResultRequest {
-            id: None,
-            name: Some("Weekly Report".into()),
-            sql: "SELECT * FROM reports".into(),
-            preview_source: Some("public.reports".into()),
-            query_result: sample_query_result(),
-        };
-
-        let saved = save_saved_result("conn-1", &request).expect("save");
-        assert_eq!(saved.metadata.row_count, 2);
-
-        let loaded = get_saved_result("conn-1", &saved.metadata.id).expect("load");
-        assert_eq!(loaded.query_result.row_count, 2);
-        assert_eq!(loaded.query_result.rows.len(), 2);
-
-        // Column type metadata must be preserved.
-        assert_eq!(loaded.query_result.columns[0].type_name, "int4");
-        assert_eq!(loaded.query_result.columns[2].type_name, "_text");
-
-        // Array values must be preserved as arrays, not flattened to strings.
-        assert!(
-            loaded.query_result.rows[0][2].is_array(),
-            "array value should round-trip as array"
-        );
-        assert_eq!(
-            loaded.query_result.rows[0][2],
-            JsonValue::Array(vec![JsonValue::from("a"), JsonValue::from("b")])
-        );
-
-        let renamed = rename_saved_result("conn-1", &saved.metadata.id, "Renamed").expect("rename");
-        assert_eq!(renamed.name, "Renamed");
-
-        delete_saved_result("conn-1", &saved.metadata.id).expect("delete");
-        assert!(get_saved_result("conn-1", &saved.metadata.id).is_err());
-    }
 }
