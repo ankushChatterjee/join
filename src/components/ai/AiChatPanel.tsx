@@ -533,7 +533,7 @@ function AiChatPanel() {
             <Sparkles className="h-4 w-4 text-accent-400" />
           </div>
         ) : (
-          <div ref={messagesContentRef} className="mx-auto w-full max-w-[760px] px-2.5 py-3">
+          <div ref={messagesContentRef} className="mx-auto w-full max-w-[1040px] px-3 py-3">
             {messages.map((msg) => (
               <ChatMessageComponent 
                 key={msg.id} 

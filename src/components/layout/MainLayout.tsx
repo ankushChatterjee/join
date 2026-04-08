@@ -150,13 +150,13 @@ export function MainLayout() {
 
         <Panel id="main-content" defaultSize="82%" minSize="35%">
           <Group orientation="horizontal" className="h-full">
-            <Panel id="ai-chat" defaultSize="38%" minSize="24%" maxSize="55%">
+            <Panel id="ai-chat" defaultSize="46%" minSize="28%" maxSize="68%">
               <AiChatPanel />
             </Panel>
 
             <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
 
-            <Panel id="workspace" defaultSize="62%" minSize="30%">
+            <Panel id="workspace" defaultSize="54%" minSize="30%">
               {!hasAnyConnection && !hasOpenTabs ? (
                 <NoConnectionState />
               ) : !hasOpenTabs ? (
