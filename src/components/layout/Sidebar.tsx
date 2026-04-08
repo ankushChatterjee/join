@@ -1,6 +1,6 @@
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import { SchemaTree } from "@/components/connections/SchemaTree";
-import { FolderTree, LogOut, PanelLeftClose } from "lucide-react";
+import { LogOut, PanelLeftClose } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -19,46 +19,42 @@ export function Sidebar({ onCollapse }: SidebarProps) {
   );
 
   return (
-    <div className="h-full flex flex-col bg-base-900/95">
+    <div className="flex h-full flex-col overflow-hidden bg-base-900">
       {activeProject ? (
-        <div className="border-b border-base-750 bg-base-900/88 px-2.5 py-2">
-          <div className="mb-2 flex items-center justify-between">
+        <div className="border-b border-base-750 px-4 py-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={onCollapse}
-              className="flex h-6 w-6 items-center justify-center rounded-sm text-base-300 transition-colors-fast hover:bg-base-800 hover:text-base-100"
+              className="ghost-button flex h-8 w-8 items-center justify-center rounded-sm"
               title="Collapse sidebar"
             >
               <PanelLeftClose className="h-3.5 w-3.5" />
             </button>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[14px] font-semibold text-base-50">
+                {activeProject.name}
+              </div>
+              <div className="mt-1 truncate text-[11px] text-base-300">
+                {activeProject.rootPath}
+              </div>
+            </div>
             <button
               onClick={closeProject}
-              className="rounded-sm border border-base-700 p-1 text-base-300 transition-colors-fast hover:bg-base-800 hover:text-base-100"
+              className="ghost-button p-2"
               title="Close project"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-bold text-base-100">
-                {activeProject.name}
-              </div>
-              <div className="truncate text-[11px] text-base-300">
-                {activeProject.rootPath}
-              </div>
-            </div>
-          </div>
         </div>
       ) : null}
-      {/* Connections section */}
       <ConnectionsList
         isExpanded={isConnectionsExpanded}
         onToggleExpanded={() => setIsConnectionsExpanded((value) => !value)}
       />
       
-      {/* Schema tree - takes remaining space */}
       {isConnectionsExpanded ? (
-        <div className="flex-1 overflow-hidden border-t border-base-800/80">
+        <div className="flex-1 overflow-hidden border-t border-base-700/20">
           <SchemaTree />
         </div>
       ) : null}

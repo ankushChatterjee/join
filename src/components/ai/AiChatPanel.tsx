@@ -78,7 +78,7 @@ function ModelSelector() {
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Select model"
         className={cn(
-          "flex h-7 items-center gap-1 rounded-sm px-1.5 text-[11px] outline-none transition-colors-fast",
+          "flex h-7 items-center gap-1 px-1.5 text-[11px] outline-none transition-colors-fast",
           isOpen
             ? "bg-base-800 text-base-100"
             : "text-base-300 hover:bg-base-800 hover:text-base-100"
@@ -92,7 +92,7 @@ function ModelSelector() {
       </button>
 
       {isOpen && (
-        <div className="animate-dropdown-in absolute right-0 top-full z-50 mt-1 w-60 overflow-hidden rounded-sm border border-base-700 bg-base-900 shadow-lg shadow-black/30">
+        <div className="animate-dropdown-in absolute right-0 top-full z-50 mt-1 w-60 overflow-hidden border border-base-700 bg-base-900 shadow-lg shadow-black/30">
           {providers.map((provider) => (
             <div
               key={provider.providerId}
@@ -167,14 +167,14 @@ function SessionList({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-1">
           <button
             onClick={handleNewChat}
-            className="rounded-sm border border-base-700 p-1 text-base-300 outline-none transition-colors-fast hover:border-base-600 hover:bg-base-800 hover:text-base-100"
+            className="border border-base-700 p-1 text-base-300 outline-none transition-colors-fast hover:border-base-600 hover:bg-base-800 hover:text-base-100"
             title="New chat"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClose}
-            className="rounded-sm border border-base-700 p-1 text-base-300 outline-none transition-colors-fast hover:border-base-600 hover:bg-base-800 hover:text-base-100"
+            className="border border-base-700 p-1 text-base-300 outline-none transition-colors-fast hover:border-base-600 hover:bg-base-800 hover:text-base-100"
             title="Close"
           >
             <X className="w-3.5 h-3.5" />
@@ -200,7 +200,7 @@ function SessionList({ onClose }: { onClose: () => void }) {
             >
               <button
                 onClick={() => handleSelect(session.id)}
-                className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm px-1 py-1 text-left outline-none"
+                className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-1 text-left outline-none"
               >
                 <MessageSquare className="h-3 w-3 shrink-0 text-base-400" />
                 <div className="min-w-0 flex-1">
@@ -212,7 +212,7 @@ function SessionList({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 onClick={(e) => handleDelete(e, session.id)}
-                className="shrink-0 rounded-sm p-1 text-base-400 opacity-0 outline-none transition-all group-hover:opacity-100 hover:bg-base-800 hover:text-red-300"
+                className="shrink-0 p-1 text-base-400 opacity-0 outline-none transition-all group-hover:opacity-100 hover:bg-base-800 hover:text-red-300"
                 title="Delete"
               >
                 <Trash2 className="h-3 w-3" />
@@ -462,15 +462,15 @@ function AiChatPanel() {
   const canSend = inputText.trim().length > 0 && !isStreaming;
 
   return (
-    <div className="ai-chat-panel relative flex h-full flex-col bg-base-900/95">
+    <div className="ai-chat-panel relative flex h-full flex-col overflow-hidden bg-base-900">
       {/* Header */}
-      <div className="h-8 px-2.5 flex items-center justify-between gap-1.5 border-b border-base-750 bg-base-900 shrink-0">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-base-750 bg-base-900 px-3">
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setShowSessions(!showSessions)}
             aria-label="Open chat history"
             className={cn(
-              "w-6 h-6 flex items-center justify-center rounded-sm outline-none transition-colors-fast",
+              "w-6 h-6 flex items-center justify-center outline-none transition-colors-fast",
               showSessions
                 ? "bg-base-800 text-base-100"
                 : "text-base-300 hover:bg-base-800 hover:text-base-100"
@@ -481,7 +481,7 @@ function AiChatPanel() {
           </button>
           <button
             onClick={handleNewChat}
-            className="w-6 h-6 flex items-center justify-center rounded-sm text-base-300 outline-none transition-colors-fast hover:bg-base-800 hover:text-base-100"
+            className="w-6 h-6 flex items-center justify-center text-base-300 outline-none transition-colors-fast hover:bg-base-800 hover:text-base-100"
             title="New chat"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -490,7 +490,7 @@ function AiChatPanel() {
             onClick={handleForkChat}
             disabled={!activeSession}
             className={cn(
-              "w-6 h-6 flex items-center justify-center rounded-sm outline-none transition-colors-fast",
+              "w-6 h-6 flex items-center justify-center outline-none transition-colors-fast",
               activeSession
                 ? "text-base-300 hover:bg-base-800 hover:text-base-100"
                 : "text-base-500 cursor-not-allowed"
@@ -502,11 +502,11 @@ function AiChatPanel() {
         </div>
 
         <div className="min-w-0 flex-1 px-1">
-          <p className="truncate text-[11px] font-semibold text-base-200">
+          <p className="truncate text-[12px] font-semibold text-base-100">
             {activeSession?.title || "New chat"}
           </p>
           {forkedFromTitle && (
-            <p className="truncate text-[10px] text-base-400">
+            <p className="truncate text-[11px] text-base-300">
               Forked from: {forkedFromTitle}
             </p>
           )}
@@ -567,8 +567,8 @@ function AiChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-base-750 bg-base-900 px-2.5 pb-2 pt-1.5">
-        <div className="relative rounded-sm border border-base-700 bg-base-850 transition-colors-fast focus-within:border-base-600">
+      <div className="shrink-0 border-t border-base-750 bg-base-900 px-3 pb-2 pt-2">
+        <div className="relative border border-base-700 bg-base-850 transition-colors-fast focus-within:border-base-600">
           <textarea
             ref={inputRef}
             value={inputText}
@@ -577,13 +577,13 @@ function AiChatPanel() {
             placeholder="Ask anything..."
             disabled={inputDisabled}
             rows={1}
-            className="w-full resize-none bg-transparent px-2.5 pb-8 pt-2 pr-12 text-[13px] leading-[1.45] text-base-100 placeholder:text-base-400 focus:outline-none focus-visible:outline-none disabled:opacity-40"
+            className="w-full resize-none overflow-hidden bg-transparent px-3 pb-8 pt-2 pr-12 text-[14px] leading-6 text-base-100 placeholder:text-base-400 focus:outline-none focus-visible:outline-none disabled:opacity-40"
           />
           <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
             {isStreaming ? (
               <button
                 onClick={stopStreaming}
-                className="flex h-7 w-7 items-center justify-center rounded-sm bg-red-500/10 text-red-400 outline-none transition-colors-fast hover:bg-red-500/20 hover:text-red-300"
+                className="flex h-7 w-7 items-center justify-center bg-red-500/10 text-red-400 outline-none transition-colors-fast hover:bg-red-500/20 hover:text-red-300"
                 title="Stop generating"
               >
                 <Square className="h-4 w-4 fill-current" />
@@ -593,7 +593,7 @@ function AiChatPanel() {
                 onClick={handleSend}
                 disabled={!canSend}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-sm outline-none transition-colors-fast",
+                  "flex h-7 w-7 items-center justify-center outline-none transition-colors-fast",
                   canSend
                     ? "bg-accent-500/20 text-accent-400 hover:bg-accent-500/30 hover:text-accent-300"
                     : "bg-base-800 text-base-500 cursor-not-allowed"
@@ -607,9 +607,9 @@ function AiChatPanel() {
         </div>
         <div className="mt-1 flex items-center justify-between px-0.5">
           <p className="text-[11px] text-base-200">
-            <kbd className="rounded-sm bg-base-850 px-1 py-0.5 font-mono text-[10px] text-base-100">Enter</kbd> send
+            <kbd className="bg-base-850 px-1 py-0.5 font-mono text-[10px] text-base-100">Enter</kbd> send
             {" · "}
-            <kbd className="rounded-sm bg-base-850 px-1 py-0.5 font-mono text-[10px] text-base-100">Shift+Enter</kbd> new line
+            <kbd className="bg-base-850 px-1 py-0.5 font-mono text-[10px] text-base-100">Shift+Enter</kbd> new line
           </p>
           <div className="flex items-center gap-3">
             <TokenUsageBar />

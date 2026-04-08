@@ -89,8 +89,8 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         ref={setNodeRef}
         style={sortableStyle}
         className={cn(
-          "flex items-center gap-1 h-5.5 px-1.5 rounded-sm shrink-0 border",
-          isActive ? "bg-base-850/85 border-base-700/80" : "bg-base-900/70 border-base-800/70"
+          "flex h-7 shrink-0 items-center gap-1.5 border-b px-2",
+          isActive ? "border-accent-500/55 bg-base-850/70" : "border-transparent bg-base-900/30"
         )}
       >
         <input
@@ -101,7 +101,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           onBlur={handleSaveEdit}
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
-          className="w-24 bg-base-800 border border-accent-500 rounded-sm px-1.5 py-0.5 text-[12px] text-base-100 outline-none"
+          className="w-24 border-b border-accent-500 bg-base-800 px-1.5 py-0.5 text-[12px] text-base-100 outline-none"
         />
       </div>
     );
@@ -116,10 +116,10 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
       onDoubleClick={handleDoubleClick}
       onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeScript(script.id))}
       className={cn(
-        "flex items-center gap-1 h-5.5 px-1.5 rounded-sm text-[11px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
+        "flex h-7 shrink-0 items-center gap-1.5 border-b px-2 text-[12px] font-medium cursor-grab active:cursor-grabbing",
         isActive
-          ? "bg-base-850/90 border-base-700/80 text-base-100"
-          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/80"
+          ? "border-accent-500/55 bg-base-850/75 text-base-100"
+          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/55"
       )}
       {...attributes}
       {...listeners}
@@ -131,7 +131,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         />
       )}
 
-      <span className="truncate max-w-[104px]">{script.name}</span>
+      <span className="max-w-[132px] truncate">{script.name}</span>
       <span
         role="button"
         tabIndex={-1}
@@ -140,7 +140,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           e.stopPropagation();
           closeScript(script.id);
         }}
-        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700/80 text-base-300 hover:text-base-100"
+        className="p-0.5 -mr-1 hover:bg-base-700/80 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -188,16 +188,16 @@ function ResultTab({ tab, isActive }: ResultTabProps) {
       onClick={() => setActiveResultTab(tab.id)}
       onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeResultTab(tab.id))}
       className={cn(
-        "flex items-center gap-1 h-5.5 px-1.5 rounded-sm text-[11px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
+        "flex h-7 shrink-0 items-center gap-1.5 border-b px-2 text-[12px] font-medium cursor-grab active:cursor-grabbing",
         isActive
-          ? "bg-base-850/90 border-base-700/80 text-base-100"
-          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/80"
+          ? "border-accent-500/55 bg-base-850/75 text-base-100"
+          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/55"
       )}
       {...attributes}
       {...listeners}
     >
       <Table2 className="w-3 h-3 text-accent-400 shrink-0" />
-      <span className="truncate max-w-[126px]">{tab.name}</span>
+      <span className="max-w-[148px] truncate">{tab.name}</span>
       <span
         role="button"
         tabIndex={-1}
@@ -206,7 +206,7 @@ function ResultTab({ tab, isActive }: ResultTabProps) {
           e.stopPropagation();
           closeResultTab(tab.id);
         }}
-        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700/80 text-base-300 hover:text-base-100"
+        className="p-0.5 -mr-1 hover:bg-base-700/80 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -366,7 +366,7 @@ export function EditorTabs() {
           <div
             ref={scrollContainerRef}
             onWheel={handleWheel}
-            className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full w-fit py-0.5"
+            className="editor-tabs-scroll flex h-full w-fit items-center gap-1 overflow-x-auto py-1"
           >
             {orderedTabs.map((tab) => {
               if (tab.kind === "script") {

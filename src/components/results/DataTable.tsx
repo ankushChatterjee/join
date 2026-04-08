@@ -52,7 +52,7 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
   const virtualRows = virtualizer.getVirtualItems();
 
   return (
-    <div ref={tableContainerRef} className="h-full overflow-auto panel-scroll results-scroll">
+    <div ref={tableContainerRef} className="results-scroll panel-scroll h-full overflow-auto">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -65,8 +65,8 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                     <th
                       key={header.id}
                       className={cn(
-                      "px-2.5 py-1.5 text-left font-semibold text-[12px] text-base-100 bg-base-900 border-b border-base-700 whitespace-nowrap tracking-[0.02em]",
-                      canSort && "cursor-pointer select-none hover:bg-base-850 transition-colors-fast"
+                      "whitespace-nowrap border-b border-base-700 bg-base-900 px-3 py-2 text-left text-[13px] font-semibold tracking-[0.02em] text-base-100",
+                      canSort && "cursor-pointer select-none transition-colors-fast hover:bg-base-850"
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
@@ -111,15 +111,15 @@ export function DataTable<TData>({ data, columns }: DataTableProps<TData>) {
                 key={row.id}
                 data-index={virtualRow.index}
                 className={cn(
-                  "border-b border-base-800/70 hover:bg-base-850/90",
-                  virtualRow.index % 2 === 0 ? "bg-base-900/65" : "bg-base-900/45"
+                  "border-b border-base-800/70 hover:bg-base-850/72",
+                  virtualRow.index % 2 === 0 ? "bg-base-900/55" : "bg-base-900/35"
                 )}
                 style={{ height: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className="h-8 px-2.5 text-base-100 whitespace-nowrap font-mono text-[12px]"
+                    className="h-8 whitespace-nowrap px-3 font-mono text-[13px] text-base-100"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>

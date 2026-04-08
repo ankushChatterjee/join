@@ -112,10 +112,10 @@ function QueryHistoryDropdown() {
         ref={buttonRef}
         onClick={handleToggle}
         className={cn(
-          "w-[22px] h-[22px] flex items-center justify-center rounded-sm transition-colors-fast cursor-pointer shrink-0 relative",
+          "ghost-button relative flex h-8 w-8 shrink-0 items-center justify-center rounded-sm",
           isOpen
-            ? "bg-base-800 text-accent-400"
-            : "text-base-300 hover:text-base-100 hover:bg-base-800"
+            ? "bg-base-800/90 text-accent-400"
+            : "text-base-300"
         )}
         title="Query history"
       >
@@ -125,17 +125,16 @@ function QueryHistoryDropdown() {
       {isOpen && createPortal(
         <div 
           ref={dropdownRef}
-          className="fixed w-[390px] max-h-[400px] bg-base-900 border border-base-700 rounded-md shadow-lg shadow-black/25 overflow-hidden z-[100]"
+          className="panel-shell fixed z-[100] max-h-[400px] w-[390px] overflow-hidden"
           style={{ top: dropdownPosition.top, right: dropdownPosition.right }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-base-750 bg-base-850">
+          <div className="flex items-center justify-between border-b border-base-700/40 px-3 py-2">
             <span className="text-xs font-semibold text-base-200 tracking-[0.03em]">Query history</span>
             <div className="flex items-center gap-1">
               {queryHistory.length > 0 && (
                 <button
                   onClick={handleClear}
-                  className="p-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast"
+                  className="ghost-button p-1"
                   title="Clear history"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -143,7 +142,7 @@ function QueryHistoryDropdown() {
               )}
               <button
                 onClick={handleClose}
-                className="p-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast"
+                className="ghost-button p-1"
                 title="Close"
               >
                 <X className="w-3.5 h-3.5" />
@@ -162,7 +161,7 @@ function QueryHistoryDropdown() {
                 <button
                   key={entry.id}
                   onClick={() => handleSelectQuery(entry)}
-                  className="w-full px-2.5 py-1.5 text-left hover:bg-base-850 transition-colors-fast border-b border-base-800/80 last:border-b-0"
+                  className="w-full border-b border-base-700/20 px-3 py-2 text-left transition-colors-fast hover:bg-white/[0.03] last:border-b-0"
                 >
                   <div className="flex items-start gap-1.5">
                     {/* Status indicator */}
@@ -218,28 +217,19 @@ export function TitleBar() {
   const projectName = useAppStore((state) => state.activeProject?.name ?? null);
   return (
     <header 
-      className="title-bar grid h-[30px] grid-cols-[68px_1fr_68px] items-center bg-base-900/95 border-b border-base-750 select-none shrink-0 relative"
+      className="title-bar relative grid h-[38px] shrink-0 grid-cols-[88px_1fr_88px] items-center border-b border-base-750 bg-base-900 px-2 select-none"
       data-tauri-drag-region
     >
-      {/* Left side - traffic lights space on macOS */}
       <div className="h-full" />
 
-      {/* Center - App title (pointer-events-none so it doesn't block dragging) */}
       <div className="flex items-center justify-center pointer-events-none px-2">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-base-100 tracking-[0.1em] uppercase">
-            Join
-          </span>
-          {projectName ? (
-            <span className="text-[11px] text-base-300 tracking-[0.04em]">
-              / {projectName}
-            </span>
-          ) : null}
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-base-100">Join</span>
+          {projectName ? <span className="text-[12px] text-base-300">/ {projectName}</span> : null}
         </div>
       </div>
 
-      {/* Right side - Action buttons */}
-      <div className="flex h-full items-center justify-end gap-1 px-2 relative z-10">
+      <div className="relative z-10 flex h-full items-center justify-end gap-1 px-1">
         <QueryHistoryDropdown />
       </div>
     </header>

@@ -17,21 +17,21 @@ import { useShallow } from "zustand/react/shallow";
 
 function NoConnectionState() {
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-surface px-8">
-      <div className="flex flex-col items-center text-center">
-        <div className="relative mb-4 flex h-12 w-12 items-center justify-center rounded-md border border-base-700 bg-base-900">
+    <div className="flex h-full flex-col items-center justify-center px-8">
+      <div className="flex max-w-md flex-col items-center text-center">
+        <div className="relative mb-4 flex h-12 w-12 items-center justify-center bg-base-900/85">
           <Database className="w-5 h-5 text-base-200" strokeWidth={1.6} />
           <Zap className="absolute w-3 h-3 text-accent-500 translate-x-3 translate-y-3" />
         </div>
-        <h2 className="text-base font-semibold text-base-100 mb-1">
+        <h2 className="mb-2 text-xl font-semibold tracking-[-0.02em] text-base-50">
           No active connection
         </h2>
-        <p className="text-sm text-base-300 max-w-[320px] leading-relaxed">
+        <p className="max-w-[340px] text-[15px] leading-7 text-base-200">
           Connect to a database from the sidebar to start writing queries
         </p>
         <div className="mt-6 flex items-center gap-2 text-xs text-base-400">
           <span>or press</span>
-          <kbd className="px-2 py-0.5 rounded-sm bg-base-850 border border-base-700 font-mono text-base-200">
+          <kbd className="bg-base-850/90 px-2 py-0.5 font-mono text-base-200">
             ⌘ N
           </kbd>
           <span>to add a connection</span>
@@ -62,15 +62,15 @@ function NoSheetsState() {
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-surface px-8">
-      <div className="flex flex-col items-center text-center">
-        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md border border-base-700 bg-base-900">
+    <div className="flex h-full flex-col items-center justify-center px-8">
+      <div className="flex max-w-md flex-col items-center text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center bg-base-900/85">
           <FileCode2 className="w-4 h-4 text-base-200" strokeWidth={1.6} />
         </div>
-        <h2 className="text-sm font-semibold text-base-100 mb-1">
+        <h2 className="mb-2 text-xl font-semibold tracking-[-0.02em] text-base-50">
           No open SQL sheets
         </h2>
-        <p className="text-sm text-base-300 mb-4">
+        <p className="mb-5 text-[15px] text-base-200">
           {canCreateScript
             ? "Create a SQL sheet to start writing queries"
             : "Connect to a database first, then create a SQL sheet"}
@@ -78,7 +78,7 @@ function NoSheetsState() {
         {canCreateScript && (
           <button
             onClick={handleNewScript}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-base-850 hover:bg-base-800 border border-base-700 text-xs text-base-200 hover:text-base-100 transition-colors-fast"
+            className="flex items-center gap-1.5 bg-accent-500/10 px-3.5 py-2 text-xs font-medium text-base-100 transition-colors-fast hover:bg-accent-500/16"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New SQL sheet</span>
@@ -123,24 +123,22 @@ export function MainLayout() {
   }, [isLeftSidebarOpen]);
 
   return (
-    <div className="app-texture h-screen w-screen flex flex-col bg-background overflow-hidden">
-      {/* Custom Title Bar */}
+    <div className="app-texture flex h-screen w-screen flex-col overflow-hidden bg-background">
       <TitleBar />
 
       <Group orientation="horizontal" className="flex-1">
-        {/* Left Sidebar */}
         {isLeftSidebarOpen ? (
           <>
             <Panel id="sidebar" defaultSize="18%" minSize="14%" maxSize="30%">
               <Sidebar onCollapse={() => setIsLeftSidebarOpen(false)} />
             </Panel>
-            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+            <Separator className="w-px bg-base-750 transition-colors-fast hover:bg-base-600 data-[separator-active]:bg-base-500" />
           </>
         ) : (
-          <div className="w-7 border-r border-base-750 bg-base-900/95 flex items-start justify-center pt-1.5 shrink-0">
+          <div className="flex w-8 shrink-0 items-start justify-center border-r border-base-750 py-2">
             <button
               onClick={() => setIsLeftSidebarOpen(true)}
-              className="w-[22px] h-[22px] rounded-sm flex items-center justify-center text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+              className="ghost-button flex h-8 w-8 items-center justify-center rounded-sm"
               title="Open sidebar"
             >
               <PanelLeftOpen className="w-3.5 h-3.5" />
@@ -154,7 +152,7 @@ export function MainLayout() {
               <AiChatPanel />
             </Panel>
 
-            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+            <Separator className="w-px bg-base-750 transition-colors-fast hover:bg-base-600 data-[separator-active]:bg-base-500" />
 
             <Panel id="workspace" defaultSize="54%" minSize="30%">
               {!hasAnyConnection && !hasOpenTabs ? (
@@ -168,7 +166,7 @@ export function MainLayout() {
                     defaultSize={isResultTabActive || isResultsPanelMinimized ? "100%" : "65%"}
                     minSize="30%"
                   >
-                    <div className="h-full flex flex-col bg-surface">
+                    <div className="flex h-full flex-col overflow-hidden bg-surface">
                       <EditorToolbar />
                       <div className="flex-1 overflow-hidden">
                         {activeEditorTab?.kind === "result" ? <ResultTabEditor /> : <SqlEditor />}
@@ -177,10 +175,10 @@ export function MainLayout() {
                   </Panel>
 
                   {isResultTabActive ? null : isResultsPanelMinimized ? (
-                    <div className="h-7 border-t border-base-750 bg-base-900/95 flex items-center justify-end px-2.5">
+                    <div className="flex h-9 items-center justify-end border-t border-base-750 bg-base-900 px-3">
                       <button
                         onClick={toggleResultsPanelMinimized}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+                        className="ghost-button flex items-center gap-1 rounded-sm px-2.5 py-1 text-[11px]"
                         title="Show results panel"
                       >
                         <PanelBottomOpen className="w-3.5 h-3.5" />
@@ -189,7 +187,7 @@ export function MainLayout() {
                     </div>
                   ) : (
                     <>
-                      <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+                      <Separator className="h-px bg-base-750 transition-colors-fast hover:bg-base-600 data-[separator-active]:bg-base-500" />
                       <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
                         <ResultsPanel />
                       </Panel>

@@ -61,7 +61,7 @@ function MarkdownContent({
             <CodeBlock code={codeString} language={language} />
           ) : (
             <code
-              className="rounded-sm bg-base-850 px-1.5 py-0.5 font-mono text-[13px] text-accent-300"
+              className="bg-base-850 px-1.5 py-0.5 font-mono text-[13px] text-base-100"
               {...rest}
             >
               {children}
@@ -70,12 +70,12 @@ function MarkdownContent({
         },
         // Headings
         h1: ({ children }) => (
-          <div className="mb-1 mt-4 text-base font-semibold text-base-100" role="heading" aria-level={1}>
+          <div className="mb-2 mt-4 text-[18px] font-semibold text-base-50" role="heading" aria-level={1}>
             {children}
           </div>
         ),
         h2: ({ children }) => (
-          <div className="mb-1 mt-3 text-sm font-semibold text-base-100" role="heading" aria-level={2}>
+          <div className="mb-2 mt-4 text-[16px] font-semibold text-base-50" role="heading" aria-level={2}>
             {children}
           </div>
         ),
@@ -101,16 +101,16 @@ function MarkdownContent({
         ),
         // Paragraphs
         p: ({ children }) => (
-          <p className="mb-2 text-[13px] leading-[1.6] text-base-200">{children}</p>
+          <p className="mb-2 text-[14px] leading-[1.65] text-base-100">{children}</p>
         ),
         // Lists
         ul: ({ children }) => (
-          <ul className="my-2 list-disc space-y-1 pl-5 text-[13px] leading-6 text-base-200 marker:text-base-400">
+          <ul className="my-2 list-disc space-y-1.5 pl-5 text-[14px] leading-[1.65] text-base-100 marker:text-base-400">
             {children}
           </ul>
         ),
         ol: ({ children }) => (
-          <ol className="my-2 list-decimal space-y-1 pl-5 text-[13px] leading-6 text-base-200 marker:text-base-400">
+          <ol className="my-2 list-decimal space-y-1.5 pl-5 text-[14px] leading-[1.65] text-base-100 marker:text-base-400">
             {children}
           </ol>
         ),
@@ -155,13 +155,13 @@ function MarkdownContent({
           <del className="text-base-300 line-through">{children}</del>
         ),
         blockquote: ({ children }) => (
-          <blockquote className="my-2 border-l-2 border-base-700 pl-3 text-[13px] italic text-base-300">
+          <blockquote className="my-2 border-l-2 border-base-700 pl-3 text-[14px] italic leading-[1.65] text-base-200">
             {children}
           </blockquote>
         ),
         table: ({ children }) => (
           <div className="my-2 overflow-x-auto">
-            <table className="min-w-full border-collapse text-[12px]">{children}</table>
+            <table className="min-w-full border-collapse text-[13px]">{children}</table>
           </div>
         ),
         th: ({ children }) => (
@@ -214,8 +214,8 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   };
 
   return (
-    <div className="my-2 overflow-hidden rounded-sm border border-base-700 bg-base-900">
-      <div className="flex items-center justify-between border-b border-base-700 bg-base-850 px-2.5 py-1">
+    <div className="my-2 overflow-hidden bg-base-900/55">
+      <div className="flex items-center justify-between border-b border-base-800 px-3 py-1.5">
         <span className="font-mono text-[11px] uppercase text-base-300">
           {language || "code"}
         </span>
@@ -224,7 +224,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
             <>
               <button
                 onClick={handleAddInNewCell}
-                className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
+                className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-base-100 transition-colors-fast hover:bg-base-800 hover:text-accent-300"
                 title="Add in a new cell"
               >
                 <ArrowDownToLine className="w-3 h-3" />
@@ -232,7 +232,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
               </button>
               <button
                 onClick={handleInsert}
-                className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-accent-300"
+                className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-base-100 transition-colors-fast hover:bg-base-800 hover:text-accent-300"
                 title="Insert to editor"
               >
                 <ArrowDownToLine className="w-3 h-3" />
@@ -242,7 +242,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] text-base-200 transition-colors-fast hover:bg-base-700 hover:text-base-100"
+            className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-base-100 transition-colors-fast hover:bg-base-800 hover:text-base-100"
             title="Copy"
           >
             {copied ? (
@@ -253,8 +253,8 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           </button>
         </div>
       </div>
-      <pre className="panel-scroll overflow-x-auto px-2.5 py-2 text-[13px]">
-        <code className="font-mono leading-relaxed text-base-200">{code}</code>
+      <pre className="panel-scroll overflow-x-auto px-3 py-2.5 text-[13px]">
+        <code className="font-mono leading-6 text-base-100">{code}</code>
       </pre>
     </div>
   );
@@ -283,10 +283,10 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
   }, [toolCall.status, toolCall.isError]);
 
   return (
-    <div className="my-2 overflow-hidden rounded-sm border border-base-700/70 bg-base-900/60">
+    <div className="my-2 overflow-hidden border-l border-base-800 pl-2">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors-fast hover:bg-base-850"
+        className="flex w-full items-center gap-1.5 px-1 py-1.5 text-left transition-colors-fast hover:bg-base-900/50"
       >
         {isExpanded ? (
           <ChevronDown className="w-3 h-3 text-base-300 shrink-0" />
@@ -301,7 +301,7 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallDisplay }) {
       </button>
 
       {isExpanded && (
-        <div className="border-t border-base-700/70 px-2.5 py-2 text-xs">
+        <div className="border-t border-base-800 px-1 py-2 text-xs">
           <div className="mb-1 text-base-300">Input:</div>
           <pre className="mb-2 overflow-x-auto font-mono text-[11px] text-base-300">
             {JSON.stringify(toolCall.input, null, 2)}
@@ -339,8 +339,8 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
     : "The AI wants to run this query:";
 
   return (
-    <div className="my-3 overflow-hidden rounded-sm border border-amber-500/30 bg-amber-500/5">
-      <div className="flex items-center gap-1.5 border-b border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5">
+    <div className="my-3 overflow-hidden bg-amber-500/5">
+      <div className="flex items-center gap-1.5 border-b border-amber-500/20 px-2.5 py-1.5">
         <ShieldAlert className="w-4 h-4 text-amber-400" />
         <span className="text-xs font-medium text-amber-300">
           {title}
@@ -350,20 +350,20 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
         <p className="mb-2 text-xs text-base-300">
           {description}
         </p>
-        <pre className="panel-scroll mb-2.5 overflow-x-auto rounded-sm border border-base-700 bg-base-900 px-2.5 py-2 text-xs font-mono text-base-200">
+        <pre className="panel-scroll mb-2.5 overflow-x-auto bg-base-900/70 px-2.5 py-2 text-xs font-mono text-base-200">
           {approval.sql}
         </pre>
         <div className="flex items-center gap-2">
           <button
             onClick={() => approveToolCall(approval.toolCallId, true)}
-            className="flex items-center gap-1.5 rounded-sm border border-green-600/30 bg-green-600/20 px-2.5 py-1 text-xs font-medium text-green-400 transition-colors-fast hover:bg-green-600/30"
+            className="flex items-center gap-1.5 bg-green-600/16 px-2.5 py-1 text-xs font-medium text-green-400 transition-colors-fast hover:bg-green-600/24"
           >
             <Check className="w-3 h-3" />
             Approve
           </button>
           <button
             onClick={() => approveToolCall(approval.toolCallId, false)}
-            className="flex items-center gap-1.5 rounded-sm border border-red-600/20 bg-red-600/10 px-2.5 py-1 text-xs font-medium text-red-400 transition-colors-fast hover:bg-red-600/20"
+            className="flex items-center gap-1.5 bg-red-600/10 px-2.5 py-1 text-xs font-medium text-red-400 transition-colors-fast hover:bg-red-600/18"
           >
             <X className="w-3 h-3" />
             Deny
@@ -526,7 +526,7 @@ const ChatMessageComponentInner = ({
   if (isError && liveContent) {
     return (
       <div className="py-1.5">
-        <div className="flex items-start gap-2 rounded-sm border border-red-500/20 bg-red-500/8 px-2.5 py-2">
+        <div className="flex items-start gap-2 bg-red-500/8 px-2.5 py-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="mb-0.5 text-xs font-medium text-red-300">Something went wrong</p>
@@ -539,7 +539,7 @@ const ChatMessageComponentInner = ({
 
   return (
     <div className="py-1.5">
-      <div className="rounded-sm border border-base-700/70 bg-base-900/50 px-2.5 py-2">
+      <div className="px-2 py-1.5">
         {parts.length > 0 ? (
           // Inline parts - render in order
           <>
@@ -549,7 +549,7 @@ const ChatMessageComponentInner = ({
                 {streamingTail && (
                   <p
                     key="streaming-tail"
-                    className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
+                    className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-100 animate-streaming-tail-in"
                   >
                     {streamingTail}
                   </p>
@@ -589,7 +589,7 @@ const ChatMessageComponentInner = ({
                       {streamingTail && (
                         <p
                           key="streaming-tail"
-                          className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-200 animate-streaming-tail-in"
+                          className="mb-2 whitespace-pre-wrap text-[13px] leading-[1.6] text-base-100 animate-streaming-tail-in"
                         >
                           {streamingTail}
                         </p>

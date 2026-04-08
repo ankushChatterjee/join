@@ -39,8 +39,8 @@ function ConnectionRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 mx-1 px-1.5 py-1 rounded-none transition-colors-fast border",
-        isActive ? "bg-base-850 border-accent-500/22" : "border-base-800 hover:bg-base-850/70"
+        "mx-3 flex items-center gap-2 px-2.5 py-1.5 transition-colors-fast",
+        isActive ? "bg-base-850/55" : "hover:bg-base-850/35"
       )}
     >
       {/* Name and host with status dot */}
@@ -61,14 +61,14 @@ function ConnectionRow({
           )}
           <span
             className={cn(
-              "text-[13px] font-semibold truncate",
+              "truncate text-[13px] font-semibold leading-5",
               isActive ? "text-base-100" : "text-base-200"
             )}
           >
             {conn.name}
           </span>
         </div>
-        <div className="text-[12px] text-base-200 truncate ml-3.5 mt-0.5">
+        <div className="ml-4 mt-0.5 truncate text-[12px] leading-5 text-base-300">
           {conn.host}:{conn.port}
         </div>
       </button>
@@ -79,7 +79,7 @@ function ConnectionRow({
           onClick={() => onConnect(conn)}
           disabled={isConnecting}
           className={cn(
-            "p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast",
+            "p-1 text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast",
             isConnecting && "opacity-50 cursor-not-allowed"
           )}
           title={isConnecting ? "Connecting..." : conn.is_connected ? "Disconnect" : "Connect"}
@@ -95,7 +95,7 @@ function ConnectionRow({
         {conn.is_connected && (
           <button
             onClick={() => onRefresh(conn.id)}
-            className="p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
+            className="p-1 text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast"
             title="Refresh"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -103,14 +103,14 @@ function ConnectionRow({
         )}
         <button
           onClick={() => onEdit(conn)}
-          className="p-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
+          className="p-1 text-base-300 hover:text-base-100 hover:bg-base-800 cursor-pointer transition-colors-fast"
           title="Edit"
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={() => onDelete(conn)}
-          className="p-1 rounded-none border border-transparent text-base-300 hover:text-red-300 hover:bg-base-800 hover:border-base-700 cursor-pointer transition-colors-fast"
+          className="p-1 text-base-300 hover:text-red-300 hover:bg-base-800 cursor-pointer transition-colors-fast"
           title="Delete"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -196,12 +196,11 @@ export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsLis
   };
 
   return (
-    <div className="border-b border-base-750 bg-base-900/85">
-      {/* Header - clickable to expand/collapse */}
-      <div className="flex items-center gap-2 px-2.5 py-1.5 font-mono">
+    <div className="border-b border-base-750/60 bg-base-900/70">
+      <div className="flex items-center gap-2 px-4 py-2">
         <button
           onClick={onToggleExpanded}
-          className="flex flex-1 items-center gap-1.5 rounded-sm px-1 py-0.5 text-left transition-colors-fast hover:bg-base-850 cursor-pointer"
+          className="flex flex-1 items-center gap-1.5 px-1 py-0.5 text-left transition-colors-fast hover:bg-base-850/60 cursor-pointer"
           title={isExpanded ? "Collapse connections" : "Expand connections"}
         >
           <ChevronRight
@@ -210,18 +209,18 @@ export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsLis
               isExpanded && "rotate-90"
             )}
           />
-          <span className="text-[12px] font-semibold text-base-100 uppercase tracking-[0.08em]">
+          <span className="text-[11px] font-semibold text-base-100 uppercase tracking-[0.14em]">
             Connections
           </span>
           {connections.length > 0 && (
-            <span className="text-[12px] text-base-200 ml-0.5">
+            <span className="ml-0.5 text-[12px] text-base-200">
               [{connectedCount > 0 ? `${connectedCount} ONLINE` : connections.length}]
             </span>
           )}
         </button>
         <button
           onClick={() => openConnectionDialog()}
-          className="p-1 -mr-1 rounded-none border border-transparent text-base-300 hover:text-base-100 hover:bg-base-800 hover:border-base-700 transition-colors-fast cursor-pointer"
+          className="ghost-button -mr-1 rounded-sm p-1 transition-colors-fast cursor-pointer"
           aria-label="Add connection"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -230,14 +229,14 @@ export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsLis
 
       {/* Expanded: Show search + all connections */}
       {isExpanded && (
-        <div className="pb-1 max-h-[38vh] overflow-y-auto connections-scroll">
+        <div className="max-h-[38vh] overflow-y-auto pb-3 connections-scroll">
           {isLoadingConnections ? (
             <div className="px-3 py-3 flex justify-center">
               <Loader2 className="w-4 h-4 animate-spin text-base-300" />
             </div>
           ) : connections.length === 0 ? (
             <div className="px-3 py-3 text-center font-mono">
-              <p className="text-[12px] text-base-200 mb-2">NO CONNECTIONS</p>
+              <p className="mb-2 text-[13px] text-base-200">NO CONNECTIONS</p>
               <button
                 onClick={() => openConnectionDialog()}
                 className="text-[12px] text-accent-500 hover:text-accent-400 cursor-pointer transition-colors-fast"
@@ -249,7 +248,7 @@ export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsLis
             <>
               {/* Search input - only shown when 5+ connections */}
               {showSearch && (
-                <div className="mx-1 mb-1 font-mono">
+                <div className="mx-3 mb-3">
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-base-300" />
                     <input
@@ -257,12 +256,12 @@ export function ConnectionsList({ isExpanded, onToggleExpanded }: ConnectionsLis
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search connections..."
-                      className="w-full pl-7 pr-7 py-1.5 text-[12px] bg-base-850 border border-base-700 rounded-none text-base-100 placeholder:text-base-400 focus:outline-none focus:border-accent-500/60 transition-colors-fast"
+                      className="w-full border-b border-base-700 bg-base-850/70 py-1.5 pl-7 pr-7 text-[12px] text-base-100 placeholder:text-base-400 transition-colors-fast focus:border-accent-500/60 focus:outline-none"
                     />
                     {searchQuery && (
                       <button
                         onClick={() => setSearchQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-none text-base-300 hover:text-base-100 cursor-pointer transition-colors-fast"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-base-300 hover:text-base-100 cursor-pointer transition-colors-fast"
                       >
                         <X className="w-3 h-3" />
                       </button>
