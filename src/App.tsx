@@ -16,9 +16,8 @@ function App() {
       loadQueryHistory: state.loadQueryHistory,
     }))
   );
-  const { togglePanel, loadSessions } = useAiStore(
+  const { loadSessions } = useAiStore(
     useShallow((state) => ({
-      togglePanel: state.togglePanel,
       loadSessions: state.loadSessions,
     }))
   );
@@ -34,18 +33,6 @@ function App() {
     // Load AI chat sessions
     loadSessions();
   }, [loadConnections, loadOpenTabs, loadQueryHistory, loadSessions]);
-
-  // Keyboard shortcut: Cmd+L to toggle AI panel
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
-        e.preventDefault();
-        togglePanel();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [togglePanel]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {

@@ -10,7 +10,6 @@ import CodeMirror from "@uiw/react-codemirror";
 import { sql, PostgreSQL, MySQL, SQLite } from "@codemirror/lang-sql";
 import { EditorView, keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
-import { buildCompletionSchema } from "@/components/editor/completionSchema";
 import { setEditorView } from "@/components/editor/editorUtils";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
@@ -24,8 +23,8 @@ const customTheme = EditorView.theme(
     ".cm-content": {
       caretColor: "#f48734",
       fontFamily: "var(--font-mono)",
-      padding: "8px 0",
-      minHeight: "104px",
+      padding: "6px 0",
+      minHeight: "96px",
     },
     ".cm-cursor": {
       borderLeft: "none",
@@ -43,7 +42,7 @@ const customTheme = EditorView.theme(
       backgroundColor: "#0a0c10",
       color: "#7f8da0",
       border: "none",
-      borderRight: "1px solid #1d2430",
+      borderRight: "1px solid rgba(42, 49, 62, 0.75)",
       paddingRight: "4px",
     },
     ".cm-lineNumbers .cm-gutterElement": {
@@ -55,7 +54,7 @@ const customTheme = EditorView.theme(
       color: "#a8b2bf",
     },
     ".cm-activeLine": {
-      backgroundColor: "rgba(42, 42, 42, 0.4)",
+      backgroundColor: "rgba(42, 42, 42, 0.24)",
     },
     ".cm-matchingBracket": {
       backgroundColor: "rgba(244, 135, 52, 0.2)",
@@ -94,9 +93,6 @@ export function ResultTabEditor() {
     activeEditorTab,
     openResultTabs,
     connections,
-    tablesBySchema,
-    viewsBySchema,
-    columns,
     refreshResultTab,
     updateResultTabSql,
     acceptResultTabProposal,
@@ -110,9 +106,6 @@ export function ResultTabEditor() {
       activeEditorTab: state.activeEditorTab,
       openResultTabs: state.openResultTabs,
       connections: state.connections,
-      tablesBySchema: state.tablesBySchema,
-      viewsBySchema: state.viewsBySchema,
-      columns: state.columns,
       refreshResultTab: state.refreshResultTab,
       updateResultTabSql: state.updateResultTabSql,
       acceptResultTabProposal: state.acceptResultTabProposal,
@@ -135,13 +128,9 @@ export function ResultTabEditor() {
   const proposedSql = activeTab?.sqlCell.proposed_sql ?? null;
   const dialect =
     dbType === "mysql" ? MySQL : dbType === "sqlite" ? SQLite : PostgreSQL;
-  const completionSchema = useMemo(
-    () => buildCompletionSchema(tablesBySchema, viewsBySchema, columns),
-    [tablesBySchema, viewsBySchema, columns]
-  );
   const sqlExtension = useMemo(
-    () => sql({ dialect, schema: completionSchema, upperCaseKeywords: true }),
-    [dialect, completionSchema]
+    () => sql({ dialect, upperCaseKeywords: true }),
+    [dialect]
   );
   const runQueryKeymap = useMemo(
     () =>
@@ -213,24 +202,24 @@ export function ResultTabEditor() {
 
   return (
     <div className="h-full flex flex-col bg-surface">
-      <div className="border-b border-base-750 bg-base-900/95">
+      <div className="border-b border-base-800 bg-base-900/75">
         <button
           onClick={() => toggleResultQueryExpanded(activeTab.id)}
-          className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-base-850 transition-colors-fast"
+          className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-base-850/80 transition-colors-fast"
         >
           {activeTab.isQueryCollapsed ? (
             <ChevronRight className="w-3.5 h-3.5 text-base-300 shrink-0" />
           ) : (
             <ChevronDown className="w-3.5 h-3.5 text-base-300 shrink-0" />
           )}
-          <span className="text-[11px] uppercase tracking-[0.08em] text-base-300">Query</span>
+          <span className="text-[10px] uppercase tracking-[0.08em] text-base-300">Query</span>
           <div className="flex-1 truncate text-[12px] text-base-200 font-mono">
             {preview || "Empty query"}
           </div>
         </button>
 
         {!activeTab.isQueryCollapsed && (
-          <div className="px-2.5 pb-2">
+          <div className="px-2.5 pb-1.5">
             {activeTab.sqlCell.proposed_sql ? (
               <DiffViewer
                 oldValue={activeTab.sqlCell.sql}
@@ -266,7 +255,7 @@ export function ResultTabEditor() {
                   dropCursor: true,
                   allowMultipleSelections: true,
                   indentOnInput: true,
-                  autocompletion: true,
+                  autocompletion: false,
                   rectangularSelection: true,
                   crosshairCursor: false,
                   highlightSelectionMatches: true,
@@ -275,10 +264,10 @@ export function ResultTabEditor() {
                   closeBracketsKeymap: true,
                   searchKeymap: true,
                   foldKeymap: true,
-                  completionKeymap: true,
+                  completionKeymap: false,
                   lintKeymap: true,
                 }}
-                className="text-[14px] border border-base-800"
+                className="text-[14px] border border-base-800/90 rounded-sm"
               />
             )}
           </div>
@@ -296,21 +285,18 @@ export function ResultTabEditor() {
               <button
                 onClick={() => refreshResultTab(activeTab.id)}
                 disabled={isExecuting}
-                className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-accent-500/35 text-accent-300 hover:bg-accent-500/8 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
+                className="h-[20px] px-1.5 flex items-center justify-center gap-1 rounded-sm border border-accent-500/28 text-accent-300 hover:bg-accent-500/8 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
                 title="Run query (⌘+Enter)"
               >
                 {isExecuting ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
-                  <>
-                    <Play className="w-3 h-3" fill="currentColor" />
-                    <span>RUN</span>
-                  </>
+                  <Play className="w-3 h-3" fill="currentColor" />
                 )}
               </button>
               <button
                 onClick={saveCurrentResults}
-                className="relative flex items-center gap-1 px-2 py-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast text-[11px]"
+                className="relative flex items-center gap-1 px-1.5 py-1 rounded-sm hover:bg-base-800/80 text-base-300 hover:text-base-100 transition-colors-fast text-[11px]"
                 title="Save result"
               >
                 <Save className="w-3 h-3" />
@@ -325,7 +311,7 @@ export function ResultTabEditor() {
               <button
                 onClick={handleExport}
                 disabled={!activeTab.queryResults || isExporting}
-                className="flex items-center gap-1 px-2 py-1 rounded-sm hover:bg-base-800 text-base-300 hover:text-base-100 transition-colors-fast text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-1.5 py-1 rounded-sm hover:bg-base-800/80 text-base-300 hover:text-base-100 transition-colors-fast text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Export to CSV"
               >
                 <Download className="w-3 h-3" />

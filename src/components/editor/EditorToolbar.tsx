@@ -39,32 +39,29 @@ export function EditorToolbar() {
   const isResultTab = activeEditorTab?.kind === "result";
 
   return (
-    <div className="h-[34px] px-2.5 flex items-center gap-1.5 border-b border-base-750 bg-base-900/95 shrink-0">
-      {/* Add cell button */}
-      <button
-        onClick={handleAddCell}
-        disabled={!activeScriptId || isResultTab}
-        className="w-6 h-6 flex items-center justify-center rounded-sm text-base-200 hover:text-base-50 hover:bg-base-800 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-        title="Add cell"
-      >
-        <Plus className="w-3.5 h-3.5" strokeWidth={1.8} />
-      </button>
-
-      {/* Format button */}
-      <button
-        onClick={handleFormat}
-        disabled={!connectionId || isResultTab}
-        className="w-6 h-6 flex items-center justify-center rounded-sm text-base-200 hover:text-base-50 hover:bg-base-800 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-        title="Format SQL (Shift+Alt+F)"
-      >
-        <AlignLeft className="w-3.5 h-3.5" strokeWidth={1.8} />
-      </button>
-
-      {/* Divider */}
-      <div className="w-px h-4 bg-base-700 shrink-0" />
-
-      {/* Editor Tabs */}
+    <div className="h-[32px] px-2 flex items-center gap-2 border-b border-base-800 bg-base-900/70 shrink-0">
       <EditorTabs />
+
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={handleFormat}
+          disabled={!connectionId || isResultTab}
+          className="h-6 px-2 flex items-center justify-center gap-1 rounded-sm border border-base-700/80 text-base-300 hover:text-base-100 hover:bg-base-850 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Format SQL (Shift+Alt+F)"
+        >
+          <AlignLeft className="w-3 h-3" strokeWidth={1.8} />
+          <span className="text-[11px]">Format</span>
+        </button>
+        <button
+          onClick={handleAddCell}
+          disabled={!activeScriptId || isResultTab}
+          className="h-6 px-2 flex items-center justify-center gap-1 rounded-sm border border-base-700/80 text-base-300 hover:text-base-100 hover:bg-base-850 transition-colors-fast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Add cell"
+        >
+          <Plus className="w-3 h-3" strokeWidth={1.8} />
+          <span className="text-[11px]">Cell</span>
+        </button>
+      </div>
     </div>
   );
 }

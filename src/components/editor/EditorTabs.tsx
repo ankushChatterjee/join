@@ -89,8 +89,8 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         ref={setNodeRef}
         style={sortableStyle}
         className={cn(
-          "flex items-center gap-1.5 h-6 px-1.5 rounded-sm shrink-0 border",
-          isActive ? "bg-base-850 border-base-700" : "bg-base-900 border-base-800"
+          "flex items-center gap-1 h-5.5 px-1.5 rounded-sm shrink-0 border",
+          isActive ? "bg-base-850/85 border-base-700/80" : "bg-base-900/70 border-base-800/70"
         )}
       >
         <input
@@ -116,10 +116,10 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
       onDoubleClick={handleDoubleClick}
       onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeScript(script.id))}
       className={cn(
-        "flex items-center gap-1.5 h-6 px-2 rounded-sm text-[12px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
+        "flex items-center gap-1 h-5.5 px-1.5 rounded-sm text-[11px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
         isActive
-          ? "bg-base-850 border-base-700 text-base-100"
-          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850"
+          ? "bg-base-850/90 border-base-700/80 text-base-100"
+          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/80"
       )}
       {...attributes}
       {...listeners}
@@ -131,7 +131,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
         />
       )}
 
-      <span className="truncate max-w-[96px]">{script.name}</span>
+      <span className="truncate max-w-[104px]">{script.name}</span>
       <span
         role="button"
         tabIndex={-1}
@@ -140,7 +140,7 @@ function ScriptTab({ script, isActive, isConnected }: ScriptTabProps) {
           e.stopPropagation();
           closeScript(script.id);
         }}
-        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700 text-base-300 hover:text-base-100"
+        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700/80 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -188,16 +188,16 @@ function ResultTab({ tab, isActive }: ResultTabProps) {
       onClick={() => setActiveResultTab(tab.id)}
       onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeResultTab(tab.id))}
       className={cn(
-        "flex items-center gap-1.5 h-6 px-2 rounded-sm text-[12px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
+        "flex items-center gap-1 h-5.5 px-1.5 rounded-sm text-[11px] font-medium shrink-0 border cursor-grab active:cursor-grabbing",
         isActive
-          ? "bg-base-850 border-base-700 text-base-100"
-          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850"
+          ? "bg-base-850/90 border-base-700/80 text-base-100"
+          : "border-transparent text-base-300 hover:text-base-100 hover:bg-base-850/80"
       )}
       {...attributes}
       {...listeners}
     >
-      <Table2 className="w-3.5 h-3.5 text-accent-400 shrink-0" />
-      <span className="truncate max-w-[120px]">{tab.name}</span>
+      <Table2 className="w-3 h-3 text-accent-400 shrink-0" />
+      <span className="truncate max-w-[126px]">{tab.name}</span>
       <span
         role="button"
         tabIndex={-1}
@@ -206,7 +206,7 @@ function ResultTab({ tab, isActive }: ResultTabProps) {
           e.stopPropagation();
           closeResultTab(tab.id);
         }}
-        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700 text-base-300 hover:text-base-100"
+        className="p-0.5 -mr-1 rounded-sm hover:bg-base-700/80 text-base-300 hover:text-base-100"
       >
         <X className="w-3 h-3" />
       </span>
@@ -358,7 +358,7 @@ export function EditorTabs() {
   return (
     <div className="flex items-center h-full min-w-0 flex-1 relative">
       {canScrollLeft && (
-        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-base-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-base-900/85 to-transparent z-10 pointer-events-none" />
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -366,7 +366,7 @@ export function EditorTabs() {
           <div
             ref={scrollContainerRef}
             onWheel={handleWheel}
-            className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full w-fit"
+            className="flex items-center gap-1 overflow-x-auto editor-tabs-scroll h-full w-fit py-0.5"
           >
             {orderedTabs.map((tab) => {
               if (tab.kind === "script") {
@@ -396,7 +396,7 @@ export function EditorTabs() {
       </DndContext>
 
       {canScrollRight && (
-        <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-base-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-base-900/85 to-transparent z-10 pointer-events-none" />
       )}
     </div>
   );

@@ -9,7 +9,6 @@ import { Play, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Search, Chevron
 import { useAppStore } from "@/stores/appStore";
 import type { SqlSheetCell } from "@/stores/types";
 import { getEditorView, setEditorView } from "./editorUtils";
-import { buildCompletionSchema } from "./completionSchema";
 import {
   buildHighlightRangesByCell,
   buildSearchableCells,
@@ -44,8 +43,8 @@ const customTheme = EditorView.theme(
     ".cm-content": {
       caretColor: "#f48734",
       fontFamily: "var(--font-mono)",
-      padding: "8px 0",
-      minHeight: "104px",
+      padding: "6px 0",
+      minHeight: "96px",
     },
     ".cm-cursor": {
       borderLeft: "none",
@@ -70,7 +69,7 @@ const customTheme = EditorView.theme(
       backgroundColor: "#0a0c10",
       color: "#7f8da0",
       border: "none",
-      borderRight: "1px solid #1d2430",
+      borderRight: "1px solid rgba(42, 49, 62, 0.75)",
       paddingRight: "4px",
     },
     ".cm-lineNumbers .cm-gutterElement": {
@@ -82,7 +81,7 @@ const customTheme = EditorView.theme(
       color: "#a8b2bf",
     },
     ".cm-activeLine": {
-      backgroundColor: "rgba(42, 42, 42, 0.4)",
+      backgroundColor: "rgba(42, 42, 42, 0.24)",
     },
     ".cm-matchingBracket": {
       backgroundColor: "rgba(244, 135, 52, 0.2)",
@@ -223,28 +222,28 @@ function SqlCell({
   }, [cell.sql]);
 
   const runMeta = useMemo(() => formatRunMeta(cell), [cell]);
-  const statusClass =
+  const statusDotClass =
     runMeta.status === "OK"
-      ? "text-green-300 border-green-500/35 bg-green-500/8"
+      ? "bg-green-400"
       : runMeta.status === "FAIL"
-        ? "text-red-300 border-red-500/35 bg-red-500/8"
-        : "text-base-300 border-base-700 bg-base-900";
+        ? "bg-red-400"
+        : "bg-base-500";
 
   return (
     <div
       id={`cell-${cell.id}`}
       onMouseDown={onSelect}
       className={cn(
-        "rounded-none border transition-colors-fast overflow-hidden",
-        isSelected ? "border-accent-500/28 bg-base-900" : "border-base-750 bg-base-900"
+        "rounded-sm border transition-colors-fast overflow-hidden",
+        isSelected ? "border-accent-500/24 bg-base-900/95" : "border-base-800/90 bg-base-900/70"
       )}
       data-script-id={scriptId}
       data-cell-id={cell.id}
     >
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 border-b font-mono",
-          isSelected ? "border-base-700 bg-base-850" : "border-base-800 bg-base-900"
+          "flex items-center gap-1.5 px-2 py-1 border-b",
+          isSelected ? "border-base-700/90 bg-base-850/80" : "border-base-800/90 bg-base-900/55"
         )}
       >
         <button
@@ -257,7 +256,7 @@ function SqlCell({
             e.preventDefault();
           }}
           tabIndex={-1}
-          className="w-[20px] h-[20px] flex items-center justify-center rounded-none text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+          className="w-[20px] h-[20px] flex items-center justify-center rounded-sm text-base-300 hover:text-base-100 hover:bg-base-800/90 transition-colors-fast"
           title={isCollapsed ? "Expand cell" : "Collapse cell"}
         >
           {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -265,49 +264,39 @@ function SqlCell({
 
         <div
           className={cn(
-            "h-[20px] px-1.5 text-[11px] font-semibold flex items-center justify-center border rounded-none",
-            isSelected ? "bg-base-800 text-base-100 border-base-600" : "bg-base-900 text-base-300 border-base-700"
+            "h-[20px] px-1.5 text-[11px] font-medium flex items-center justify-center border rounded-sm",
+            isSelected ? "bg-base-800/90 text-base-100 border-base-600/80" : "bg-base-900/75 text-base-300 border-base-700/70"
           )}
         >
           {index + 1}
         </div>
 
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="h-[20px] px-1.5 border border-base-700 text-[11px] text-base-300 flex items-center rounded-none shrink-0">
-            LAST {runMeta.when}
-          </span>
-          <span className="h-[20px] px-1.5 border border-base-700 text-[11px] text-base-300 flex items-center rounded-none shrink-0">
-            DUR {runMeta.duration}
-          </span>
-          <span className={cn("h-[20px] px-1.5 border text-[11px] font-semibold flex items-center rounded-none shrink-0", statusClass)}>
-            {runMeta.status}
-          </span>
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-base-300">
+          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", statusDotClass)} />
+          <span className="truncate">Last run {runMeta.when}</span>
+          <span className="shrink-0">{runMeta.duration}</span>
         </div>
 
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={onRun}
             disabled={isRunning}
-            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-accent-500/35 text-accent-300 hover:bg-accent-500/8 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
+            className="h-[20px] px-1.5 flex items-center justify-center gap-1 rounded-sm border border-accent-500/28 text-accent-300 hover:bg-accent-500/8 disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
             title="Run cell (⌘+Enter)"
           >
             {isRunning ? (
               <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
-              <>
-                <Play className="w-3 h-3" fill="currentColor" />
-                <span>RUN</span>
-              </>
+              <Play className="w-3 h-3" fill="currentColor" />
             )}
           </button>
           <button
             onClick={onRemove}
             disabled={!canRemove}
-            className="h-[20px] px-2 flex items-center justify-center gap-1 rounded-none border border-base-700 text-base-300 hover:text-red-300 hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
+            className="h-[20px] px-1.5 flex items-center justify-center gap-1 rounded-sm border border-base-700/80 text-base-300 hover:text-red-300 hover:border-red-500/35 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors-fast text-[11px] font-semibold"
             title={canRemove ? "Remove cell" : "Cannot remove the only cell"}
           >
             <Trash2 className="w-3 h-3" />
-            <span>DEL</span>
           </button>
         </div>
       </div>
@@ -322,7 +311,7 @@ function SqlCell({
           />
         </div>
       ) : isCollapsed ? (
-        <div className="px-2.5 py-1.5 text-[12px] text-base-200 font-mono bg-base-900 border-t border-base-800">
+        <div className="px-2.5 py-1.5 text-[12px] text-base-200 font-mono bg-base-900/70 border-t border-base-800/90">
           <span className="text-base-400 mr-2">PREVIEW</span>
           {preview}
         </div>
@@ -358,17 +347,17 @@ function SqlCell({
             indentOnInput: true,
             bracketMatching: true,
             closeBrackets: true,
-            autocompletion: true,
+            autocompletion: false,
             rectangularSelection: true,
             crosshairCursor: false,
             highlightSelectionMatches: false,
             closeBracketsKeymap: true,
             searchKeymap: true,
             foldKeymap: true,
-            completionKeymap: true,
+            completionKeymap: false,
             lintKeymap: true,
           }}
-          className="text-[14px] border-t border-base-800"
+          className="text-[14px] border-t border-base-800/90"
         />
       )}
     </div>
@@ -404,9 +393,6 @@ export function SqlEditor() {
     openScripts,
     activeScriptId,
     updateScriptContent,
-    tablesBySchema,
-    viewsBySchema,
-    columns,
     setSelectedScriptCell,
     addScriptCell,
     removeScriptCell,
@@ -418,9 +404,6 @@ export function SqlEditor() {
       openScripts: state.openScripts,
       activeScriptId: state.activeScriptId,
       updateScriptContent: state.updateScriptContent,
-      tablesBySchema: state.tablesBySchema,
-      viewsBySchema: state.viewsBySchema,
-      columns: state.columns,
       setSelectedScriptCell: state.setSelectedScriptCell,
       addScriptCell: state.addScriptCell,
       removeScriptCell: state.removeScriptCell,
@@ -448,14 +431,9 @@ export function SqlEditor() {
         ? SQLite
         : PostgreSQL;
 
-  const completionSchema = useMemo(
-    () => buildCompletionSchema(tablesBySchema, viewsBySchema, columns),
-    [tablesBySchema, viewsBySchema, columns]
-  );
-
   const sqlExtension = useMemo(
-    () => sql({ dialect, schema: completionSchema, upperCaseKeywords: true }),
-    [dialect, completionSchema]
+    () => sql({ dialect, upperCaseKeywords: true }),
+    [dialect]
   );
   const searchableCells = useMemo(
     () => buildSearchableCells(activeScript?.cells, isSearchOpen),
@@ -624,7 +602,7 @@ export function SqlEditor() {
         </div>
       )}
 
-      <div className="h-full w-full p-1 space-y-1.5 panel-scroll scrollbar-stable">
+      <div className="h-full w-full p-1.5 space-y-1.5 panel-scroll scrollbar-stable">
         {activeScript.cells.map((cell, index) => {
           const isSelected = activeScript.selectedCellId === cell.id;
           const isRunning =
@@ -666,10 +644,10 @@ export function SqlEditor() {
 
         <button
           onClick={handleAddCell}
-          className="group mx-auto flex w-fit h-7 px-2.5 rounded-sm border border-base-700 bg-base-900 hover:bg-base-850 text-base-200 transition-colors-fast items-center justify-center gap-1.5"
+          className="group mx-auto flex w-fit h-6 px-2 rounded-sm border border-base-700/80 bg-base-900/75 hover:bg-base-850 text-base-200 transition-colors-fast items-center justify-center gap-1"
         >
           <Plus className="w-3 h-3 text-accent-300 group-hover:text-accent-200" />
-          <span className="text-[12px] font-medium tracking-[0.02em]">Add cell</span>
+          <span className="text-[11px] font-medium tracking-[0.02em]">Add cell</span>
         </button>
       </div>
     </div>

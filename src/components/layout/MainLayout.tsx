@@ -13,7 +13,6 @@ import { ResultsPanel } from "@/components/results/ResultsPanel";
 import { ResultTabEditor } from "@/components/results/ResultTabEditor";
 import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { useAppStore } from "@/stores/appStore";
-import { useAiStore } from "@/stores/aiStore";
 import { useShallow } from "zustand/react/shallow";
 
 function NoConnectionState() {
@@ -108,7 +107,6 @@ export function MainLayout() {
       toggleResultsPanelMinimized: state.toggleResultsPanelMinimized,
     }))
   );
-  const isPanelOpen = useAiStore((state) => state.isPanelOpen);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     const saved = window.localStorage.getItem("join:left-sidebar-open");
@@ -150,62 +148,58 @@ export function MainLayout() {
           </div>
         )}
 
-      {/* Main Content Area */}
-        <Panel id="main-content" defaultSize={isPanelOpen ? "52%" : "82%"} minSize="35%">
-          {!hasAnyConnection && !hasOpenTabs ? (
-            <NoConnectionState />
-          ) : !hasOpenTabs ? (
-            <NoSheetsState />
-          ) : (
-            <Group orientation="vertical" className="h-full">
-              {/* Editor Area */}
-              <Panel
-                id="editor"
-                defaultSize={isResultTabActive || isResultsPanelMinimized ? "100%" : "65%"}
-                minSize="30%"
-              >
-                <div className="h-full flex flex-col bg-surface">
-                  <EditorToolbar />
-                  <div className="flex-1 overflow-hidden">
-                    {activeEditorTab?.kind === "result" ? <ResultTabEditor /> : <SqlEditor />}
-                  </div>
-                </div>
-              </Panel>
-
-              {isResultTabActive ? null : isResultsPanelMinimized ? (
-                <div className="h-7 border-t border-base-750 bg-base-900/95 flex items-center justify-end px-2.5">
-                  <button
-                    onClick={toggleResultsPanelMinimized}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
-                    title="Show results panel"
-                  >
-                    <PanelBottomOpen className="w-3.5 h-3.5" />
-                    <span>Show Results</span>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
-
-                  {/* Results Panel */}
-                  <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
-                    <ResultsPanel />
-                  </Panel>
-                </>
-              )}
-            </Group>
-          )}
-        </Panel>
-
-        {/* AI Chat Panel */}
-        {isPanelOpen && (
-          <>
-            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
-            <Panel id="ai-chat" defaultSize="30%" minSize="20%" maxSize="55%">
+        <Panel id="main-content" defaultSize="82%" minSize="35%">
+          <Group orientation="horizontal" className="h-full">
+            <Panel id="ai-chat" defaultSize="38%" minSize="24%" maxSize="55%">
               <AiChatPanel />
             </Panel>
-          </>
-        )}
+
+            <Separator className="w-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+
+            <Panel id="workspace" defaultSize="62%" minSize="30%">
+              {!hasAnyConnection && !hasOpenTabs ? (
+                <NoConnectionState />
+              ) : !hasOpenTabs ? (
+                <NoSheetsState />
+              ) : (
+                <Group orientation="vertical" className="h-full">
+                  <Panel
+                    id="editor"
+                    defaultSize={isResultTabActive || isResultsPanelMinimized ? "100%" : "65%"}
+                    minSize="30%"
+                  >
+                    <div className="h-full flex flex-col bg-surface">
+                      <EditorToolbar />
+                      <div className="flex-1 overflow-hidden">
+                        {activeEditorTab?.kind === "result" ? <ResultTabEditor /> : <SqlEditor />}
+                      </div>
+                    </div>
+                  </Panel>
+
+                  {isResultTabActive ? null : isResultsPanelMinimized ? (
+                    <div className="h-7 border-t border-base-750 bg-base-900/95 flex items-center justify-end px-2.5">
+                      <button
+                        onClick={toggleResultsPanelMinimized}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] text-base-300 hover:text-base-100 hover:bg-base-800 transition-colors-fast"
+                        title="Show results panel"
+                      >
+                        <PanelBottomOpen className="w-3.5 h-3.5" />
+                        <span>Show Results</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Separator className="h-px bg-base-750 hover:bg-accent-500/35 transition-colors-fast data-[separator-active]:bg-accent-500/35" />
+                      <Panel id="results" defaultSize="35%" minSize="15%" maxSize="70%">
+                        <ResultsPanel />
+                      </Panel>
+                    </>
+                  )}
+                </Group>
+              )}
+            </Panel>
+          </Group>
+        </Panel>
       </Group>
     </div>
   );

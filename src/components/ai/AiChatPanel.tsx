@@ -9,7 +9,6 @@ import {
   Plus,
   Trash2,
   ChevronDown,
-  ChevronRight,
   Check,
   MessageSquare,
   X,
@@ -290,7 +289,6 @@ function AiChatPanel() {
     stopStreaming,
     createSession,
     forkSession,
-    togglePanel,
   } = useAiStore(
     useShallow((state) => ({
       activeSession: state.activeSession,
@@ -306,7 +304,6 @@ function AiChatPanel() {
       stopStreaming: state.stopStreaming,
       createSession: state.createSession,
       forkSession: state.forkSession,
-      togglePanel: state.togglePanel,
     }))
   );
 
@@ -465,7 +462,7 @@ function AiChatPanel() {
   const canSend = inputText.trim().length > 0 && !isStreaming;
 
   return (
-    <div className="ai-chat-panel relative flex h-full flex-col border-l border-base-750 bg-base-900/95">
+    <div className="ai-chat-panel relative flex h-full flex-col bg-base-900/95">
       {/* Header */}
       <div className="h-8 px-2.5 flex items-center justify-between gap-1.5 border-b border-base-750 bg-base-900 shrink-0">
         <div className="flex items-center gap-0.5">
@@ -517,14 +514,6 @@ function AiChatPanel() {
 
         <div className="flex items-center gap-0.5">
           <ModelSelector />
-          <button
-            onClick={togglePanel}
-            aria-label="Collapse AI panel"
-            className="w-6 h-6 flex items-center justify-center rounded-sm text-base-300 outline-none transition-colors-fast hover:bg-base-800 hover:text-base-100"
-            title="Collapse AI panel"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
 
