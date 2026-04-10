@@ -5,8 +5,14 @@ import { useAppStore } from "@/stores/appStore";
 import { TitleBar } from "@/components/layout/TitleBar";
 import joinLogo from "../../../src-tauri/icons/128x128.png";
 
+function formatProjectPath(path: string) {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 3) return path;
+  return `.../${parts.slice(-3).join("/")}`;
+}
+
 export function ProjectWelcomeScreen() {
-  const { createProject, openProject } = useAppStore();
+  const { createProject, openProject, recentProjects } = useAppStore();
   const [name, setName] = useState("My Project");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -42,11 +48,20 @@ export function ProjectWelcomeScreen() {
     }
   };
 
+  const handleOpenRecent = async (rootPath: string) => {
+    try {
+      setIsBusy(true);
+      await openProject(rootPath);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="app-texture flex h-screen w-screen flex-col bg-background text-base-100">
       <TitleBar />
       <div className="mx-auto flex w-full max-w-4xl flex-1 items-center justify-center px-6">
-        <section className="w-full max-w-xl rounded-lg border border-base-750 bg-base-900/88 px-7 py-8 shadow-[0_10px_30px_rgba(0,0,0,0.14)]">
+        <section className="w-full max-w-2xl rounded-lg border border-base-750 bg-base-900/88 px-7 py-8 shadow-[0_10px_30px_rgba(0,0,0,0.14)]">
           <div className="mx-auto flex max-w-md flex-col items-center text-center">
             <img
               src={joinLogo}
@@ -93,6 +108,34 @@ export function ProjectWelcomeScreen() {
               <FolderOpen className="h-4 w-4" />
               <span>Open existing project</span>
             </button>
+
+            {recentProjects.length > 0 ? (
+              <div className="mt-7 w-full border-t border-base-750 pt-5 text-left">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-base-300">
+                  Recent Projects
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {recentProjects.map((project) => (
+                    <button
+                      key={project.rootPath}
+                      onClick={() => handleOpenRecent(project.rootPath)}
+                      disabled={isBusy}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-md border border-base-750 bg-base-950/45 px-3 py-2 text-left transition-colors-fast hover:border-base-600 hover:bg-base-850/70 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <FolderOpen className="h-4 w-4 shrink-0 text-accent-300" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-base-100">
+                          {project.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[12px] text-base-400">
+                          {formatProjectPath(project.rootPath)}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

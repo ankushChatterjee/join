@@ -58,12 +58,22 @@ pub struct NewConnectionRequest {
 
 #[tauri::command]
 fn create_project(parent_dir: String, name: String) -> Result<storage::ProjectInfo, String> {
-    storage::project::create_project(&parent_dir, &name).map_err(|e| e.to_string())
+    let project =
+        storage::project::create_project(&parent_dir, &name).map_err(|e| e.to_string())?;
+    storage::preferences::remember_project(&project).map_err(|e| e.to_string())?;
+    Ok(project)
 }
 
 #[tauri::command]
 fn open_project(root_path: String) -> Result<storage::ProjectInfo, String> {
-    storage::project::open_project(&root_path).map_err(|e| e.to_string())
+    let project = storage::project::open_project(&root_path).map_err(|e| e.to_string())?;
+    storage::preferences::remember_project(&project).map_err(|e| e.to_string())?;
+    Ok(project)
+}
+
+#[tauri::command]
+fn list_recent_projects() -> Result<Vec<storage::ProjectInfo>, String> {
+    storage::preferences::list_recent_projects().map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -664,6 +674,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_project,
             open_project,
+            list_recent_projects,
             // Connections
             list_connections,
             add_connection,

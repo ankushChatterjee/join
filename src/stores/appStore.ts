@@ -89,6 +89,8 @@ interface PendingSqlParameterPrompt {
 interface AppState {
   // Project
   activeProject: ProjectInfo | null;
+  recentProjects: ProjectInfo[];
+  isRestoringProject: boolean;
 
   // Connections
   connections: ConnectionInfo[];
@@ -162,6 +164,8 @@ interface AppState {
   // Actions - Connections
   createProject: (parentDir: string, name: string) => Promise<void>;
   openProject: (rootPath: string) => Promise<void>;
+  loadRecentProjects: () => Promise<void>;
+  restoreLastProject: () => Promise<void>;
   closeProject: () => void;
   loadConnections: () => Promise<void>;
   addConnection: (request: NewConnectionRequest) => Promise<ConnectionInfo>;
@@ -535,6 +539,8 @@ export const useAppStore = create<AppState>((set, get) => {
   return ({
   // Initial state
   activeProject: null,
+  recentProjects: [],
+  isRestoringProject: false,
   connections: [],
   activeConnectionId: null,
   isLoadingConnections: false,
@@ -607,11 +613,39 @@ export const useAppStore = create<AppState>((set, get) => {
       editingConnection: null,
       ...resetProjectScopedState(),
     });
+    void get().loadRecentProjects();
     await Promise.all([
       get().loadConnections(),
       get().loadOpenTabs(),
       get().loadQueryHistory(),
     ]);
+  },
+
+  loadRecentProjects: async () => {
+    try {
+      const recentProjects = await invoke<ProjectInfo[]>("list_recent_projects");
+      set({ recentProjects });
+    } catch (error) {
+      console.error("Failed to load recent projects:", error);
+      set({ recentProjects: [] });
+    }
+  },
+
+  restoreLastProject: async () => {
+    if (get().activeProject || get().isRestoringProject) return;
+    set({ isRestoringProject: true });
+    try {
+      const recentProjects = await invoke<ProjectInfo[]>("list_recent_projects");
+      set({ recentProjects });
+      const lastProject = recentProjects[0];
+      if (lastProject) {
+        await get().openProject(lastProject.rootPath);
+      }
+    } catch (error) {
+      console.error("Failed to restore last project:", error);
+    } finally {
+      set({ isRestoringProject: false });
+    }
   },
 
   closeProject: () => {

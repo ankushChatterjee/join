@@ -5,14 +5,17 @@ import { QueryParametersDialog } from "@/components/query/QueryParametersDialog"
 import { ToastContainer } from "@/components/ui/Toast";
 import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { ProjectWelcomeScreen } from "@/components/project/ProjectWelcomeScreen";
+import { TitleBar } from "@/components/layout/TitleBar";
 import { useAppStore } from "@/stores/appStore";
 import { useAiStore } from "@/stores/aiStore";
 import { useShallow } from "zustand/react/shallow";
 
 function App() {
-  const { activeProject } = useAppStore(
+  const { activeProject, isRestoringProject, restoreLastProject } = useAppStore(
     useShallow((state) => ({
       activeProject: state.activeProject,
+      isRestoringProject: state.isRestoringProject,
+      restoreLastProject: state.restoreLastProject,
     }))
   );
   const { loadSessions, resetProjectState } = useAiStore(
@@ -21,6 +24,10 @@ function App() {
       resetProjectState: state.resetProjectState,
     }))
   );
+
+  useEffect(() => {
+    void restoreLastProject();
+  }, [restoreLastProject]);
 
   useEffect(() => {
     if (activeProject) {
@@ -44,7 +51,18 @@ function App() {
 
   return (
     <>
-      {activeProject ? <MainLayout /> : <ProjectWelcomeScreen />}
+      {activeProject ? (
+        <MainLayout />
+      ) : isRestoringProject ? (
+        <div className="app-texture flex h-screen w-screen flex-col bg-background text-base-100">
+          <TitleBar />
+          <div className="flex flex-1 items-center justify-center text-sm text-base-300">
+            Opening project...
+          </div>
+        </div>
+      ) : (
+        <ProjectWelcomeScreen />
+      )}
       <ConnectionDialog />
       <QueryParametersDialog />
       <ToastContainer />
