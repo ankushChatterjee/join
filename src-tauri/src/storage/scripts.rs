@@ -9,7 +9,7 @@ use super::path_safety::{safe_join, validate_id};
 use super::project::get_project_root;
 use super::ConfigError;
 
-const SHEET_FORMAT_VERSION: i64 = 1;
+pub const SHEET_FORMAT_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptMetadata {
@@ -145,6 +145,10 @@ fn create_default_cell(sql: String) -> SqlSheetCell {
     }
 }
 
+pub fn create_sheet_cell(sql: String) -> SqlSheetCell {
+    create_default_cell(sql)
+}
+
 fn create_default_sheet(sql: String) -> SqlSheetDocument {
     let cell = create_default_cell(sql);
     SqlSheetDocument {
@@ -228,7 +232,10 @@ fn save_script_sheet(
     Ok(())
 }
 
-pub fn list_scripts(project_root: &str, connection_id: &str) -> Result<Vec<ScriptMetadata>, ConfigError> {
+pub fn list_scripts(
+    project_root: &str,
+    connection_id: &str,
+) -> Result<Vec<ScriptMetadata>, ConfigError> {
     let project_root = get_project_root(project_root)?;
     let dir = get_connection_scripts_dir(&project_root, connection_id)?;
 
@@ -255,7 +262,11 @@ pub fn list_scripts(project_root: &str, connection_id: &str) -> Result<Vec<Scrip
     Ok(scripts)
 }
 
-pub fn create_script(project_root: &str, connection_id: &str, name: &str) -> Result<Script, ConfigError> {
+pub fn create_script(
+    project_root: &str,
+    connection_id: &str,
+    name: &str,
+) -> Result<Script, ConfigError> {
     let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     let script_id = format!("script-{}", chrono::Utc::now().timestamp_millis());
@@ -276,7 +287,37 @@ pub fn create_script(project_root: &str, connection_id: &str, name: &str) -> Res
     Ok(Script { metadata, sheet })
 }
 
-pub fn get_script(project_root: &str, connection_id: &str, script_id: &str) -> Result<Script, ConfigError> {
+pub fn create_script_with_sheet(
+    project_root: &str,
+    connection_id: &str,
+    name: &str,
+    sheet: &SqlSheetDocument,
+) -> Result<Script, ConfigError> {
+    let project_root = get_project_root(project_root)?;
+    validate_id(connection_id)?;
+    let script_id = format!("script-{}", chrono::Utc::now().timestamp_millis());
+    let now = chrono::Utc::now().timestamp_millis();
+
+    let metadata = ScriptMetadata {
+        id: script_id.clone(),
+        name: name.to_string(),
+        connection_id: connection_id.to_string(),
+        created_at: now,
+        updated_at: now,
+    };
+    let sheet = normalize_sheet(sheet.clone());
+
+    save_script_metadata(&project_root, &metadata)?;
+    save_script_sheet(&project_root, connection_id, &script_id, &sheet)?;
+
+    Ok(Script { metadata, sheet })
+}
+
+pub fn get_script(
+    project_root: &str,
+    connection_id: &str,
+    script_id: &str,
+) -> Result<Script, ConfigError> {
     let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
@@ -416,7 +457,11 @@ pub fn rename_script(
     Ok(metadata)
 }
 
-pub fn delete_script(project_root: &str, connection_id: &str, script_id: &str) -> Result<(), ConfigError> {
+pub fn delete_script(
+    project_root: &str,
+    connection_id: &str,
+    script_id: &str,
+) -> Result<(), ConfigError> {
     let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     validate_id(script_id)?;
@@ -430,7 +475,10 @@ pub fn delete_script(project_root: &str, connection_id: &str, script_id: &str) -
     Ok(())
 }
 
-pub fn delete_connection_scripts(project_root: &str, connection_id: &str) -> Result<(), ConfigError> {
+pub fn delete_connection_scripts(
+    project_root: &str,
+    connection_id: &str,
+) -> Result<(), ConfigError> {
     let project_root = get_project_root(project_root)?;
     validate_id(connection_id)?;
     let dir = get_connection_scripts_dir(&project_root, connection_id)?;

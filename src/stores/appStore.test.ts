@@ -665,4 +665,94 @@ describe("appStore updateScriptContent behavior lock", () => {
     expect(script2.selectedCellId).toBe("cell-1");
     expect(script2.cells[0].sql).toBe("SELECT from-invalid");
   });
+
+  it("connectCodebase stores folder metadata without eager query loading", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "connect_codebase") {
+        return Promise.resolve({
+          id: "codebase-1",
+          name: "app",
+          rootPath: "/tmp/app",
+          codexThreadId: null,
+          queries: [],
+          isExpanded: true,
+          lastIndexedAt: null,
+          lastError: null,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await useAppStore.getState().connectCodebase("/tmp/app");
+
+    const state = useAppStore.getState();
+    expect(state.codebases).toHaveLength(1);
+    expect(state.codebases[0].queries).toEqual([]);
+    expect(invokeMock).toHaveBeenCalledWith("connect_codebase", {
+      projectRoot: "/tmp/test-project",
+      rootPath: "/tmp/app",
+    });
+  });
+
+  it("fetchAllCodebaseQueries updates the sidebar cache only on manual pull", async () => {
+    useAppStore.setState({
+      codebases: [
+        {
+          id: "codebase-1",
+          name: "app",
+          rootPath: "/tmp/app",
+          codexThreadId: null,
+          queries: [],
+          isExpanded: true,
+          lastIndexedAt: null,
+          lastError: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    } as any);
+
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "fetch_all_codebase_queries") {
+        return Promise.resolve({
+          id: "codebase-1",
+          name: "app",
+          rootPath: "/tmp/app",
+          codexThreadId: "thread-1",
+          queries: [
+            {
+              id: "query-1",
+              name: "signup",
+              sql: "select * from users",
+              parameterizedSql: "select * from users where id = :user_id",
+              sourcePath: "queries/signup.sql",
+              startLine: 1,
+              endLine: 2,
+              framework: null,
+              confidence: "high",
+              notes: null,
+              detectedParameters: [{ name: "user_id" }],
+            },
+          ],
+          isExpanded: true,
+          lastIndexedAt: 42,
+          lastError: null,
+          createdAt: 1,
+          updatedAt: 42,
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await useAppStore.getState().fetchAllCodebaseQueries("codebase-1");
+
+    const state = useAppStore.getState();
+    expect(state.codebases[0].queries).toHaveLength(1);
+    expect(invokeMock).toHaveBeenCalledWith("fetch_all_codebase_queries", {
+      projectRoot: "/tmp/test-project",
+      codebaseId: "codebase-1",
+    });
+  });
 });

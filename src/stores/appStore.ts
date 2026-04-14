@@ -24,6 +24,8 @@ import type {
   ConnectionMetadataSnapshot,
   SqlParamDefaults,
   SqlPlaceholderMode,
+  CodebaseConnection,
+  CodebaseQueryLookupResult,
 } from "./types";
 import { recordPerfSample } from "@/lib/perf";
 import {
@@ -127,6 +129,10 @@ interface AppState {
   savedResultsByConnection: Record<string, SavedResultMetadata[]>;
   isSavedResultsFolderExpanded: boolean;
 
+  // Connected local folders
+  codebases: CodebaseConnection[];
+  isLoadingCodebases: boolean;
+
   // Tree UI State
   expandedSchemas: Set<string>;
   expandedTables: Set<string>; // "schema.table" format
@@ -167,6 +173,20 @@ interface AppState {
   loadRecentProjects: () => Promise<void>;
   restoreLastProject: () => Promise<void>;
   closeProject: () => void;
+  loadCodebases: () => Promise<void>;
+  connectCodebase: (rootPath: string) => Promise<void>;
+  fetchAllCodebaseQueries: (codebaseId: string) => Promise<void>;
+  fetchCodebaseQuery: (
+    codebaseId: string,
+    prompt: string
+  ) => Promise<CodebaseQueryLookupResult>;
+  toggleCodebaseExpanded: (codebaseId: string) => Promise<void>;
+  disconnectCodebase: (codebaseId: string) => Promise<void>;
+  openCodebaseQueriesAsSheet: (
+    codebaseId: string,
+    queryIds: string[],
+    connectionId: string
+  ) => Promise<string | null>;
   loadConnections: () => Promise<void>;
   addConnection: (request: NewConnectionRequest) => Promise<ConnectionInfo>;
   updateConnection: (id: string, request: NewConnectionRequest) => Promise<void>;
@@ -455,6 +475,8 @@ export const useAppStore = create<AppState>((set, get) => {
     isScriptsFolderExpanded: true,
     savedResultsByConnection: {},
     isSavedResultsFolderExpanded: true,
+    codebases: [],
+    isLoadingCodebases: false,
     expandedSchemas: new Set<string>(),
     expandedTables: new Set<string>(),
     expandedViews: new Set<string>(),
@@ -566,6 +588,8 @@ export const useAppStore = create<AppState>((set, get) => {
   isScriptsFolderExpanded: true,
   savedResultsByConnection: {},
   isSavedResultsFolderExpanded: true,
+  codebases: [],
+  isLoadingCodebases: false,
 
   // Tree UI State
   expandedSchemas: new Set(),
@@ -616,6 +640,7 @@ export const useAppStore = create<AppState>((set, get) => {
     void get().loadRecentProjects();
     await Promise.all([
       get().loadConnections(),
+      get().loadCodebases(),
       get().loadOpenTabs(),
       get().loadQueryHistory(),
     ]);
@@ -655,6 +680,175 @@ export const useAppStore = create<AppState>((set, get) => {
       editingConnection: null,
       ...resetProjectScopedState(),
     });
+  },
+
+  loadCodebases: async () => {
+    const projectRoot = get().activeProject?.rootPath;
+    if (!projectRoot) {
+      set({ codebases: [], isLoadingCodebases: false });
+      return;
+    }
+    set({ isLoadingCodebases: true });
+    try {
+      const codebases = await invoke<CodebaseConnection[]>("list_codebases", { projectRoot });
+      set({ codebases, isLoadingCodebases: false });
+    } catch (error) {
+      console.error("Failed to load codebases:", error);
+      set({ isLoadingCodebases: false });
+    }
+  },
+
+  connectCodebase: async (rootPath: string) => {
+    const projectRoot = requireProjectRoot();
+    set({ isLoadingCodebases: true });
+    try {
+      const codebase = await invoke<CodebaseConnection>("connect_codebase", { projectRoot, rootPath });
+      set({ codebases: [codebase], isLoadingCodebases: false });
+      get().showToast("success", `Connected folder: ${codebase.name}`);
+    } catch (error) {
+      console.error("[Codebase] Failed to connect folder", { rootPath, error });
+      set({ isLoadingCodebases: false });
+      get().showToast("error", `Failed to connect folder: ${error}`);
+    }
+  },
+
+  fetchAllCodebaseQueries: async (codebaseId: string) => {
+    const projectRoot = requireProjectRoot();
+    set({ isLoadingCodebases: true });
+    try {
+      const codebase = await invoke<CodebaseConnection>("fetch_all_codebase_queries", {
+        projectRoot,
+        codebaseId,
+      });
+      set((state) => ({
+        codebases: state.codebases.map((c) => (c.id === codebaseId ? codebase : c)),
+        isLoadingCodebases: false,
+      }));
+      if (codebase.lastError) {
+        console.error("[Codebase] Codex query refresh failed", {
+          codebaseId,
+          codebase,
+          error: codebase.lastError,
+        });
+        get().showToast("error", `Codebase indexing failed: ${codebase.lastError}`);
+      } else {
+        get().showToast("success", `Pulled ${codebase.queries.length} queries`);
+      }
+    } catch (error) {
+      console.error("[Codebase] Failed to fetch all codebase queries", { codebaseId, error });
+      set({ isLoadingCodebases: false });
+      get().showToast("error", `Failed to pull codebase queries: ${error}`);
+    }
+  },
+
+  fetchCodebaseQuery: async (codebaseId: string, prompt: string) => {
+    const projectRoot = requireProjectRoot();
+    try {
+      const result = await invoke<CodebaseQueryLookupResult>("fetch_codebase_query", {
+        projectRoot,
+        codebaseId,
+        prompt,
+      });
+      set((state) => ({
+        codebases: state.codebases.map((codebase) =>
+          codebase.id === codebaseId
+            ? {
+                ...codebase,
+                lastError: null,
+                updatedAt: Date.now(),
+              }
+            : codebase
+        ),
+      }));
+      return result;
+    } catch (error) {
+      console.error("[Codebase] Failed to fetch single codebase query", {
+        codebaseId,
+        prompt,
+        error,
+      });
+      throw error;
+    }
+  },
+
+  toggleCodebaseExpanded: async (codebaseId: string) => {
+    const projectRoot = requireProjectRoot();
+    const codebase = get().codebases.find((c) => c.id === codebaseId);
+    if (!codebase) return;
+    const nextExpanded = !codebase.isExpanded;
+    set((state) => ({
+      codebases: state.codebases.map((c) =>
+        c.id === codebaseId ? { ...c, isExpanded: nextExpanded } : c
+      ),
+    }));
+    try {
+      const updated = await invoke<CodebaseConnection>("set_codebase_expanded", {
+        projectRoot,
+        codebaseId,
+        isExpanded: nextExpanded,
+      });
+      set((state) => ({
+        codebases: state.codebases.map((c) => (c.id === codebaseId ? updated : c)),
+      }));
+    } catch (error) {
+      console.error("Failed to persist codebase expanded state:", error);
+    }
+  },
+
+  disconnectCodebase: async (codebaseId: string) => {
+    const projectRoot = requireProjectRoot();
+    try {
+      await invoke("disconnect_codebase", { projectRoot, codebaseId });
+      set((state) => ({
+        codebases: state.codebases.filter((c) => c.id !== codebaseId),
+      }));
+      get().showToast("info", "Disconnected folder");
+    } catch (error) {
+      get().showToast("error", `Failed to disconnect folder: ${error}`);
+    }
+  },
+
+  openCodebaseQueriesAsSheet: async (
+    codebaseId: string,
+    queryIds: string[],
+    connectionId: string
+  ) => {
+    const projectRoot = requireProjectRoot();
+    try {
+      const script = await invoke<Script>("open_codebase_queries_as_sheet", {
+        projectRoot,
+        codebaseId,
+        queryIds,
+        connectionId,
+      });
+      const cells = normalizeCells(script.cells || []);
+      const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
+      const openScript: OpenScript = {
+        id: script.id,
+        name: script.name,
+        connectionId: script.connection_id,
+        cells,
+        selectedCellId,
+        isDirty: false,
+        pendingSaveRevision: 0,
+        lastFlushedRevision: 0,
+      };
+      set((state) => ({
+        scriptsByConnection: {
+          ...state.scriptsByConnection,
+          [connectionId]: [...(state.scriptsByConnection[connectionId] || []), script],
+        },
+        openScripts: [...state.openScripts, openScript],
+        activeScriptId: script.id,
+        activeEditorTab: { kind: "script", id: script.id },
+      }));
+      get().saveOpenTabs();
+      get().showToast("success", "Opened codebase queries in a SQL sheet");
+      return script.id;
+    } catch (error) {
+      get().showToast("error", `Failed to open codebase queries: ${error}`);
+      return null;
+    }
   },
 
   // Connection actions

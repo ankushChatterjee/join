@@ -9,6 +9,53 @@ export interface ProjectInfo {
   updatedAt: number;
 }
 
+export interface DetectedCodebaseParameter {
+  name: string;
+  sourceExpression?: string | null;
+  originalPlaceholder?: string | null;
+}
+
+export interface ExtractedCodebaseQuery {
+  id: string;
+  name: string;
+  sql: string;
+  parameterizedSql: string;
+  sourcePath: string;
+  startLine?: number | null;
+  endLine?: number | null;
+  framework?: string | null;
+  confidence: "high" | "medium" | "low" | string;
+  notes?: string | null;
+  detectedParameters: DetectedCodebaseParameter[];
+}
+
+export interface CodebaseConnection {
+  id: string;
+  name: string;
+  rootPath: string;
+  codexThreadId?: string | null;
+  queries: ExtractedCodebaseQuery[];
+  isExpanded: boolean;
+  lastIndexedAt?: number | null;
+  lastError?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CodebaseQueryLookupCandidate {
+  name: string;
+  sourcePath: string;
+  confidence: "high" | "medium" | "low" | string;
+  notes?: string | null;
+}
+
+export interface CodebaseQueryLookupResult {
+  status: "match" | "ambiguous" | "not_found" | string;
+  query?: ExtractedCodebaseQuery | null;
+  matches: CodebaseQueryLookupCandidate[];
+  message?: string | null;
+}
+
 export type SqlParamDefaults =
   | { mode: "named"; values: Record<string, string | null> }
   | { mode: "positional"; values: Array<string | null> };

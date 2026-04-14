@@ -29,6 +29,7 @@ describe("allTools aggregate validation", () => {
       "get_query_history",
       "read_results",
       "lint_sql_safety",
+      "get_codebase_query",
       "get_editor_context",
       "insert_sql",
       "replace_editor_content",
@@ -146,6 +147,12 @@ describe("allTools aggregate validation", () => {
   it("get_editor_context schema accepts empty object", () => {
     const schema = (allTools.get_editor_context as any).inputSchema;
     expect(schema.safeParse({}).success).toBe(true);
+  });
+
+  it("get_codebase_query schema requires request", () => {
+    const schema = (allTools.get_codebase_query as any).inputSchema;
+    expect(schema.safeParse({ request: "find signup query" }).success).toBe(true);
+    expect(schema.safeParse({}).success).toBe(false);
   });
 
   it("insert_sql schema requires sql", () => {

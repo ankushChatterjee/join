@@ -1,4 +1,5 @@
 pub mod chats;
+pub mod codebases;
 pub mod config;
 pub mod credentials;
 pub mod history;
@@ -9,6 +10,10 @@ pub mod saved_results;
 pub mod scripts;
 pub mod tabs;
 
+pub use codebases::{
+    CodebaseConnection, CodebaseQueryLookupCandidate, CodebaseQueryLookupResult,
+    ExtractedCodebaseQuery,
+};
 pub use config::*;
 pub use credentials::*;
 pub use history::{QueryHistory, QueryHistoryEntry};

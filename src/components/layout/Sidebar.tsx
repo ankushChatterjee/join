@@ -1,5 +1,6 @@
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import { SchemaTree } from "@/components/connections/SchemaTree";
+import { CodebaseList } from "@/components/codebase/CodebaseList";
 import { LogOut, PanelLeftClose } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useState } from "react";
@@ -48,11 +49,12 @@ export function Sidebar({ onCollapse }: SidebarProps) {
           </div>
         </div>
       ) : null}
+      <CodebaseList />
       <ConnectionsList
         isExpanded={isConnectionsExpanded}
         onToggleExpanded={() => setIsConnectionsExpanded((value) => !value)}
       />
-      
+
       {isConnectionsExpanded ? (
         <div className="flex-1 overflow-hidden border-t border-base-700/20">
           <SchemaTree />

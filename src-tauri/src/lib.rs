@@ -1,3 +1,4 @@
+pub mod codex_app_server;
 pub mod db;
 pub mod storage;
 
@@ -5,6 +6,7 @@ use db::{ConnectionConfig, DatabaseType, QueryResult};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
+use tauri::{AppHandle, Emitter};
 
 // ============================================================================
 // Types for frontend communication
@@ -52,6 +54,33 @@ pub struct NewConnectionRequest {
     pub ssl_mode: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodebaseProgressEvent {
+    codebase_id: String,
+    phase: String,
+    text: String,
+    append: bool,
+}
+
+fn emit_codebase_progress(
+    app: &AppHandle,
+    codebase_id: &str,
+    phase: &str,
+    text: &str,
+    append: bool,
+) {
+    let _ = app.emit(
+        "codebase-progress",
+        CodebaseProgressEvent {
+            codebase_id: codebase_id.to_string(),
+            phase: phase.to_string(),
+            text: text.to_string(),
+            append,
+        },
+    );
+}
+
 // ============================================================================
 // Tauri Commands - Projects
 // ============================================================================
@@ -74,6 +103,144 @@ fn open_project(root_path: String) -> Result<storage::ProjectInfo, String> {
 #[tauri::command]
 fn list_recent_projects() -> Result<Vec<storage::ProjectInfo>, String> {
     storage::preferences::list_recent_projects().map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Tauri Commands - Codebases
+// ============================================================================
+
+#[tauri::command]
+fn list_codebases(project_root: String) -> Result<Vec<storage::CodebaseConnection>, String> {
+    storage::codebases::load_codebases(&project_root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn connect_codebase(
+    project_root: String,
+    root_path: String,
+) -> Result<storage::CodebaseConnection, String> {
+    storage::codebases::connect_codebase(&project_root, &root_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn fetch_all_codebase_queries(
+    app: AppHandle,
+    project_root: String,
+    codebase_id: String,
+) -> Result<storage::CodebaseConnection, String> {
+    let codebase =
+        storage::codebases::get_codebase(&project_root, &codebase_id).map_err(|e| e.to_string())?;
+
+    match codex_app_server::extract_sql_queries(
+        &codebase.root_path,
+        codebase.codex_thread_id.as_deref(),
+        |update| {
+            emit_codebase_progress(
+                &app,
+                &codebase_id,
+                &update.phase,
+                &update.text,
+                update.append,
+            );
+        },
+    )
+    .await
+    {
+        Ok((thread_id, extraction)) => {
+            storage::codebases::apply_bulk_extraction(
+                &project_root,
+                &codebase.id,
+                thread_id,
+                extraction,
+            )
+            .map_err(|e| e.to_string())
+        }
+        Err(error) => {
+            emit_codebase_progress(&app, &codebase_id, "error", &error.to_string(), false);
+            eprintln!(
+                "[CODEBASE] fetch_all_codebase_queries failed project_root={project_root:?}, codebase_id={:?}, root_path={:?}, codex_thread_id={:?}: {error:?}",
+                codebase.id, codebase.root_path, codebase.codex_thread_id
+            );
+            storage::codebases::mark_index_error(&project_root, &codebase.id, error.to_string())
+                .map_err(|e| e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+async fn fetch_codebase_query(
+    app: AppHandle,
+    project_root: String,
+    codebase_id: String,
+    prompt: String,
+) -> Result<storage::CodebaseQueryLookupResult, String> {
+    let codebase =
+        storage::codebases::get_codebase(&project_root, &codebase_id).map_err(|e| e.to_string())?;
+
+    match codex_app_server::find_sql_query_with_request(
+        &codebase.root_path,
+        codebase.codex_thread_id.as_deref(),
+        &prompt,
+        |update| {
+            emit_codebase_progress(
+                &app,
+                &codebase_id,
+                &update.phase,
+                &update.text,
+                update.append,
+            );
+        },
+    )
+    .await
+    {
+        Ok((thread_id, lookup)) => storage::codebases::apply_query_lookup(
+            &project_root,
+            &codebase.id,
+            thread_id,
+            lookup,
+        )
+        .map_err(|e| e.to_string()),
+        Err(error) => {
+            emit_codebase_progress(&app, &codebase_id, "error", &error.to_string(), false);
+            eprintln!(
+                "[CODEBASE] fetch_codebase_query failed project_root={project_root:?}, codebase_id={:?}, root_path={:?}, codex_thread_id={:?}: {error:?}",
+                codebase.id, codebase.root_path, codebase.codex_thread_id
+            );
+            let _ = storage::codebases::mark_index_error(&project_root, &codebase.id, error.to_string());
+            Err(error.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+fn set_codebase_expanded(
+    project_root: String,
+    codebase_id: String,
+    is_expanded: bool,
+) -> Result<storage::CodebaseConnection, String> {
+    storage::codebases::set_codebase_expanded(&project_root, &codebase_id, is_expanded)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_codebase_queries_as_sheet(
+    project_root: String,
+    codebase_id: String,
+    query_ids: Vec<String>,
+    connection_id: String,
+) -> Result<storage::Script, String> {
+    storage::codebases::open_codebase_queries_as_sheet(
+        &project_root,
+        &codebase_id,
+        &query_ids,
+        &connection_id,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn disconnect_codebase(project_root: String, codebase_id: String) -> Result<(), String> {
+    storage::codebases::disconnect_codebase(&project_root, &codebase_id).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -675,6 +842,14 @@ pub fn run() {
             create_project,
             open_project,
             list_recent_projects,
+            // Codebases
+            list_codebases,
+            connect_codebase,
+            fetch_all_codebase_queries,
+            fetch_codebase_query,
+            set_codebase_expanded,
+            open_codebase_queries_as_sheet,
+            disconnect_codebase,
             // Connections
             list_connections,
             add_connection,
