@@ -7,7 +7,8 @@ use super::path_safety::validate_id;
 use super::project::get_project_root;
 use super::{scripts, ConfigError};
 use crate::codex_app_server::{
-    CodexExtractedQuery, CodexQueryLookupCandidate, CodexSqlExtraction, CodexSqlQueryLookup,
+    CodexCodebaseContext, CodexContextEvidence, CodexExtractedQuery, CodexQueryLookupCandidate,
+    CodexSqlExtraction, CodexSqlQueryLookup,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +80,33 @@ pub struct CodebaseQueryLookupResult {
     pub query: Option<ExtractedCodebaseQuery>,
     #[serde(default)]
     pub matches: Vec<CodebaseQueryLookupCandidate>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodebaseContextEvidence {
+    pub source_path: String,
+    #[serde(default)]
+    pub start_line: Option<i64>,
+    #[serde(default)]
+    pub end_line: Option<i64>,
+    pub kind: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodebaseContextResult {
+    pub status: String,
+    pub question: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub evidence: Vec<CodebaseContextEvidence>,
+    #[serde(default)]
+    pub related_queries: Vec<CodebaseQueryLookupCandidate>,
     #[serde(default)]
     pub message: Option<String>,
 }
@@ -245,6 +273,16 @@ fn convert_query_lookup_candidate(
     }
 }
 
+fn convert_context_evidence(evidence: CodexContextEvidence) -> CodebaseContextEvidence {
+    CodebaseContextEvidence {
+        source_path: evidence.source_path,
+        start_line: evidence.start_line,
+        end_line: evidence.end_line,
+        kind: evidence.kind,
+        summary: evidence.summary,
+    }
+}
+
 pub fn apply_query_lookup(
     project_root: &str,
     codebase_id: &str,
@@ -274,6 +312,44 @@ pub fn apply_query_lookup(
             .map(convert_query_lookup_candidate)
             .collect(),
         message: lookup.message,
+    })
+}
+
+pub fn apply_codebase_context(
+    project_root: &str,
+    codebase_id: &str,
+    thread_id: Option<String>,
+    context: CodexCodebaseContext,
+) -> Result<CodebaseContextResult, ConfigError> {
+    validate_id(codebase_id)?;
+    let project_root = get_project_root(project_root)?;
+    let mut codebases = load_codebases(project_root.to_string_lossy().as_ref())?;
+    let now = chrono::Utc::now().timestamp_millis();
+    let Some(index) = codebases.iter().position(|c| c.id == codebase_id) else {
+        return Err(ConfigError::NotFound);
+    };
+
+    codebases[index].codex_thread_id =
+        thread_id.or_else(|| codebases[index].codex_thread_id.clone());
+    codebases[index].last_error = None;
+    codebases[index].updated_at = now;
+    save_codebases(&project_root, codebases)?;
+
+    Ok(CodebaseContextResult {
+        status: context.status,
+        question: context.question,
+        summary: context.summary,
+        evidence: context
+            .evidence
+            .into_iter()
+            .map(convert_context_evidence)
+            .collect(),
+        related_queries: context
+            .related_queries
+            .into_iter()
+            .map(convert_query_lookup_candidate)
+            .collect(),
+        message: context.message,
     })
 }
 
@@ -483,6 +559,50 @@ mod tests {
         assert_eq!(lookup.status, "match");
         assert!(lookup.query.is_some());
         assert_eq!(persisted.codex_thread_id.as_deref(), Some("thread-123"));
+        assert!(persisted.queries.is_empty());
+    }
+
+    #[test]
+    fn codebase_context_updates_thread_without_persisting_bulk_queries() {
+        let root = temp_project_root();
+        let folder = root.join("context-folder");
+        fs::create_dir_all(&folder).expect("folder");
+        let codebase = connect_codebase(
+            root.to_str().expect("root"),
+            folder.to_str().expect("folder"),
+        )
+        .expect("connect");
+
+        let context = apply_codebase_context(
+            root.to_str().expect("root"),
+            &codebase.id,
+            Some("thread-ctx".to_string()),
+            CodexCodebaseContext {
+                status: "answered".to_string(),
+                question: "How is signup used?".to_string(),
+                summary: Some("Auth flow executes the query.".to_string()),
+                evidence: vec![CodexContextEvidence {
+                    source_path: "src/auth/signup.ts".to_string(),
+                    start_line: Some(12),
+                    end_line: Some(24),
+                    kind: "callsite".to_string(),
+                    summary: "Executes the signup SQL.".to_string(),
+                }],
+                related_queries: vec![CodexQueryLookupCandidate {
+                    name: "signup".to_string(),
+                    source_path: "queries/signup.sql".to_string(),
+                    confidence: "high".to_string(),
+                    notes: None,
+                }],
+                message: None,
+            },
+        )
+        .expect("context");
+
+        let persisted = get_codebase(root.to_str().expect("root"), &codebase.id).expect("codebase");
+        assert_eq!(context.status, "answered");
+        assert_eq!(context.evidence.len(), 1);
+        assert_eq!(persisted.codex_thread_id.as_deref(), Some("thread-ctx"));
         assert!(persisted.queries.is_empty());
     }
 }

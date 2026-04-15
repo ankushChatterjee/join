@@ -213,6 +213,51 @@ async fn fetch_codebase_query(
 }
 
 #[tauri::command]
+async fn ask_codebase_context(
+    app: AppHandle,
+    project_root: String,
+    codebase_id: String,
+    prompt: String,
+) -> Result<storage::CodebaseContextResult, String> {
+    let codebase =
+        storage::codebases::get_codebase(&project_root, &codebase_id).map_err(|e| e.to_string())?;
+
+    match codex_app_server::ask_codebase_context(
+        &codebase.root_path,
+        codebase.codex_thread_id.as_deref(),
+        &prompt,
+        |update| {
+            emit_codebase_progress(
+                &app,
+                &codebase_id,
+                &update.phase,
+                &update.text,
+                update.append,
+            );
+        },
+    )
+    .await
+    {
+        Ok((thread_id, context)) => storage::codebases::apply_codebase_context(
+            &project_root,
+            &codebase.id,
+            thread_id,
+            context,
+        )
+        .map_err(|e| e.to_string()),
+        Err(error) => {
+            emit_codebase_progress(&app, &codebase_id, "error", &error.to_string(), false);
+            eprintln!(
+                "[CODEBASE] ask_codebase_context failed project_root={project_root:?}, codebase_id={:?}, root_path={:?}, codex_thread_id={:?}: {error:?}",
+                codebase.id, codebase.root_path, codebase.codex_thread_id
+            );
+            let _ = storage::codebases::mark_index_error(&project_root, &codebase.id, error.to_string());
+            Err(error.to_string())
+        }
+    }
+}
+
+#[tauri::command]
 fn set_codebase_expanded(
     project_root: String,
     codebase_id: String,
@@ -847,6 +892,7 @@ pub fn run() {
             connect_codebase,
             fetch_all_codebase_queries,
             fetch_codebase_query,
+            ask_codebase_context,
             set_codebase_expanded,
             open_codebase_queries_as_sheet,
             disconnect_codebase,

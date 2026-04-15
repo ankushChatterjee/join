@@ -18,7 +18,7 @@ import {
   replaceEditorContentTool,
   addCellTool,
 } from "./editorTools";
-import { getCodebaseQuery } from "./codebaseTools";
+import { askCodex, getCodebaseQuery } from "./codebaseTools";
 import { askQuestion } from "./questionTool";
 import { planSqlQuery, explainSql } from "./planTools";
 import { getPostgresBestPractice } from "./postgresSkillTools";
@@ -44,6 +44,7 @@ export const allTools = {
   read_results: readResults,
   lint_sql_safety: lintSqlSafety,
   get_codebase_query: getCodebaseQuery,
+  ask_codex: askCodex,
   get_editor_context: getEditorContext,
   insert_sql: insertSql,
   replace_editor_content: replaceEditorContentTool,

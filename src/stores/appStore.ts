@@ -25,6 +25,7 @@ import type {
   SqlParamDefaults,
   SqlPlaceholderMode,
   CodebaseConnection,
+  CodebaseContextResult,
   CodebaseQueryLookupResult,
 } from "./types";
 import { recordPerfSample } from "@/lib/perf";
@@ -180,6 +181,10 @@ interface AppState {
     codebaseId: string,
     prompt: string
   ) => Promise<CodebaseQueryLookupResult>;
+  askCodebaseContext: (
+    codebaseId: string,
+    prompt: string
+  ) => Promise<CodebaseContextResult>;
   toggleCodebaseExpanded: (codebaseId: string) => Promise<void>;
   disconnectCodebase: (codebaseId: string) => Promise<void>;
   openCodebaseQueriesAsSheet: (
@@ -763,6 +768,36 @@ export const useAppStore = create<AppState>((set, get) => {
       return result;
     } catch (error) {
       console.error("[Codebase] Failed to fetch single codebase query", {
+        codebaseId,
+        prompt,
+        error,
+      });
+      throw error;
+    }
+  },
+
+  askCodebaseContext: async (codebaseId: string, prompt: string) => {
+    const projectRoot = requireProjectRoot();
+    try {
+      const result = await invoke<CodebaseContextResult>("ask_codebase_context", {
+        projectRoot,
+        codebaseId,
+        prompt,
+      });
+      set((state) => ({
+        codebases: state.codebases.map((codebase) =>
+          codebase.id === codebaseId
+            ? {
+                ...codebase,
+                lastError: null,
+                updatedAt: Date.now(),
+              }
+            : codebase
+        ),
+      }));
+      return result;
+    } catch (error) {
+      console.error("[Codebase] Failed to ask for codebase context", {
         codebaseId,
         prompt,
         error,

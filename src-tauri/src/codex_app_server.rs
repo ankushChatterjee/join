@@ -95,6 +95,33 @@ pub struct CodexSqlQueryLookup {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexContextEvidence {
+    pub source_path: String,
+    #[serde(default)]
+    pub start_line: Option<i64>,
+    #[serde(default)]
+    pub end_line: Option<i64>,
+    pub kind: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCodebaseContext {
+    pub status: String,
+    pub question: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub evidence: Vec<CodexContextEvidence>,
+    #[serde(default)]
+    pub related_queries: Vec<CodexQueryLookupCandidate>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
 fn next_id() -> u64 {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
@@ -192,6 +219,30 @@ Rules:
 - If nothing relevant is found, return status "not_found", leave "query" null, and explain briefly in "message".
 - Convert framework placeholders, interpolation, and positional values into Join named parameters in parameterizedSql.
 - Preserve original query text in sql.
+"#
+    )
+}
+
+fn codebase_context_prompt(request: &str) -> String {
+    format!(
+        r#"Answer this implementation-context question about SQL usage in this local folder:
+
+{request}
+
+Search for:
+- the SQL definition itself
+- callsites that build, parameterize, or execute the query
+- consumers that read the results
+- surrounding feature code, services, handlers, UI flows, jobs, or scripts that explain how the query is used
+
+Return JSON only. Do not include markdown fences or explanatory text.
+
+Rules:
+- Keep this read-only. Do not edit files.
+- Be concrete. Prefer specific files and line ranges over general statements.
+- Use status "answered" when you found enough evidence to answer, or "not_found" when you could not.
+- Keep summaries concise and evidence-backed.
+- relatedQueries should list nearby SQL definitions or alternative relevant queries when helpful.
 "#
     )
 }
@@ -311,6 +362,52 @@ fn single_query_output_schema() -> Value {
             "message": { "type": ["string", "null"] }
         },
         "required": ["status", "query", "matches", "message"],
+        "additionalProperties": false
+    })
+}
+
+fn codebase_context_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "status": { "type": "string", "enum": ["answered", "not_found"] },
+            "question": { "type": "string" },
+            "summary": { "type": ["string", "null"] },
+            "evidence": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "sourcePath": { "type": "string" },
+                        "startLine": { "type": ["integer", "null"] },
+                        "endLine": { "type": ["integer", "null"] },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["query_definition", "callsite", "consumer", "schema", "other"]
+                        },
+                        "summary": { "type": "string" }
+                    },
+                    "required": ["sourcePath", "startLine", "endLine", "kind", "summary"],
+                    "additionalProperties": false
+                }
+            },
+            "relatedQueries": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "sourcePath": { "type": "string" },
+                        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+                        "notes": { "type": ["string", "null"] }
+                    },
+                    "required": ["name", "sourcePath", "confidence", "notes"],
+                    "additionalProperties": false
+                }
+            },
+            "message": { "type": ["string", "null"] }
+        },
+        "required": ["status", "question", "summary", "evidence", "relatedQueries", "message"],
         "additionalProperties": false
     })
 }
@@ -521,6 +618,31 @@ pub async fn find_sql_query_with_request(
     };
     let lookup: CodexSqlQueryLookup = serde_json::from_str(json_text)?;
     Ok((result.thread_id, lookup))
+}
+
+pub async fn ask_codebase_context(
+    cwd: &str,
+    existing_thread_id: Option<&str>,
+    request: &str,
+    on_progress: impl FnMut(CodexProgressUpdate),
+) -> Result<(Option<String>, CodexCodebaseContext), CodexAppServerError> {
+    let result = run_codex_turn(
+        cwd,
+        existing_thread_id,
+        codebase_context_prompt(request),
+        codebase_context_output_schema(),
+        on_progress,
+    )
+    .await?;
+    let Some(json_text) = extract_json_object(&result.agent_text) else {
+        eprintln!(
+            "[CODEX_APP_SERVER] codebase context parse failed: no JSON object in agent text:\n{}",
+            result.agent_text
+        );
+        return Err(CodexAppServerError::MissingExtraction);
+    };
+    let context: CodexCodebaseContext = serde_json::from_str(json_text)?;
+    Ok((result.thread_id, context))
 }
 
 struct CodexTurnResult {
@@ -924,5 +1046,38 @@ mod tests {
         .expect("lookup parse");
         assert_eq!(lookup.status, "ambiguous");
         assert_eq!(lookup.matches.len(), 1);
+    }
+
+    #[test]
+    fn parses_codebase_context_payload() {
+        let context: CodexCodebaseContext = serde_json::from_str(
+            r#"{
+              "status":"answered",
+              "question":"How is signup used?",
+              "summary":"The auth flow builds and executes the signup query.",
+              "evidence":[
+                {
+                  "sourcePath":"src/auth/signup.ts",
+                  "startLine":12,
+                  "endLine":24,
+                  "kind":"callsite",
+                  "summary":"Builds the SQL and sends it to the DB layer."
+                }
+              ],
+              "relatedQueries":[
+                {
+                  "name":"signup",
+                  "sourcePath":"queries/signup.sql",
+                  "confidence":"high",
+                  "notes":null
+                }
+              ],
+              "message":null
+            }"#,
+        )
+        .expect("context parse");
+        assert_eq!(context.status, "answered");
+        assert_eq!(context.evidence.len(), 1);
+        assert_eq!(context.related_queries.len(), 1);
     }
 }

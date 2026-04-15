@@ -30,6 +30,7 @@ describe("allTools aggregate validation", () => {
       "read_results",
       "lint_sql_safety",
       "get_codebase_query",
+      "ask_codex",
       "get_editor_context",
       "insert_sql",
       "replace_editor_content",
@@ -152,6 +153,12 @@ describe("allTools aggregate validation", () => {
   it("get_codebase_query schema requires request", () => {
     const schema = (allTools.get_codebase_query as any).inputSchema;
     expect(schema.safeParse({ request: "find signup query" }).success).toBe(true);
+    expect(schema.safeParse({}).success).toBe(false);
+  });
+
+  it("ask_codex schema requires request", () => {
+    const schema = (allTools.ask_codex as any).inputSchema;
+    expect(schema.safeParse({ request: "How is signup used?" }).success).toBe(true);
     expect(schema.safeParse({}).success).toBe(false);
   });
 

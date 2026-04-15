@@ -11,8 +11,8 @@ pub mod scripts;
 pub mod tabs;
 
 pub use codebases::{
-    CodebaseConnection, CodebaseQueryLookupCandidate, CodebaseQueryLookupResult,
-    ExtractedCodebaseQuery,
+    CodebaseConnection, CodebaseContextResult, CodebaseQueryLookupCandidate,
+    CodebaseQueryLookupResult, ExtractedCodebaseQuery,
 };
 pub use config::*;
 pub use credentials::*;

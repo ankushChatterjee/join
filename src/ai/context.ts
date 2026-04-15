@@ -189,6 +189,9 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
     `- If the user asks for a query from the connected local folder, or you need app-code SQL context, call \`get_codebase_query\` before guessing.`
   );
   parts.push(
+    `- If the user asks how a query is implemented, used, triggered, or consumed in the app, call \`ask_codex\` to gather codebase context before answering.`
+  );
+  parts.push(
     `- Do not pull all codebase queries by default. Use \`get_codebase_query\` for targeted lookup and only discuss ambiguity when the tool reports multiple plausible matches.`
   );
   if (executionContext?.targetConnectionId) {

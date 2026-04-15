@@ -56,6 +56,23 @@ export interface CodebaseQueryLookupResult {
   message?: string | null;
 }
 
+export interface CodebaseContextEvidence {
+  sourcePath: string;
+  startLine?: number | null;
+  endLine?: number | null;
+  kind: "query_definition" | "callsite" | "consumer" | "schema" | "other" | string;
+  summary: string;
+}
+
+export interface CodebaseContextResult {
+  status: "answered" | "not_found" | string;
+  question: string;
+  summary?: string | null;
+  evidence: CodebaseContextEvidence[];
+  relatedQueries: CodebaseQueryLookupCandidate[];
+  message?: string | null;
+}
+
 export type SqlParamDefaults =
   | { mode: "named"; values: Record<string, string | null> }
   | { mode: "positional"; values: Array<string | null> };
