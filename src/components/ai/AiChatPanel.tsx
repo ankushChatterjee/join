@@ -55,6 +55,10 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   zai: "Z.AI",
 };
 
+const DEFAULT_COLLAPSED_PROVIDERS = new Set<ProviderId>(
+  Object.keys(PROVIDER_LABELS) as ProviderId[]
+);
+
 function ModelSelector() {
   const { selectedModelId, setSelectedModel } = useAiStore(
     useShallow((state) => ({
@@ -63,7 +67,9 @@ function ModelSelector() {
     }))
   );
   const [isOpen, setIsOpen] = useState(false);
-  const [collapsedProviders, setCollapsedProviders] = useState<Set<ProviderId>>(() => new Set());
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<ProviderId>>(
+    () => new Set(DEFAULT_COLLAPSED_PROVIDERS)
+  );
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const providers = getModelsByProvider();
