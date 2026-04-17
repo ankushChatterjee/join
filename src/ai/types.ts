@@ -5,7 +5,7 @@
 import type { ModelMessage, AssistantModelMessage, ToolModelMessage } from "ai";
 
 // Re-export provider types
-export type { ProviderId, ModelConfig } from "./providers";
+export type { ProviderId, ModelConfig } from "./modelConfigs";
 
 // --- Chat Session Types (UI) ---
 
@@ -66,6 +66,80 @@ export interface PendingQuestion {
   questions: QuestionInfo[];
   resolve: (answers: string[][]) => void;
   reject: () => void;
+}
+
+export interface ExplainPlanSummary {
+  rootLabel: string | null;
+  estimatedCost: number | null;
+  warnings: string[];
+  indexesUsed: string[];
+  notableCharacteristics: string[];
+  nodeCount: number;
+}
+
+export interface ExplainPlanNodeMetrics {
+  startup_cost: number | null;
+  total_cost: number | null;
+  plan_rows: number | null;
+  plan_width: number | null;
+  actual_rows: number | null;
+  actual_total_time_ms: number | null;
+}
+
+export interface ExplainPlanNode {
+  node_id: string;
+  node_type: string;
+  label: string;
+  depth: number;
+  relation_name: string | null;
+  index_name: string | null;
+  description: string | null;
+  metrics: ExplainPlanNodeMetrics;
+  warnings: string[];
+  child_node_ids: string[];
+}
+
+export interface ExplainPlanTree {
+  root_node_id: string | null;
+  ordered_node_ids: string[];
+  max_depth: number;
+  nodes: Record<string, ExplainPlanNode>;
+}
+
+export type QueryPlanAnnotationSeverity = "info" | "warning" | "critical";
+
+export interface QueryPlanAnnotation {
+  annotation_id: string;
+  node_id: string;
+  title: string;
+  explanation: string;
+  severity: QueryPlanAnnotationSeverity;
+  recommendation?: string | null;
+}
+
+export interface ExplainPlanPayload {
+  plan_id: string;
+  query_sql: string;
+  dialect: "postgresql" | "mysql" | "sqlite";
+  safe_to_proceed: boolean;
+  estimated_cost: number | null;
+  warnings: string[];
+  indexes_used: string[];
+  explain_time_ms: number;
+  suggested_rule?: string;
+  summary: ExplainPlanSummary;
+  normalized_plan: ExplainPlanTree;
+  raw_plan: unknown;
+}
+
+export interface ExplainPlanPresentation {
+  plan_id: string;
+  title: string;
+  summary: string;
+  default_focus_node_id: string | null;
+  annotations: QueryPlanAnnotation[];
+  plan: ExplainPlanPayload;
+  source: "agent" | "fallback";
 }
 
 // Streaming parts - track order of content during streaming

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import {
   analyzeSqlPlaceholders,
   applySqlParams,
@@ -8,110 +8,78 @@ import {
   setParamDefaults,
 } from "./sqlParameters";
 
-describe("sqlParameters cache utils", () => {
-  it("normalizes whitespace and trailing semicolons", () => {
-    expect(normalizeSqlForParamCache("  SELECT   *  FROM users ; ; ")).toBe(
-      "SELECT * FROM users"
+describe("sql parameter parsing", () => {
+  it("normalizes whitespace and trailing semicolons for stable cache keys", () => {
+    expect(normalizeSqlForParamCache("  SELECT   *  FROM users ; ; ")).toBe("SELECT * FROM users");
+    expect(buildParamCacheKey("c1", "SELECT  * FROM users ;", "named")).toBe(
+      buildParamCacheKey("c1", "SELECT * FROM   users", "named")
     );
   });
 
-  it("builds stable key for same normalized sql", () => {
-    const a = buildParamCacheKey("c1", "SELECT  * FROM users ;", "named");
-    const b = buildParamCacheKey("c1", "SELECT * FROM   users", "named");
-    expect(a).toBe(b);
-  });
-
-  it("gets and sets named defaults", () => {
+  it("builds named defaults and reuses submitted values", () => {
     const sql = "SELECT * FROM users WHERE id = :id AND org = :org";
     const analyzed = analyzeSqlPlaceholders(sql);
     expect(analyzed.error).toBeNull();
     expect(analyzed.spec?.mode).toBe("named");
-    if (!analyzed.spec || analyzed.spec.mode !== "named") return;
+    if (!analyzed.spec || analyzed.spec.mode !== "named") throw new Error("expected named spec");
 
     const key = buildParamCacheKey("c1", sql, "named");
-    const emptyDefaults = getParamDefaults({}, key, analyzed.spec);
-    expect(emptyDefaults).toEqual({
+    expect(getParamDefaults({}, key, analyzed.spec)).toEqual({
       mode: "named",
       values: { id: null, org: null },
     });
 
-    const updatedCache = setParamDefaults({}, key, {
-      mode: "named",
-      values: { id: "123", org: "acme" },
-    });
-    const loaded = getParamDefaults(updatedCache, key, analyzed.spec);
-    expect(loaded).toEqual({
+    const cache = setParamDefaults({}, key, { mode: "named", values: { id: "123", org: "acme" } });
+    expect(getParamDefaults(cache, key, analyzed.spec)).toEqual({
       mode: "named",
       values: { id: "123", org: "acme" },
     });
   });
 
-  it("gets and sets positional defaults", () => {
+  it("builds positional defaults and substitutes by index", () => {
     const sql = "SELECT * FROM users WHERE id = ? AND org_id = ?";
     const analyzed = analyzeSqlPlaceholders(sql);
     expect(analyzed.error).toBeNull();
     expect(analyzed.spec?.mode).toBe("positional");
-    if (!analyzed.spec || analyzed.spec.mode !== "positional") return;
+    if (!analyzed.spec || analyzed.spec.mode !== "positional") throw new Error("expected positional spec");
 
     const key = buildParamCacheKey("c1", sql, "positional");
-    const emptyDefaults = getParamDefaults({}, key, analyzed.spec);
-    expect(emptyDefaults).toEqual({
+    expect(getParamDefaults({}, key, analyzed.spec)).toEqual({
       mode: "positional",
       values: [null, null],
     });
-
-    const updatedCache = setParamDefaults({}, key, {
-      mode: "positional",
-      values: ["12", "55"],
-    });
-    const loaded = getParamDefaults(updatedCache, key, analyzed.spec);
-    expect(loaded).toEqual({
-      mode: "positional",
-      values: ["12", "55"],
-    });
-  });
-});
-
-describe("sqlParameters parsing and substitution", () => {
-  it("rejects mixed placeholder styles", () => {
-    const analyzed = analyzeSqlPlaceholders(
-      "SELECT * FROM users WHERE id = :id AND org_id = ?"
+    expect(applySqlParams(sql, analyzed.spec, { mode: "positional", values: ["12", "55"] })).toBe(
+      "SELECT * FROM users WHERE id = '12' AND org_id = '55'"
     );
-    expect(analyzed.spec).toBeNull();
-    expect(String(analyzed.error)).toContain("Cannot mix");
   });
 
-  it("ignores placeholders inside strings and comments", () => {
+  it("rejects mixed placeholder styles", () => {
+    const analyzed = analyzeSqlPlaceholders("SELECT * FROM users WHERE id = :id AND org_id = ?");
+    expect(analyzed.spec).toBeNull();
+    expect(analyzed.error).toContain("Cannot mix");
+  });
+
+  it("ignores placeholders inside strings, comments, casts, operators, and dollar quotes", () => {
     const analyzed = analyzeSqlPlaceholders(
-      "SELECT ':x' AS a -- ?\n, col FROM t WHERE id = :id /* :noop ? */"
+      "SELECT ':x' AS a, col::text, data ?? 'k', $$ :ignored ? $$ FROM t -- ?\nWHERE id = :id /* :noop ? */"
     );
     expect(analyzed.error).toBeNull();
     expect(analyzed.spec?.mode).toBe("named");
-    if (!analyzed.spec || analyzed.spec.mode !== "named") return;
+    if (!analyzed.spec || analyzed.spec.mode !== "named") throw new Error("expected named spec");
     expect(analyzed.spec.names).toEqual(["id"]);
   });
 
-  it("reuses same named value for duplicate placeholder", () => {
-    const sql = "SELECT * FROM t WHERE a = :id OR b = :id";
+  it("escapes named values and reuses duplicate placeholders", () => {
+    const sql = "SELECT * FROM t WHERE a = :id OR b = :id OR name = :name";
     const analyzed = analyzeSqlPlaceholders(sql);
     expect(analyzed.spec?.mode).toBe("named");
-    if (!analyzed.spec || analyzed.spec.mode !== "named") return;
-    const finalSql = applySqlParams(sql, analyzed.spec, {
-      mode: "named",
-      values: { id: "42" },
-    });
-    expect(finalSql).toBe("SELECT * FROM t WHERE a = '42' OR b = '42'");
-  });
+    if (!analyzed.spec || analyzed.spec.mode !== "named") throw new Error("expected named spec");
 
-  it("substitutes positional values by index", () => {
-    const sql = "SELECT * FROM t WHERE a = ? AND b = ?";
-    const analyzed = analyzeSqlPlaceholders(sql);
-    expect(analyzed.spec?.mode).toBe("positional");
-    if (!analyzed.spec || analyzed.spec.mode !== "positional") return;
-    const finalSql = applySqlParams(sql, analyzed.spec, {
-      mode: "positional",
-      values: ["x", "y"],
-    });
-    expect(finalSql).toBe("SELECT * FROM t WHERE a = 'x' AND b = 'y'");
+    expect(
+      applySqlParams(sql, analyzed.spec, {
+        mode: "named",
+        values: { id: "42", name: "O'Brien" },
+      })
+    ).toBe("SELECT * FROM t WHERE a = '42' OR b = '42' OR name = 'O''Brien'");
   });
 });

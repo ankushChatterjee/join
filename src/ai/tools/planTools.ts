@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
 import type { AgentContext } from "../agent";
 import type { TableInfo, ForeignKeyInfo, SchemaInfo } from "@/stores/types";
+import { buildExplainPayload, normalizeExplainPlan } from "@/ai/queryPlan";
 
 // ---------------------------------------------------------------------------
 // Connection helper
@@ -540,19 +541,37 @@ export const explainSql = tool({
         w.includes("Full scan")
     );
 
-    const output: Record<string, unknown> = {
-      safe_to_proceed: warnings.length === 0,
-      estimated_cost: estimatedCost,
-      warnings,
-      indexes_used: indexesUsed,
-      dialect,
-      explain_time_ms: result.execution_time_ms,
-    };
-
-    if (hasSeqScan && dialect === "postgresql") {
-      output.suggested_rule = "query-missing-indexes";
+    let normalizedPlanPayload;
+    try {
+      normalizedPlanPayload = normalizeExplainPlan(dialect, result, warnings);
+    } catch {
+      normalizedPlanPayload = {
+        normalizedPlan: {
+          root_node_id: null,
+          ordered_node_ids: [],
+          max_depth: 0,
+          nodes: {},
+        },
+        rawPlan: null,
+      };
+      warnings.push("Could not normalize EXPLAIN output — falling back to summary-only view");
     }
 
-    return JSON.stringify(output, null, 2);
+    return JSON.stringify(
+      buildExplainPayload({
+        dialect,
+        sql,
+        safeToProceed: warnings.length === 0,
+        estimatedCost,
+        warnings,
+        indexesUsed,
+        explainTimeMs: result.execution_time_ms,
+        suggestedRule: hasSeqScan && dialect === "postgresql" ? "query-missing-indexes" : undefined,
+        normalizedPlan: normalizedPlanPayload.normalizedPlan,
+        rawPlan: normalizedPlanPayload.rawPlan,
+      }),
+      null,
+      2
+    );
   },
 });

@@ -198,15 +198,16 @@ execute() called → Promise created → onRequestApproval(resolve) →
 
 ---
 
-## Providers (`providers.ts`)
+## Providers (`providers.ts`, `modelConfigs.ts`)
 
 ```
 MODEL_CONFIGS[] → defines available models with { id, name, providerId, maxOutputTokens, envVar }
 ```
 
 Currently supports:
-- **Anthropic**: Claude 4.5 Sonnet, Claude 4.5 Opus, Claude 4.6 Opus
-- **Google**: Gemini 2.5 Pro
+- **OpenAI**: GPT-5.4 Mini (default), GPT-5.4, GPT-5.3 Codex
+- **Anthropic**: Claude 4.5 Sonnet, Claude 4.6 Sonnet, Claude 4.6 Opus
+- **Google**: Gemini 3 Pro, Gemini 3 Flash, Gemini 2.5 Pro, Gemini 3.1 Pro
 
 Key detail: HTTP requests go through **Tauri's fetch** (`@tauri-apps/plugin-http`), not the browser's `fetch`, to avoid CORS issues in the desktop app. API keys are fetched from the Rust backend via `invoke("get_env_var")`. Provider instances are cached by `providerId:apiKey`.
 

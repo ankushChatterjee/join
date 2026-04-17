@@ -24,12 +24,14 @@ import { planSqlQuery, explainSql } from "./planTools";
 import { getPostgresBestPractice } from "./postgresSkillTools";
 import { planDdl } from "./planDdlTool";
 import { validateDdl } from "./ddlTools";
+import { presentQueryPlan } from "./queryPlanPresentationTool";
 
 /** All tools available to the AI agent, keyed by tool name */
 export const allTools = {
   plan_sql_query: planSqlQuery,
   plan_ddl: planDdl,
   explain_sql: explainSql,
+  present_query_plan: presentQueryPlan,
   validate_ddl: validateDdl,
   get_postgres_best_practice: getPostgresBestPractice,
   list_schemas: listSchemas,

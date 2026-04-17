@@ -243,6 +243,8 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
   parts.push(
     `\n**Step 4 — VERIFY**: Call \`explain_sql\` on the draft SQL.\n` +
     `- If \`safe_to_proceed\` is false or warnings mention sequential scans, call \`get_postgres_best_practice\` with the relevant rule_id (e.g. query-missing-indexes) and apply the fix.\n` +
+    `- Immediately follow a successful \`explain_sql\` call with \`present_query_plan\` so the chat shows an inline visualization automatically.\n` +
+    `- Keep \`present_query_plan\` annotations short, educational, and tied to specific node_ids from the plan.\n` +
     `- After passing verification, write the SQL with \`insert_sql\` or \`replace_editor_content\`.`
   );
 

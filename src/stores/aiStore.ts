@@ -19,13 +19,14 @@ import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 import { compactConversation } from "@/ai/compaction";
 import type { AgentExecutionContext } from "@/ai/executionContext";
 import { resolveAgentTarget } from "@/ai/contextResolver";
-import { getModelConfig } from "@/ai/providers";
+import { getModelConfig } from "@/ai/modelConfigs";
 import { useAppStore } from "@/stores/appStore";
 import { recordPerfSample } from "@/lib/perf";
 
 const STREAM_TEXT_FLUSH_MS = 40;
 const STREAM_MARKDOWN_MIN_COMMIT_MS = 300;
 const STREAM_MARKDOWN_MAX_COMMIT_MS = 800;
+const DEFAULT_MODEL_ID = "gpt-5.4-mini";
 
 const debugLog = async (message: string) => {
   try {
@@ -241,7 +242,7 @@ export const useAiStore = create<AiState>((set, get) => {
   return ({
   // Initial state
   isPanelOpen: true,
-  selectedModelId: "claude-sonnet-4-5-20250929",
+  selectedModelId: DEFAULT_MODEL_ID,
   sessions: [],
   activeSessionId: null,
   activeSession: null,
@@ -275,6 +276,26 @@ export const useAiStore = create<AiState>((set, get) => {
     void invoke("set_selected_model_id", { modelId }).catch((err) =>
       console.warn("Failed to persist selected model:", err)
     );
+    const { activeSession } = get();
+    if (!activeSession || activeSession.modelId === modelId) return;
+
+    const updatedAt = Date.now();
+    const updatedSession: ChatSession = {
+      ...activeSession,
+      modelId,
+      updatedAt,
+    };
+
+    set((state) => ({
+      activeSession: updatedSession,
+      sessions: state.sessions.map((session) =>
+        session.id === updatedSession.id
+          ? { ...session, modelId, updatedAt }
+          : session
+      ),
+    }));
+
+    void get().saveActiveSession();
   },
 
   // Session management
@@ -301,9 +322,12 @@ export const useAiStore = create<AiState>((set, get) => {
     try {
       const projectRoot = useAppStore.getState().activeProject?.rootPath;
       const savedModelId = await invoke<string | null>("get_selected_model_id");
-      if (savedModelId && getModelConfig(savedModelId)) {
-        set({ selectedModelId: savedModelId });
-      }
+      set({
+        selectedModelId:
+          savedModelId && getModelConfig(savedModelId)
+            ? savedModelId
+            : DEFAULT_MODEL_ID,
+      });
 
       if (!projectRoot) {
         get().resetProjectState();

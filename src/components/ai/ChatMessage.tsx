@@ -27,6 +27,8 @@ import { addCodeInNewCell } from "./chatMessageActions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { QuestionCard } from "./QuestionCard";
+import { QueryPlanCard } from "./QueryPlanCard";
+import { getQueryPlanPresentationForToolCall } from "@/ai/queryPlan";
 
 const STREAM_SOFT_REVEAL_CPS = 360;
 const STREAM_SOFT_REVEAL_MAX_STEP = 64;
@@ -519,6 +521,11 @@ const ChatMessageComponentInner = ({
   const parts = isStreaming
     ? streamingParts || []
     : message.parts || [];
+  const hasExplicitQueryPlanPresentation = toolCalls.some(
+    (toolCall) =>
+      toolCall.name === "present_query_plan" &&
+      Boolean(getQueryPlanPresentationForToolCall(toolCall))
+  );
   const hasTextPart = parts.some((part) => part.type === "text");
   const isError = message.isError;
 
@@ -603,6 +610,21 @@ const ChatMessageComponentInner = ({
                   </div>
                 );
               } else {
+                const queryPlanPresentation = getQueryPlanPresentationForToolCall(part.toolCall);
+                if (queryPlanPresentation) {
+                  if (
+                    part.toolCall.name === "explain_sql" &&
+                    hasExplicitQueryPlanPresentation
+                  ) {
+                    return null;
+                  }
+                  return (
+                    <QueryPlanCard
+                      key={`query-plan-${part.toolCall.id}`}
+                      presentation={queryPlanPresentation}
+                    />
+                  );
+                }
                 // Tool call - skip if it has a pending approval
                 if (pendingApprovals.some((a) => a.toolCallId === part.toolCall.id)) {
                   return (
@@ -632,7 +654,24 @@ const ChatMessageComponentInner = ({
                 {toolCalls
                   .filter((tc) => !pendingApprovals.some((a) => a.toolCallId === tc.id))
                   .map((tc) => (
-                    <ToolCallItem key={tc.id} toolCall={tc} />
+                    (() => {
+                      const queryPlanPresentation = getQueryPlanPresentationForToolCall(tc);
+                      if (
+                        tc.name === "explain_sql" &&
+                        hasExplicitQueryPlanPresentation
+                      ) {
+                        return null;
+                      }
+                      if (queryPlanPresentation) {
+                        return (
+                          <QueryPlanCard
+                            key={`query-plan-${tc.id}`}
+                            presentation={queryPlanPresentation}
+                          />
+                        );
+                      }
+                      return <ToolCallItem key={tc.id} toolCall={tc} />;
+                    })()
                   ))}
               </div>
             )}

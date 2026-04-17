@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { ChatMessageComponent } from "./ChatMessage";
-import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/providers";
+import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/modelConfigs";
 import { useShallow } from "zustand/react/shallow";
 
 function formatSessionTimestamp(timestamp: number): string {

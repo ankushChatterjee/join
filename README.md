@@ -29,12 +29,13 @@ A desktop SQL client with embedded AI assistance.
 
    Create a `.env` file in the project root with your AI provider API keys:
    ```
+   OPENAI_API_KEY=your_key_here
    ANTHROPIC_API_KEY=your_key_here
    GEMINI_API_KEY=your_key_here
    OPEN_ROUTER_API_KEY=your_key_here
    ```
 
-   You can use Anthropic (Claude), Google's Gemini, and OpenRouter-backed models.
+   OpenAI is the recommended provider and powers the default AI model. Anthropic (Claude), Google's Gemini, and OpenRouter-backed models are also supported.
 
 4. Run in development mode:
    ```bash

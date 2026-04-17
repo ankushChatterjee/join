@@ -217,7 +217,6 @@ function CodebaseTile({
           <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-base-100">
             Codebase
           </span>
-          <span className="text-[12px] text-base-200">[{codebase.queries.length}]</span>
         </button>
         <button
           onClick={() => fetchAllCodebaseQueries(codebase.id)}
