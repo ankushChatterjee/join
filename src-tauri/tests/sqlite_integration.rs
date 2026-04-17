@@ -219,3 +219,77 @@ async fn sqlite_file_database_persists_between_connections() {
 
     let _ = std::fs::remove_file(db_path);
 }
+
+#[tokio::test]
+async fn sqlite_query_results_are_truncated_for_large_result_sets() {
+    let config = sqlite_memory_config();
+    let connection_id = config.id.clone();
+
+    connect(&config, None).await.expect("connect sqlite");
+
+    let result = execute_query(
+        &connection_id,
+        r#"
+        WITH RECURSIVE nums(n) AS (
+          SELECT 1
+          UNION ALL
+          SELECT n + 1 FROM nums WHERE n < 10005
+        )
+        SELECT n FROM nums
+        "#,
+    )
+    .await
+    .expect("large sqlite query");
+
+    assert_eq!(result.row_count, 10_000);
+    assert_eq!(result.rows.len(), 10_000);
+    assert!(result.truncated);
+    assert_eq!(result.max_rows, 10_000);
+    assert_eq!(result.rows[0][0].as_i64(), Some(1));
+    assert_eq!(result.rows[9_999][0].as_i64(), Some(10_000));
+
+    disconnect(&connection_id).await.expect("disconnect sqlite");
+}
+
+#[tokio::test]
+async fn sqlite_schema_helpers_reject_unsafe_identifiers_without_mutating_schema() {
+    let config = sqlite_memory_config();
+    let connection_id = config.id.clone();
+
+    connect(&config, None).await.expect("connect sqlite");
+    execute_query(
+        &connection_id,
+        "CREATE TABLE safe_table (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+    )
+    .await
+    .expect("create safe table");
+
+    let unsafe_columns = get_columns(
+        &connection_id,
+        "safe_table; DROP TABLE safe_table; --",
+        Some("main"),
+    )
+    .await
+    .expect_err("unsafe table identifier should be rejected");
+    assert!(unsafe_columns
+        .to_string()
+        .contains("Invalid SQLite table"));
+
+    let unsafe_indexes = get_indexes(
+        &connection_id,
+        "safe_table; DROP TABLE safe_table; --",
+        Some("main"),
+    )
+        .await
+        .expect_err("unsafe table identifier should be rejected for indexes");
+    assert!(unsafe_indexes
+        .to_string()
+        .contains("Invalid SQLite table"));
+
+    let tables = get_tables(&connection_id, Some("main"))
+        .await
+        .expect("safe table should still exist");
+    assert!(tables.iter().any(|table| table.name == "safe_table"));
+
+    disconnect(&connection_id).await.expect("disconnect sqlite");
+}

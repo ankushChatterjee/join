@@ -274,3 +274,45 @@ async fn postgres_metadata_and_query_integration() {
 
     disconnect(&connection_id).await.expect("disconnect");
 }
+
+#[tokio::test]
+#[ignore = "requires docker postgres"]
+async fn postgres_multi_statement_and_domain_error_integration() {
+    let config = test_config();
+    let password = std::env::var("PG_PASSWORD").unwrap_or_else(|_| "join".into());
+    let connection_id = config.id.clone();
+
+    connect(&config, Some(&password))
+        .await
+        .expect("postgres connect");
+
+    let multi = execute_query(
+        &connection_id,
+        "CREATE TEMP TABLE tmp_join_runner_check (id INTEGER, label TEXT);
+         INSERT INTO tmp_join_runner_check (id, label) VALUES (1, 'alpha'), (2, 'beta');
+         SELECT id, label FROM tmp_join_runner_check ORDER BY id;",
+    )
+    .await
+    .expect("multi-statement query should return final select rows");
+    assert_eq!(multi.row_count, 2);
+    assert_eq!(multi.columns.len(), 2);
+    assert_eq!(multi.rows[0][0].as_i64(), Some(1));
+    assert_eq!(multi.rows[1][1].as_str(), Some("beta"));
+
+    let discount = execute_query(&connection_id, "SELECT calculate_discount(199.95) AS discount")
+        .await
+        .expect("function query");
+    assert_eq!(discount.row_count, 1);
+    assert_eq!(discount.columns[0].name, "discount");
+    assert_eq!(discount.rows[0][0].as_str(), Some("20.00"));
+
+    let domain_error = execute_query(&connection_id, "SELECT (-1)::positive_int").await;
+    assert!(
+        domain_error
+            .expect_err("domain check should reject negative values")
+            .to_string()
+            .contains("positive_int")
+    );
+
+    disconnect(&connection_id).await.expect("disconnect");
+}
