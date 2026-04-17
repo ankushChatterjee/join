@@ -8,7 +8,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
-const CODEX_TIMEOUT_SECS: u64 = 180;
+const CODEX_TIMEOUT_SECS: u64 = 600;
+const CODEX_DEFAULT_MODEL: &str = "gpt-5.4-mini";
 const CODEX_PATH_ENV: &str = "JOIN_CODEX_PATH";
 
 #[derive(Debug, Error)]
@@ -431,6 +432,7 @@ fn turn_start_request(
                 "type": "readOnly",
                 "access": { "type": "fullAccess" }
             },
+            "model": CODEX_DEFAULT_MODEL,
             "effort": "medium",
             "outputSchema": output_schema
         }

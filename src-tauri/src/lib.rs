@@ -774,16 +774,17 @@ async fn export_to_csv(file_path: String, data: ExportData) -> Result<(), String
 // Tauri Commands - Environment Variables (for AI API keys)
 // ============================================================================
 
+const API_KEY_ENV_VARS: &[&str] = &[
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "MOONSHOT_API_KEY",
+    "OPEN_ROUTER_API_KEY",
+];
+
 #[tauri::command]
 fn get_env_var(name: String) -> Result<String, String> {
-    // Only allow specific env vars for security
-    let allowed = [
-        "ANTHROPIC_API_KEY",
-        "GEMINI_API_KEY",
-        "MOONSHOT_API_KEY",
-        "OPEN_ROUTER_API_KEY",
-    ];
-    if !allowed.contains(&name.as_str()) {
+    if !API_KEY_ENV_VARS.contains(&name.as_str()) {
         return Err(format!(
             "Access to environment variable '{}' is not allowed",
             name
@@ -801,14 +802,7 @@ fn looks_like_placeholder_secret(value: &str) -> bool {
 }
 
 fn warn_api_key_configuration() {
-    let keys = [
-        "ANTHROPIC_API_KEY",
-        "GEMINI_API_KEY",
-        "OPEN_ROUTER_API_KEY",
-        "MOONSHOT_API_KEY",
-    ];
-
-    for key in keys {
+    for &key in API_KEY_ENV_VARS {
         match std::env::var(key) {
             Ok(value) if looks_like_placeholder_secret(&value) => {
                 println!(
@@ -1051,10 +1045,10 @@ mod tests {
     #[test]
     fn get_env_var_enforces_allowlist() {
         unsafe {
-            std::env::set_var("ANTHROPIC_API_KEY", "token-123");
+            std::env::set_var("OPENAI_API_KEY", "token-123");
         }
         assert_eq!(
-            get_env_var("ANTHROPIC_API_KEY".into()).expect("allowed"),
+            get_env_var("OPENAI_API_KEY".into()).expect("allowed"),
             "token-123"
         );
         let err = get_env_var("PATH".into()).expect_err("path should be blocked");
