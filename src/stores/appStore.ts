@@ -176,7 +176,6 @@ interface AppState {
   closeProject: () => void;
   loadCodebases: () => Promise<void>;
   connectCodebase: (rootPath: string) => Promise<void>;
-  fetchAllCodebaseQueries: (codebaseId: string) => Promise<void>;
   fetchCodebaseQuery: (
     codebaseId: string,
     prompt: string
@@ -187,11 +186,6 @@ interface AppState {
   ) => Promise<CodebaseContextResult>;
   toggleCodebaseExpanded: (codebaseId: string) => Promise<void>;
   disconnectCodebase: (codebaseId: string) => Promise<void>;
-  openCodebaseQueriesAsSheet: (
-    codebaseId: string,
-    queryIds: string[],
-    connectionId: string
-  ) => Promise<string | null>;
   loadConnections: () => Promise<void>;
   addConnection: (request: NewConnectionRequest) => Promise<ConnectionInfo>;
   updateConnection: (id: string, request: NewConnectionRequest) => Promise<void>;
@@ -717,35 +711,6 @@ export const useAppStore = create<AppState>((set, get) => {
     }
   },
 
-  fetchAllCodebaseQueries: async (codebaseId: string) => {
-    const projectRoot = requireProjectRoot();
-    set({ isLoadingCodebases: true });
-    try {
-      const codebase = await invoke<CodebaseConnection>("fetch_all_codebase_queries", {
-        projectRoot,
-        codebaseId,
-      });
-      set((state) => ({
-        codebases: state.codebases.map((c) => (c.id === codebaseId ? codebase : c)),
-        isLoadingCodebases: false,
-      }));
-      if (codebase.lastError) {
-        console.error("[Codebase] Codex query refresh failed", {
-          codebaseId,
-          codebase,
-          error: codebase.lastError,
-        });
-        get().showToast("error", `Codebase indexing failed: ${codebase.lastError}`);
-      } else {
-        get().showToast("success", `Pulled ${codebase.queries.length} queries`);
-      }
-    } catch (error) {
-      console.error("[Codebase] Failed to fetch all codebase queries", { codebaseId, error });
-      set({ isLoadingCodebases: false });
-      get().showToast("error", `Failed to pull codebase queries: ${error}`);
-    }
-  },
-
   fetchCodebaseQuery: async (codebaseId: string, prompt: string) => {
     const projectRoot = requireProjectRoot();
     try {
@@ -840,49 +805,6 @@ export const useAppStore = create<AppState>((set, get) => {
       get().showToast("info", "Disconnected folder");
     } catch (error) {
       get().showToast("error", `Failed to disconnect folder: ${error}`);
-    }
-  },
-
-  openCodebaseQueriesAsSheet: async (
-    codebaseId: string,
-    queryIds: string[],
-    connectionId: string
-  ) => {
-    const projectRoot = requireProjectRoot();
-    try {
-      const script = await invoke<Script>("open_codebase_queries_as_sheet", {
-        projectRoot,
-        codebaseId,
-        queryIds,
-        connectionId,
-      });
-      const cells = normalizeCells(script.cells || []);
-      const selectedCellId = pickSelectedCellId(cells, script.selected_cell_id);
-      const openScript: OpenScript = {
-        id: script.id,
-        name: script.name,
-        connectionId: script.connection_id,
-        cells,
-        selectedCellId,
-        isDirty: false,
-        pendingSaveRevision: 0,
-        lastFlushedRevision: 0,
-      };
-      set((state) => ({
-        scriptsByConnection: {
-          ...state.scriptsByConnection,
-          [connectionId]: [...(state.scriptsByConnection[connectionId] || []), script],
-        },
-        openScripts: [...state.openScripts, openScript],
-        activeScriptId: script.id,
-        activeEditorTab: { kind: "script", id: script.id },
-      }));
-      get().saveOpenTabs();
-      get().showToast("success", "Opened codebase queries in a SQL sheet");
-      return script.id;
-    } catch (error) {
-      get().showToast("error", `Failed to open codebase queries: ${error}`);
-      return null;
     }
   },
 

@@ -17,6 +17,7 @@ import {
   insertSql,
   replaceEditorContentTool,
   addCellTool,
+  openSqlInSheetTool,
 } from "./editorTools";
 import { askCodex, getCodebaseQuery } from "./codebaseTools";
 import { askQuestion } from "./questionTool";
@@ -51,6 +52,7 @@ export const allTools = {
   insert_sql: insertSql,
   replace_editor_content: replaceEditorContentTool,
   add_cell: addCellTool,
+  open_sql_in_sheet: openSqlInSheetTool,
   ask_question: askQuestion,
 };
 

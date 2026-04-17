@@ -14,11 +14,13 @@ import {
   X,
   Sparkles,
   GitFork,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAiStore } from "@/stores/aiStore";
 import { ChatMessageComponent } from "./ChatMessage";
 import { getModelsByProvider, MODEL_CONFIGS } from "@/ai/modelConfigs";
+import type { ProviderId } from "@/ai/modelConfigs";
 import { useShallow } from "zustand/react/shallow";
 
 function formatSessionTimestamp(timestamp: number): string {
@@ -45,6 +47,14 @@ function formatSessionTimestamp(timestamp: number): string {
 
 // --- Model Selector ---
 
+const PROVIDER_LABELS: Record<ProviderId, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Google",
+  moonshotai: "Moonshot",
+  zai: "Z.AI",
+};
+
 function ModelSelector() {
   const { selectedModelId, setSelectedModel } = useAiStore(
     useShallow((state) => ({
@@ -53,10 +63,21 @@ function ModelSelector() {
     }))
   );
   const [isOpen, setIsOpen] = useState(false);
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<ProviderId>>(() => new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const providers = getModelsByProvider();
   const selectedModel = MODEL_CONFIGS.find((m) => m.id === selectedModelId);
+  const selectedProviderName = selectedModel ? PROVIDER_LABELS[selectedModel.providerId] : null;
+
+  const toggleProvider = (providerId: ProviderId) => {
+    setCollapsedProviders((previous) => {
+      const next = new Set(previous);
+      if (next.has(providerId)) next.delete(providerId);
+      else next.add(providerId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -78,51 +99,113 @@ function ModelSelector() {
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Select model"
         className={cn(
-          "flex h-7 items-center gap-1 px-1.5 text-[11px] outline-none transition-colors-fast",
+          "flex h-8 min-w-[168px] items-center gap-2 rounded-sm border px-2 text-left outline-none transition-colors-fast",
           isOpen
-            ? "bg-base-800 text-base-100"
-            : "text-base-300 hover:bg-base-800 hover:text-base-100"
+            ? "border-accent-500/40 bg-base-850 text-base-50 shadow-sm shadow-black/20"
+            : "border-base-750 bg-base-900/80 text-base-200 hover:border-base-600 hover:bg-base-850 hover:text-base-50"
         )}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-accent-500/80" />
-        <span className="max-w-[130px] truncate">
-          {selectedModel?.name || "Select model"}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-semibold leading-3">
+            {selectedModel?.name || "Select model"}
+          </span>
+          <span className="mt-0.5 block truncate text-[10px] leading-3 text-base-400">
+            {selectedProviderName || "Provider"}
+          </span>
         </span>
-        <ChevronDown className={cn("h-3 w-3 text-base-300 transition-transform", isOpen && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-base-300 transition-transform",
+            isOpen && "rotate-180"
+          )}
+        />
       </button>
 
       {isOpen && (
-        <div className="animate-dropdown-in absolute right-0 top-full z-50 mt-1 w-60 overflow-hidden border border-base-700 bg-base-900 shadow-lg shadow-black/30">
-          {providers.map((provider) => (
-            <div
-              key={provider.providerId}
-              className="border-b border-base-700/60 last:border-b-0"
-            >
-              <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-base-300">
-                {provider.providerName}
+        <div className="animate-dropdown-in absolute right-0 top-full z-50 mt-2 w-[340px] overflow-hidden rounded-md border border-base-700 bg-base-950/98 shadow-xl shadow-black/35">
+          <div className="border-b border-base-750 bg-base-900 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-base-300">
+                  Model
+                </div>
+                <div className="mt-0.5 truncate text-[12px] text-base-100">
+                  Choose the model for this chat
+                </div>
               </div>
-              {provider.models.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => {
-                    setSelectedModel(model.id);
-                    setIsOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] outline-none transition-colors-fast",
-                    model.id === selectedModelId
-                      ? "bg-base-850 text-base-100"
-                      : "text-base-300 hover:bg-base-850 hover:text-base-100"
-                  )}
-                >
-                  <span className="flex-1">{model.name}</span>
-                  {model.id === selectedModelId && (
-                    <Check className="h-3 w-3 text-accent-400" />
-                  )}
-                </button>
-              ))}
+              {selectedProviderName ? (
+                <span className="shrink-0 text-[11px] font-medium text-base-300">
+                  {selectedProviderName}
+                </span>
+              ) : null}
             </div>
-          ))}
+          </div>
+          {providers.map((provider) => {
+            const isProviderCollapsed = collapsedProviders.has(provider.providerId);
+
+            return (
+              <div
+                key={provider.providerId}
+                className="border-b border-base-800/80 px-2 py-1 last:border-b-0"
+              >
+                <button
+                  onClick={() => toggleProvider(provider.providerId)}
+                  className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-left transition-colors-fast hover:bg-base-850"
+                  aria-expanded={!isProviderCollapsed}
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-3 w-3 shrink-0 text-base-400 transition-transform duration-150",
+                      !isProviderCollapsed && "rotate-90"
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-base-200">
+                    {PROVIDER_LABELS[provider.providerId]}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-base-400">
+                    {provider.models.length} model{provider.models.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+                {!isProviderCollapsed ? provider.models.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => {
+                      setSelectedModel(model.id);
+                      setIsOpen(false);
+                    }}
+                    className={cn(
+                      "group flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none transition-colors-fast",
+                      model.id === selectedModelId
+                        ? "bg-accent-500/10 text-base-50 ring-1 ring-accent-500/25"
+                        : "text-base-300 hover:bg-base-850 hover:text-base-100"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        model.id === selectedModelId
+                          ? "bg-accent-400"
+                          : "bg-base-600 group-hover:bg-base-400"
+                      )}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium leading-4">
+                        {model.name}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] leading-3 text-base-400">
+                        {model.id}
+                      </span>
+                    </span>
+                    {model.id === selectedModelId ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-accent-300" />
+                    ) : (
+                      <span className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </button>
+                )) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

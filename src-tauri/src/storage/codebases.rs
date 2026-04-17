@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::path_safety::validate_id;
 use super::project::get_project_root;
-use super::{scripts, ConfigError};
+use super::ConfigError;
 use crate::codex_app_server::{
     CodexCodebaseContext, CodexContextEvidence, CodexExtractedQuery, CodexQueryLookupCandidate,
     CodexSqlExtraction, CodexSqlQueryLookup,
@@ -372,7 +372,10 @@ pub fn mark_index_error(
     Ok(updated)
 }
 
-pub fn get_codebase(project_root: &str, codebase_id: &str) -> Result<CodebaseConnection, ConfigError> {
+pub fn get_codebase(
+    project_root: &str,
+    codebase_id: &str,
+) -> Result<CodebaseConnection, ConfigError> {
     validate_id(codebase_id)?;
     load_codebases(project_root)?
         .into_iter()
@@ -403,77 +406,6 @@ pub fn disconnect_codebase(project_root: &str, codebase_id: &str) -> Result<(), 
     let mut codebases = load_codebases(project_root.to_string_lossy().as_ref())?;
     codebases.retain(|codebase| codebase.id != codebase_id);
     save_codebases(&project_root, codebases)
-}
-
-fn query_header(query: &ExtractedCodebaseQuery) -> String {
-    let mut lines = vec![
-        format!("-- Query: {}", query.name.replace('\n', " ")),
-        format!("-- Source: {}", query.source_path.replace('\n', " ")),
-    ];
-    if let Some(start_line) = query.start_line {
-        lines.push(format!("-- Line: {start_line}"));
-    }
-    if query.confidence != "high" {
-        lines.push(format!("-- Confidence: {}", query.confidence));
-    }
-    if let Some(notes) = &query.notes {
-        if !notes.trim().is_empty() {
-            lines.push(format!("-- Notes: {}", notes.replace('\n', " ")));
-        }
-    }
-    lines.join("\n")
-}
-
-pub fn open_codebase_queries_as_sheet(
-    project_root: &str,
-    codebase_id: &str,
-    query_ids: &[String],
-    connection_id: &str,
-) -> Result<scripts::Script, ConfigError> {
-    validate_id(codebase_id)?;
-    validate_id(connection_id)?;
-    for query_id in query_ids {
-        validate_id(query_id)?;
-    }
-
-    let codebases = load_codebases(project_root)?;
-    let codebase = codebases
-        .iter()
-        .find(|c| c.id == codebase_id)
-        .ok_or(ConfigError::NotFound)?;
-    let selected_ids: std::collections::HashSet<&str> =
-        query_ids.iter().map(String::as_str).collect();
-    let selected: Vec<&ExtractedCodebaseQuery> = codebase
-        .queries
-        .iter()
-        .filter(|query| selected_ids.contains(query.id.as_str()))
-        .collect();
-
-    if selected.is_empty() {
-        return Err(ConfigError::ValidationError(
-            "no extracted queries were selected".to_string(),
-        ));
-    }
-
-    let cells: Vec<scripts::SqlSheetCell> = selected
-        .iter()
-        .map(|query| {
-            let sql = format!(
-                "{}\n{}",
-                query_header(query),
-                query.parameterized_sql.trim()
-            );
-            scripts::create_sheet_cell(sql)
-        })
-        .collect();
-    let selected_cell_id = cells.first().map(|cell| cell.id.clone());
-    let sheet = scripts::SqlSheetDocument {
-        version: scripts::SHEET_FORMAT_VERSION,
-        selected_cell_id,
-        cells,
-    };
-    let name = format!("Folder Queries - {}", codebase.name);
-    scripts::create_script_with_sheet(project_root, connection_id, &name, &sheet)
 }
 
 #[cfg(test)]

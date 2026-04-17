@@ -78,7 +78,7 @@ export function classifyIntent(msg: ChatMessage): ConversationIntent {
     .toLowerCase();
 
   const schemaKeywords = /describe_table|list_tables|list_schemas|list_views|list_functions|schema|columns?|indexes?|foreign.?keys?|get_database_overview/;
-  const queryKeywords = /\bselect\b|\bjoin\b|\bwhere\b|\bgroup by\b|\border by\b|insert_sql|replace_editor_content|add_cell|lint_sql|execute_readonly|plan_sql_query|explain_sql/;
+  const queryKeywords = /\bselect\b|\bjoin\b|\bwhere\b|\bgroup by\b|\border by\b|insert_sql|replace_editor_content|add_cell|open_sql_in_sheet|lint_sql|execute_readonly|plan_sql_query|explain_sql/;
   const debugKeywords = /error|exception|fail|wrong|incorrect|not working|why|issue|problem|bug/;
   const explainKeywords = /explain|what is|what does|how does|tell me about|describe|understand/;
   const phaticKeywords = /^(hi|hello|hey|thanks|thank you|great|ok|okay|sure|yes|no|got it|perfect|sounds good|cool)[\s.!]*$/;
@@ -135,7 +135,7 @@ function isSchemaListing(msg: ChatMessage): boolean {
 /** Check if the message appears to insert/modify SQL in the editor */
 function isEditorMutation(msg: ChatMessage): boolean {
   if (!msg.toolCalls) return false;
-  const mutationTools = new Set(["insert_sql", "replace_editor_content", "add_cell"]);
+  const mutationTools = new Set(["insert_sql", "replace_editor_content", "add_cell", "open_sql_in_sheet"]);
   return msg.toolCalls.some((tc) => mutationTools.has(tc.name));
 }
 

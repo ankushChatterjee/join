@@ -11,6 +11,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onCollapse }: SidebarProps) {
+  const [isCodebaseExpanded, setIsCodebaseExpanded] = useState(true);
   const [isConnectionsExpanded, setIsConnectionsExpanded] = useState(true);
   const { activeProject, closeProject } = useAppStore(
     useShallow((state) => ({
@@ -49,7 +50,10 @@ export function Sidebar({ onCollapse }: SidebarProps) {
           </div>
         </div>
       ) : null}
-      <CodebaseList />
+      <CodebaseList
+        isExpanded={isCodebaseExpanded}
+        onToggleExpanded={() => setIsCodebaseExpanded((value) => !value)}
+      />
       <ConnectionsList
         isExpanded={isConnectionsExpanded}
         onToggleExpanded={() => setIsConnectionsExpanded((value) => !value)}

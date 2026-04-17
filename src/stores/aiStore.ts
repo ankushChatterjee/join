@@ -18,6 +18,7 @@ import { encodingForModel, TiktokenModel } from "js-tiktoken";
 import { buildSystemPrompt, buildMessageContext } from "@/ai/context";
 import { compactConversation } from "@/ai/compaction";
 import type { AgentExecutionContext } from "@/ai/executionContext";
+import { formatAiError } from "@/ai/errors";
 import { resolveAgentTarget } from "@/ai/contextResolver";
 import { getModelConfig } from "@/ai/modelConfigs";
 import { useAppStore } from "@/stores/appStore";
@@ -761,7 +762,7 @@ export const useAiStore = create<AiState>((set, get) => {
             flushPendingStreamingText();
             console.error("[AI Store] Agent onError callback:", error, typeof error);
 
-            const errorMsg = error instanceof Error ? error.message : String(error);
+            const errorMsg = formatAiError(error);
             const errorMessage: ChatMessage = {
               id: crypto.randomUUID(),
               role: "assistant",
@@ -799,7 +800,7 @@ export const useAiStore = create<AiState>((set, get) => {
         abortController.signal
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = formatAiError(error);
       const isAborted = errorMsg === "Aborted" || (error instanceof DOMException && error.name === "AbortError");
 
       if (!isAborted) {

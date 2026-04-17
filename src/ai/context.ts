@@ -186,13 +186,19 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
   parts.push(`\n## Runtime Context`);
   parts.push(`- Use tool calls to fetch fresh schema/data details instead of relying on potentially stale prompt state.`);
   parts.push(
-    `- If the user asks for a query from the connected local folder, or you need app-code SQL context, call \`get_codebase_query\` before guessing.`
+    `- If the user asks for SQL from the connected local folder by feature, table, endpoint, file, or intent, call \`get_codebase_query\` before guessing.`
   );
   parts.push(
-    `- If the user asks how a query is implemented, used, triggered, or consumed in the app, call \`ask_codex\` to gather codebase context before answering.`
+    `- After \`get_codebase_query\` returns a match, answer with the SQL, source path/lines, confidence, and a brief note that you can open it in a sheet.`
   );
   parts.push(
-    `- Do not pull all codebase queries by default. Use \`get_codebase_query\` for targeted lookup and only discuss ambiguity when the tool reports multiple plausible matches.`
+    `- If \`get_codebase_query\` returns multiple plausible matches, present 2-5 cited options and ask which one the user wants opened.`
+  );
+  parts.push(
+    `- If the user asks to open or get a found codebase SQL query in a sheet, call \`open_sql_in_sheet\` with the SQL and source citation. This tool requires approval.`
+  );
+  parts.push(
+    `- Use \`ask_codex\` only for deeper implementation context, such as how a query is used, triggered, or consumed.`
   );
   if (executionContext?.targetConnectionId) {
     parts.push(`- Default target connection ID: \`${executionContext.targetConnectionId}\``);
@@ -299,6 +305,9 @@ export function buildSystemPrompt(executionContext?: AgentExecutionContext): str
   );
   parts.push(
     `- Use \`add_cell\` when you need to create a new cell (especially if no cell is selected). This tool requires user approval. Use this only when are SURE that the user wants this query, always understand / explain the query to youself before adding it for the user. If you are not sure, ask the user an question`
+  );
+  parts.push(
+    `- Use \`open_sql_in_sheet\` instead of \`add_cell\` when the SQL came from a codebase lookup and should include a source header.`
   );
   parts.push(
     `- The \`execute_readonly_sql\` tool requires user approval and should be used when needed to verify data or explore the schema further. It only supports read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE etc).`

@@ -222,3 +222,93 @@ export const addCellTool = tool({
       : "No cell was selected, so I created and selected a new cell.";
   },
 });
+
+// --- open_sql_in_sheet ---
+export const openSqlInSheetTool = tool({
+  description:
+    "Open a SQL query in a SQL sheet after user approval. Use this after finding a codebase query that the user wants in sheets. If an active SQL sheet is open for the target connection, this adds a new cell; otherwise it creates a new SQL sheet.",
+  inputSchema: z.object({
+    sql: z.string().min(1).describe("The SQL text to open in a sheet."),
+    sheet_name: z
+      .string()
+      .optional()
+      .describe("Optional name for a newly created SQL sheet."),
+    source: z
+      .string()
+      .optional()
+      .describe("Optional source citation, such as src/modules/orders.repository.ts:130."),
+    target_connection_id: z
+      .string()
+      .optional()
+      .describe("Optional connection ID to use for a newly created sheet."),
+  }),
+  execute: async (
+    { sql, sheet_name, source, target_connection_id },
+    { toolCallId, experimental_context, abortSignal }
+  ) => {
+    const ctx = experimental_context as AgentContext | undefined;
+    const trimmedSql = sql.trim();
+    const sourceLine = source?.trim();
+    const sheetName = sheet_name?.trim();
+    const sqlForSheet = sourceLine
+      ? `-- Source: ${sourceLine}\n-- Found by codebase chat lookup\n${trimmedSql}`
+      : trimmedSql;
+
+    if (ctx?.onRequestApproval) {
+      const approved = await new Promise<boolean>((resolve) => {
+        ctx.onRequestApproval!({
+          toolCallId,
+          toolName: "open_sql_in_sheet",
+          sql: sqlForSheet,
+          resolve,
+        });
+      });
+
+      if (abortSignal?.aborted) {
+        throw new Error("Aborted");
+      }
+
+      if (!approved) {
+        return "User declined to open the SQL in a sheet.";
+      }
+    }
+
+    const state = useAppStore.getState();
+    const activeScript =
+      state.activeEditorTab?.kind === "script" && state.activeScriptId
+        ? state.openScripts.find((script) => script.id === state.activeScriptId)
+        : null;
+    const targetConnectionId =
+      target_connection_id?.trim() ||
+      activeScript?.connectionId ||
+      state.activeConnectionId ||
+      state.connections[0]?.id;
+
+    if (!targetConnectionId) {
+      return "No database connection is available. Add or select a connection before opening SQL in a sheet.";
+    }
+
+    if (
+      activeScript &&
+      (!target_connection_id?.trim() || activeScript.connectionId === targetConnectionId)
+    ) {
+      const cellId = await state.addScriptCell(activeScript.id, sqlForSheet, true);
+      return cellId
+        ? "Opened the SQL in a new cell in the active sheet."
+        : "Failed to add the SQL to the active sheet.";
+    }
+
+    const scriptId = await state.createScript(targetConnectionId);
+    if (!scriptId) {
+      return "Failed to create a SQL sheet for the query.";
+    }
+
+    const freshState = useAppStore.getState();
+    freshState.updateScriptContent(scriptId, sqlForSheet);
+    if (sheetName) {
+      await freshState.renameScript(scriptId, sheetName);
+    }
+    freshState.saveOpenTabs();
+    return "Opened the SQL in a new sheet.";
+  },
+});

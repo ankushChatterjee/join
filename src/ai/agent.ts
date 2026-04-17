@@ -11,6 +11,7 @@ import { getModelConfig } from "./modelConfigs";
 import { allTools } from "./tools";
 import { buildSystemPrompt } from "./context";
 import type { AgentExecutionContext } from "./executionContext";
+import { formatAiError, toAiError } from "./errors";
 
 const debugLog = async (message: string) => {
   try {
@@ -102,7 +103,7 @@ export async function runAgent(
       );
     },
     onError: (event) => {
-      console.error("[Agent] Stream error:", event.error);
+      console.error("[Agent] Stream error:", formatAiError(event.error), event.error);
     },
   });
 
@@ -158,7 +159,7 @@ export async function runAgent(
         case "tool-error": {
           // Tool execution errored
           const tc2 = allToolCalls.find((t) => t.id === part.toolCallId);
-          const errorMsg = part.error instanceof Error ? part.error.message : String(part.error);
+          const errorMsg = formatAiError(part.error);
           if (tc2) {
             tc2.status = "completed";
             tc2.result = errorMsg;
@@ -169,9 +170,7 @@ export async function runAgent(
         }
 
         case "error": {
-          throw part.error instanceof Error
-            ? part.error
-            : new Error(String(part.error));
+          throw toAiError(part.error);
         }
 
         // Ignore other stream events (start-step, finish-step, etc.)
@@ -184,7 +183,7 @@ export async function runAgent(
     if (signal?.aborted || (err instanceof Error && err.message === "Aborted")) {
       throw new Error("Aborted");
     }
-    throw err;
+    throw toAiError(err);
   }
 
   // Build the final ChatMessage

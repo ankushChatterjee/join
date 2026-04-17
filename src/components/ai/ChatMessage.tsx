@@ -335,10 +335,17 @@ function SqlApprovalCard({ approval }: { approval: PendingApproval }) {
   const { approveToolCall } = useAiStore();
   
   const isAddCell = approval.toolName === "add_cell";
-  const title = isAddCell ? "Add Cell Approval" : "SQL Query Approval";
-  const description = isAddCell 
+  const isOpenInSheet = approval.toolName === "open_sql_in_sheet";
+  const title = isAddCell
+    ? "Add Cell Approval"
+    : isOpenInSheet
+      ? "Open SQL in Sheet"
+      : "SQL Query Approval";
+  const description = isAddCell
     ? "The agent wants to add this query to a new cell:"
-    : "The AI wants to run this query:";
+    : isOpenInSheet
+      ? "The agent wants to open this SQL in a sheet:"
+      : "The AI wants to run this query:";
 
   return (
     <div className="my-3 overflow-hidden bg-amber-500/5">

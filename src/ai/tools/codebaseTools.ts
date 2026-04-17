@@ -4,12 +4,20 @@ import { useAppStore } from "@/stores/appStore";
 
 export const getCodebaseQuery = tool({
   description:
-    "Ask Codex to find a single best-matching SQL query inside the connected local folder. Use this when the user asks for a query from the codebase or when application code context is needed. Returns one match, an ambiguity set, or a not_found result.",
+    "Ask Codex to find a specific SQL query inside the connected local folder. Use this when the user asks for app/codebase SQL by feature, table, endpoint, file, or query intent. Returns one match with citations, an ambiguity set, or a not_found result.",
   inputSchema: z.object({
     request: z
       .string()
       .min(1)
       .describe("Natural-language description of the query you want to find in the connected folder."),
+    table_hint: z
+      .string()
+      .optional()
+      .describe("Optional table name hint if the user mentioned one."),
+    feature_hint: z
+      .string()
+      .optional()
+      .describe("Optional product feature, route, endpoint, or workflow hint."),
     file_hint: z
       .string()
       .optional()
@@ -19,7 +27,7 @@ export const getCodebaseQuery = tool({
       .optional()
       .describe("Optional query name hint if the user mentioned one."),
   }),
-  execute: async ({ request, file_hint, name_hint }) => {
+  execute: async ({ request, table_hint, feature_hint, file_hint, name_hint }) => {
     const state = useAppStore.getState();
     const codebase = state.codebases[0];
 
@@ -35,6 +43,12 @@ export const getCodebaseQuery = tool({
     }
 
     const promptParts = [request.trim()];
+    if (table_hint?.trim()) {
+      promptParts.push(`Table hint: ${table_hint.trim()}`);
+    }
+    if (feature_hint?.trim()) {
+      promptParts.push(`Feature/endpoint hint: ${feature_hint.trim()}`);
+    }
     if (file_hint?.trim()) {
       promptParts.push(`File hint: ${file_hint.trim()}`);
     }
